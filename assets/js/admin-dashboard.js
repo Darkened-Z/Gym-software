@@ -1954,7 +1954,7 @@ function loadPayments() {
                     </div>
                     <button class="btn ${paymentsDefaultersFilter ? 'btn-warning' : 'btn-secondary'}" id="showDefaultersBtn">Show Late Payers</button>
                     <button class="btn ${memberStatusFilter === 'inactive' ? 'btn-primary' : 'btn-secondary'}" id="showInactivePaymentsBtn">Inactive Members</button>
-                    <button class="btn ${memberStatusFilter === 'active' && paymentsDefaultersFilter ? 'btn-primary' : 'btn-secondary'}" id="showActivePaymentsBtn">Active Members</button>
+                    <button class="btn ${memberStatusFilter === 'active' ? 'btn-primary' : 'btn-secondary'}" id="showActivePaymentsBtn">Active Members</button>
                     ${isAdminUser() ? '<button class="btn btn-primary" id="addPaymentBtn">Take Payment</button>' : ''}
                 </div>
             </div>
@@ -2242,7 +2242,7 @@ function loadPaymentsTable(page = 1) {
     const year = paymentsViewMode === 'current' ? new Date().getFullYear() : paymentsSelectedYear;
     const search = document.getElementById('paymentSearch')?.value || '';
     const defaultersParam = paymentsDefaultersFilter ? '&defaulters=1' : '';
-    const effectivePaymentStatusFilter = paymentsDefaultersFilter ? memberStatusFilter : (memberStatusFilter === 'inactive' ? 'inactive' : null);
+    const effectivePaymentStatusFilter = memberStatusFilter;
     const statusParam = effectivePaymentStatusFilter ? `&status=${effectivePaymentStatusFilter}` : '';
 
     const container = document.getElementById('paymentsTableContainer');
