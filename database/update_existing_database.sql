@@ -1,13 +1,15 @@
 -- ============================================================================
 -- Gym CRM upgrade for OLD / EXISTING databases
 -- ============================================================================
--- Use this file when you already have a populated CRM database and want to
--- bring it up to the current app schema safely.
--- For brand-new empty databases, import database/full_setup.sql instead.
+-- Use this file only for upgrading an existing, already-selected CRM database.
 -- In phpMyAdmin: select the target database first, then import this file.
+-- For brand-new empty databases, import database/full_setup.sql instead.
+-- Optional guidance only:
+-- USE gym_management;
+-- CREATE DATABASE gym_management;
 -- ============================================================================
 
-USE gym_management;
+-- USE gym_management;
 
 SET FOREIGN_KEY_CHECKS = 0;
 
