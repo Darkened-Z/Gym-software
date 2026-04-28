@@ -2,11 +2,12 @@
 -- Gym CRM full database setup for phpMyAdmin
 -- ============================================================================
 -- Usage:
---   1) Open phpMyAdmin and select the target database.
+--   1) Open phpMyAdmin and select the existing target database.
 --   2) Import this file once.
---   3) If your host allows CREATE DATABASE, this file will create gym_management
---      automatically; otherwise comment out the CREATE DATABASE line and import
---      into the selected database.
+--   3) Default/shared-host flow: keep the database-create/use lines commented
+--      out so the objects are created inside the database you selected.
+--   4) Optional local/default flow: uncomment the lines below if you want this
+--      script to create and use gym_management and your host allows it.
 --
 -- Notes:
 --   - This file consolidates the repo's schema, seed, reminder, and compatibility
@@ -15,8 +16,8 @@
 --   - Seed rows use ON DUPLICATE KEY UPDATE to keep re-imports safe.
 -- ============================================================================
 
-CREATE DATABASE IF NOT EXISTS gym_management CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE gym_management;
+-- CREATE DATABASE IF NOT EXISTS gym_management CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+-- USE gym_management;
 
 SET FOREIGN_KEY_CHECKS = 0;
 
