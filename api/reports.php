@@ -100,11 +100,12 @@ try {
             $unionParts = [];
             foreach ($memberSources as $source) {
                 $dateColumn = resolve_member_date_column($db, $source['table']);
-                $unionParts[] = "SELECT id, member_code, name, phone, status, total_due_amount, next_fee_due_date, {$dateColumn} AS join_date, '{$source['gender']}' AS gender
-                                 FROM {$source['table']}
-                                 WHERE status = 'active'
-                                   AND ((next_fee_due_date IS NOT NULL AND next_fee_due_date < CURDATE())
-                                        OR COALESCE(total_due_amount, 0) > 0)";
+                $statusExpr = Member::getStatusCaseExpression('m.' . $dateColumn);
+                $unionParts[] = "SELECT m.id, m.member_code, m.name, m.phone, m.status, {$statusExpr} AS calculated_status, m.total_due_amount, m.next_fee_due_date, m.{$dateColumn} AS join_date, '{$source['gender']}' AS gender
+                                 FROM {$source['table']} m
+                                 WHERE ({$statusExpr}) = 'active'
+                                   AND ((m.next_fee_due_date IS NOT NULL AND m.next_fee_due_date < CURDATE())
+                                        OR COALESCE(m.total_due_amount, 0) > 0)";
             }
 
             $query = "SELECT * FROM (" . implode(' UNION ALL ', $unionParts) . ") d
@@ -433,7 +434,8 @@ try {
                 foreach ($genders as $g) {
                     $tbl = 'members_' . $g;
                     $dc = resolve_member_date_column($db, $tbl);
-                    $rows = fetchExportRows($db, "SELECT '{$g}' AS gender, member_code, name, phone, COALESCE(email,'') AS email, status, {$dc} AS join_date, monthly_fee, total_due_amount, next_fee_due_date, COALESCE(address,'') AS address FROM {$tbl} ORDER BY name ASC");
+                    $statusExpr = Member::getStatusCaseExpression($dc);
+                    $rows = fetchExportRows($db, "SELECT '{$g}' AS gender, member_code, name, phone, COALESCE(email,'') AS email, {$statusExpr} AS status, {$dc} AS join_date, monthly_fee, total_due_amount, next_fee_due_date, COALESCE(address,'') AS address FROM {$tbl} ORDER BY name ASC");
                     foreach ($rows as $row) {
                         fputcsv($out, $row);
                     }

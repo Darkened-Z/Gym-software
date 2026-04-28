@@ -8,6 +8,7 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../app/models/MessageTemplate.php';
 require_once __DIR__ . '/../app/models/MessageQueue.php';
 require_once __DIR__ . '/../app/models/MemberConsent.php';
+require_once __DIR__ . '/../app/models/Member.php';
 require_once __DIR__ . '/../app/helpers/AuthHelper.php';
 
 header('Content-Type: application/json');
@@ -58,9 +59,10 @@ try {
                 ? 'm.next_fee_due_date < CURDATE()'
                 : 'm.next_fee_due_date <= DATE_ADD(CURDATE(), INTERVAL :days_ahead DAY)';
 
+            $statusExpr = Member::getStatusCaseExpression('m.' . resolve_member_date_column($db, $memberTable));
             $query = "SELECT m.id, m.name, m.phone, m.total_due_amount, m.next_fee_due_date
                       FROM {$memberTable} m
-                      WHERE m.status = 'active'
+                      WHERE ({$statusExpr}) = 'active'
                         AND m.phone IS NOT NULL
                         AND m.phone != ''
                         AND m.total_due_amount > 0

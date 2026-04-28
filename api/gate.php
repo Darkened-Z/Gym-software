@@ -14,6 +14,7 @@
 
 require_once __DIR__ . '/../config/config.php';
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../app/models/Member.php';
 require_once __DIR__ . '/../app/helpers/Cache.php';
 require_once __DIR__ . '/../app/helpers/AuthHelper.php';
 require_once __DIR__ . '/../app/helpers/AdminLogger.php';
@@ -109,23 +110,15 @@ try {
      * Find member by RFID UID (searches both genders)
      */
     function findMemberByRFID($db, $rfidUid) {
-        // Check men table
-        $query = "SELECT * FROM members_men WHERE rfid_uid = :rfid_uid LIMIT 1";
-        $stmt = $db->prepare($query);
-        $stmt->bindValue(':rfid_uid', $rfidUid, PDO::PARAM_STR);
-        $stmt->execute();
-        $member = $stmt->fetch();
+        $memberModel = new Member($db, 'men');
+        $member = $memberModel->getByRfidUid($rfidUid);
         
         if ($member) {
             return ['member' => $member, 'gender' => 'men'];
         }
         
-        // Check women table
-        $query = "SELECT * FROM members_women WHERE rfid_uid = :rfid_uid LIMIT 1";
-        $stmt = $db->prepare($query);
-        $stmt->bindValue(':rfid_uid', $rfidUid, PDO::PARAM_STR);
-        $stmt->execute();
-        $member = $stmt->fetch();
+        $memberModel = new Member($db, 'women');
+        $member = $memberModel->getByRfidUid($rfidUid);
         
         if ($member) {
             return ['member' => $member, 'gender' => 'women'];
@@ -231,7 +224,8 @@ try {
             $attendanceTable = "attendance_{$gender}";
             
             // Check member status
-            if ($member['status'] !== 'active') {
+            $effectiveStatus = $member['calculated_status'] ?? $member['status'] ?? 'inactive';
+            if ($effectiveStatus !== 'active') {
                 logGateActivity($db, [
                     'gate_type' => 'entry',
                     'gate_id' => $gateId,

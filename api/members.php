@@ -228,12 +228,15 @@ try {
 
                 $id = $member->create($memberData);
                 if ($id) {
+                    $member->syncActivityStatus((int)$id);
+                    $freshData = $member->getById((int)$id);
                     $adminLogger->log('member_created', 'member_' . $gender, $id, null, [
                         'member_code' => $memberData['member_code'],
                         'name' => $memberData['name'],
-                        'phone' => $memberData['phone']
+                        'phone' => $memberData['phone'],
+                        'member_status' => $freshData['calculated_status'] ?? $freshData['status'] ?? $memberData['status']
                     ]);
-                    echo json_encode(['success' => true, 'id' => $id, 'message' => 'Member created successfully']);
+                    echo json_encode(['success' => true, 'id' => $id, 'message' => 'Member created successfully', 'member_status' => $freshData['calculated_status'] ?? $freshData['status'] ?? $memberData['status']]);
                 } else {
                     http_response_code(500);
                     echo json_encode(['success' => false, 'message' => 'Failed to create member']);
@@ -315,13 +318,15 @@ try {
                 ];
 
                 if ($member->update($id, $memberData)) {
+                    $member->syncActivityStatus((int)$id);
+                    $freshData = $member->getById((int)$id);
                     $adminLogger->log('member_updated', 'member_' . $gender, $id, null, [
                         'member_code' => $memberData['member_code'],
                         'name' => $memberData['name'],
                         'phone' => $memberData['phone'],
-                        'status' => $memberData['status']
+                        'status' => $freshData['calculated_status'] ?? $freshData['status'] ?? $memberData['status']
                     ]);
-                    echo json_encode(['success' => true, 'message' => 'Member updated successfully']);
+                    echo json_encode(['success' => true, 'message' => 'Member updated successfully', 'member_status' => $freshData['calculated_status'] ?? $freshData['status'] ?? $memberData['status']]);
                 } else {
                     http_response_code(500);
                     echo json_encode(['success' => false, 'message' => 'Failed to update member']);
@@ -397,7 +402,8 @@ try {
             foreach (['men', 'women'] as $g) {
                 $tbl = 'members_' . $g;
                 $dc = resolve_member_date_column($db, $tbl);
-                $stmt = $db->prepare("SELECT id, member_code, name, phone, status, total_due_amount, '{$g}' AS gender, {$dc} AS join_date
+                $statusExpr = Member::getStatusCaseExpression($dc);
+                $stmt = $db->prepare("SELECT id, member_code, name, phone, status, {$statusExpr} AS calculated_status, total_due_amount, '{$g}' AS gender, {$dc} AS join_date
                                       FROM {$tbl}
                                       WHERE member_code LIKE :q1 OR name LIKE :q2 OR phone LIKE :q3
                                       ORDER BY name ASC LIMIT 30");

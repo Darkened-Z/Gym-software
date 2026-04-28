@@ -49,6 +49,7 @@ try {
             // Get payments for current month
             $memberTable = 'members_' . $gender;
             $joinDateColumn = resolve_member_date_column($db, $memberTable);
+            $statusExpr = Member::getStatusCaseExpression($joinDateColumn);
             $offset = ($page - 1) * $limit;
             
             if ($defaulters) {
@@ -57,14 +58,11 @@ try {
                 $searchParam = '%' . $search . '%';
                 
                 // Build WHERE clause for base filtering
-                $whereClause = "WHERE m.{$joinDateColumn} <= :one_month_ago";
+                $whereClause = "WHERE m.{$joinDateColumn} <= :one_month_ago AND ({$statusExpr}) = 'active'";
                 
                 // STATUS FILTERING
                 if ($status) {
-                    $whereClause .= " AND m.status = :status";
-                } else {
-                    // Default to active if not specified
-                    $whereClause .= " AND m.status = 'active'"; 
+                    $whereClause .= " AND ({$statusExpr}) = :status";
                 }
                 
                 if (!empty($search)) {
@@ -91,7 +89,7 @@ try {
                 }
                 
                 if ($status) {
-                     $whereClause .= " AND m.status = :status";
+                     $whereClause .= " AND ({$statusExpr}) = :status";
                 }
                 
                 $query = "SELECT p.*, m.member_code, m.name 

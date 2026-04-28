@@ -67,7 +67,7 @@ class Member {
     }
 
     private function baseSelect(): string {
-        return "SELECT m.*, m.{$this->dateColumn} AS join_date FROM {$this->table} m";
+        return "SELECT m.*, m.{$this->dateColumn} AS join_date, " . self::getStatusCaseExpression('m.' . $this->dateColumn) . " AS calculated_status FROM {$this->table} m";
     }
 
     public function getAll($page = 1, $limit = 20, $search = '', $status = null, array $filters = []) {
@@ -316,14 +316,15 @@ class Member {
     }
 
     public function getStats() {
+        $statusExpr = self::getStatusCaseExpression($this->dateColumn);
         $statsQuery = "SELECT
                 COUNT(*) as total,
-                SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active,
-                SUM(CASE WHEN status = 'inactive' THEN 1 ELSE 0 END) as inactive,
+                SUM(CASE WHEN {$statusExpr} = 'active' THEN 1 ELSE 0 END) as active,
+                SUM(CASE WHEN {$statusExpr} = 'inactive' THEN 1 ELSE 0 END) as inactive,
                 SUM(CASE WHEN is_checked_in = 1 THEN 1 ELSE 0 END) as checked_in_now,
                 SUM(CASE WHEN next_fee_due_date = CURDATE() THEN 1 ELSE 0 END) as due_today,
                 SUM(CASE WHEN next_fee_due_date < CURDATE() AND COALESCE(total_due_amount, 0) > 0 THEN 1 ELSE 0 END) as overdue,
-                COALESCE(SUM(CASE WHEN status = 'active' THEN total_due_amount ELSE 0 END), 0) as active_due_amount
+                COALESCE(SUM(CASE WHEN {$statusExpr} = 'active' THEN total_due_amount ELSE 0 END), 0) as active_due_amount
             FROM {$this->table}";
 
         $stmt = $this->conn->prepare($statsQuery);
@@ -342,12 +343,13 @@ class Member {
     }
 
     public function getOperationalSnapshot(): array {
+        $statusExpr = self::getStatusCaseExpression($this->dateColumn);
         $query = "SELECT
-                SUM(CASE WHEN status = 'active' AND is_checked_in = 1 THEN 1 ELSE 0 END) as checked_in_now,
-                SUM(CASE WHEN status = 'active' AND next_fee_due_date = CURDATE() THEN 1 ELSE 0 END) as due_today,
-                SUM(CASE WHEN status = 'active' AND next_fee_due_date < CURDATE() AND COALESCE(total_due_amount, 0) > 0 THEN 1 ELSE 0 END) as overdue,
-                SUM(CASE WHEN status = 'active' AND {$this->dateColumn} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') THEN 1 ELSE 0 END) as new_this_month,
-                COALESCE(SUM(CASE WHEN status = 'active' THEN total_due_amount ELSE 0 END), 0) as total_active_due
+                SUM(CASE WHEN {$statusExpr} = 'active' AND is_checked_in = 1 THEN 1 ELSE 0 END) as checked_in_now,
+                SUM(CASE WHEN {$statusExpr} = 'active' AND next_fee_due_date = CURDATE() THEN 1 ELSE 0 END) as due_today,
+                SUM(CASE WHEN {$statusExpr} = 'active' AND next_fee_due_date < CURDATE() AND COALESCE(total_due_amount, 0) > 0 THEN 1 ELSE 0 END) as overdue,
+                SUM(CASE WHEN {$statusExpr} = 'active' AND {$this->dateColumn} >= DATE_FORMAT(CURDATE(), '%Y-%m-01') THEN 1 ELSE 0 END) as new_this_month,
+                COALESCE(SUM(CASE WHEN {$statusExpr} = 'active' THEN total_due_amount ELSE 0 END), 0) as total_active_due
             FROM {$this->table}";
 
         $stmt = $this->conn->prepare($query);

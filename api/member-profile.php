@@ -134,7 +134,8 @@ try {
             $joinDateColumn = resolve_member_date_column($db, $memberTable);
             $lastPaymentDate = $lastPayment['last_payment_date'] ?? ($member[$joinDateColumn] ?? date('Y-m-d'));
             $daysSincePayment = (strtotime(date('Y-m-d')) - strtotime($lastPaymentDate)) / (60 * 60 * 24);
-            $isDefaulter = ($member['status'] === 'active' && $daysSincePayment >= 30);
+            $effectiveStatus = $member['calculated_status'] ?? $member['status'] ?? 'inactive';
+            $isDefaulter = ($effectiveStatus === 'active' && $daysSincePayment >= 30);
             
             echo json_encode([
                 'success' => true,
