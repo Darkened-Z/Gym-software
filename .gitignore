@@ -1,0 +1,44 @@
+# Dependencies
+/vendor/
+
+# Uploads
+/uploads/*
+!/uploads/.gitkeep
+
+# Logs
+/logs/*
+!/logs/.gitkeep
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+
+.env.local
+
+# Composer
+composer.lock
+
+# Temporary files
+*.tmp
+*.log
+
+# Test files
+New Text Document.txt
+New Microsoft Excel Worksheet.xlsx
+*.xlsx
+*.xls
+!vendor/**/*.xlsx
+
+
+
+
+.env

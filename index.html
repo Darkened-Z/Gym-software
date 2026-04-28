@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Gym Management System - Login</title>
+    <link rel="stylesheet" href="assets/css/style.css?v=3">
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-box login-box-wide">
+            <h1>Gym Management System</h1>
+            <p class="login-subtitle">Use one clean box below. Staff is on one side. Members are on the other side.</p>
+
+            <div class="login-access-card" aria-label="Quick login options">
+                <div class="access-intro">
+                    <strong>Start here</strong>
+                    <p>Front desk staff should use username and password. Members should use member code only.</p>
+                </div>
+
+                <div class="login-split-layout">
+                    <section id="admin-login" class="login-form-panel is-visible" aria-labelledby="admin-login-title">
+                        <div class="login-panel-badge">Staff / Admin</div>
+                        <h2 id="admin-login-title">Open front desk dashboard</h2>
+                        <p class="login-panel-text">Use this for reception, payments, attendance, reports, and staff work.</p>
+                        <form id="adminForm" aria-label="Admin Login Form">
+                            <div class="form-group">
+                                <label for="adminUsername">Username</label>
+                                <input 
+                                    type="text" 
+                                    id="adminUsername" 
+                                    name="username" 
+                                    autocomplete="username"
+                                    aria-required="true"
+                                    placeholder="Type staff username"
+                                    required>
+                            </div>
+                            <div class="form-group">
+                                <label for="adminPassword">Password</label>
+                                <input 
+                                    type="password" 
+                                    id="adminPassword" 
+                                    name="password" 
+                                    autocomplete="current-password"
+                                    aria-required="true"
+                                    placeholder="Type password"
+                                    required>
+                            </div>
+                            <small class="form-hint">Only staff and admin should use this side.</small>
+                            <button type="submit" class="btn btn-primary" aria-label="Login as Admin">Open Dashboard</button>
+                        </form>
+                    </section>
+
+                    <div class="login-divider" aria-hidden="true">
+                        <span>OR</span>
+                    </div>
+
+                    <section id="member-login" class="login-form-panel is-visible" aria-labelledby="member-login-title">
+                        <div class="login-panel-badge member-badge">Member</div>
+                        <h2 id="member-login-title">Open member profile</h2>
+                        <p class="login-panel-text">Members only need their code. No password is needed here.</p>
+                        <form id="memberForm" aria-label="Member Login Form">
+                            <div class="form-group">
+                                <label for="memberCode">Member Code / Account No.</label>
+                                <input 
+                                    type="text" 
+                                    id="memberCode" 
+                                    name="member_code" 
+                                    autocomplete="off"
+                                    aria-required="true"
+                                    placeholder="Example: M001"
+                                    required>
+                            </div>
+                            <small class="form-hint">If you are a gym member, use this side only.</small>
+                            <button type="submit" class="btn btn-primary" aria-label="Login as Member">Open Member Profile</button>
+                        </form>
+                    </section>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="assets/js/utils.js?v=3"></script>
+    <script src="assets/js/auth.js?v=3"></script>
+    <script>
+        // Check authentication status on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            checkAuthStatus();
+        });
+
+        function checkAuthStatus() {
+            fetch('api/auth.php?action=check')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.authenticated) {
+                        if (data.role === 'admin' || data.role === 'staff') {
+                            window.location.href = 'admin-dashboard.html';
+                        } else if (data.role === 'member') {
+                            if (data.gender === 'men') {
+                                window.location.href = 'member-profile-men.html';
+                            } else {
+                                window.location.href = 'member-profile-women.html';
+                            }
+                        }
+                    }
+                })
+                .catch(err => console.error('Auth check error:', err));
+        }
+    </script>
+</body>
+</html>
+

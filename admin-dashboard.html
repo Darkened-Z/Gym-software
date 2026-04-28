@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Gym Front Desk Dashboard</title>
+    <link rel="stylesheet" href="assets/css/style.css?v=4">
+    <link rel="stylesheet" href="assets/css/admin-dashboard.css?v=4">
+</head>
+
+<body>
+    <button class="mobile-menu-toggle" id="mobileMenuToggle" aria-label="Open or close menu"
+        aria-expanded="false">☰ Menu</button>
+    <div class="dashboard-container">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h2>Gym Front Desk</h2>
+            </div>
+            <nav class="sidebar-nav" role="navigation" aria-label="Main navigation">
+                <a href="#" class="nav-item active" data-section="dashboard" aria-label="Home dashboard">
+                    <span aria-hidden="true">📊</span> Home
+                </a>
+                <a href="#" class="nav-item" data-section="members" aria-label="Members Management">
+                    <span aria-hidden="true">👥</span> Members
+                </a>
+                <a href="#" class="nav-item" data-section="attendance" aria-label="Check in and check out members">
+                    <span aria-hidden="true">✓</span> Check In / Out
+                </a>
+                <a href="#" class="nav-item" data-section="payments" aria-label="Payments Management">
+                    <span aria-hidden="true">💰</span> Payments
+                </a>
+                <a href="#" class="nav-item" data-section="due-fees" aria-label="Members who need to pay">
+                    <span aria-hidden="true">⚠️</span> Need Payment
+                </a>
+                <a href="#" class="nav-item" data-section="expenses" aria-label="Expenses Management">
+                    <span aria-hidden="true">💸</span> Expenses
+                </a>
+                <a href="#" class="nav-item" data-section="reports" aria-label="Reports">
+                    <span aria-hidden="true">📈</span> Reports
+                </a>
+                <a href="#" class="nav-item" data-section="staff" aria-label="Staff Management">
+                    <span aria-hidden="true">🧑‍💼</span> Staff
+                </a>
+                <a href="#" class="nav-item" data-section="activity-log" aria-label="Admin Activity Log">
+                    <span aria-hidden="true">📝</span> Activity Log
+                </a>
+                <a href="#" class="nav-item" data-section="import" aria-label="Import or download data">
+                    <span aria-hidden="true">📥</span> Import / Download
+                </a>
+                <a href="#" class="nav-item" data-section="sync" aria-label="Sync or backup data">
+                    <span aria-hidden="true">🔄</span> Sync / Backup
+                </a>
+                <a href="#" class="nav-item" data-section="reminders" aria-label="WhatsApp Reminders">
+                    <span aria-hidden="true">💬</span> Reminders
+                </a>
+                <a href="#" class="nav-item" id="logoutBtn" aria-label="Logout">
+                    <span aria-hidden="true">🚪</span> Logout
+                </a>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="content-header">
+                <h1 id="pageTitle">Home</h1>
+                <div class="header-actions" style="margin-left: auto; margin-right: 1rem;">
+                    <button class="btn btn-primary" onclick="toggleGlobalSearchScan()"
+                        style="padding: 0.5rem 1rem; display: flex; align-items: center; gap: 0.5rem;"
+                        aria-label="Scan a member card to open profile">
+                        <i class="fas fa-wifi"></i> <span>Scan Member Card</span>
+                    </button>
+                </div>
+                <div class="user-info">
+                    <span id="userName">Admin</span>
+                </div>
+            </header>
+
+            <div class="content-body" id="contentBody" role="main" aria-live="polite" aria-busy="false">
+                <!-- Content will be loaded dynamically -->
+                <div class="loading" role="status" aria-label="Loading content">Loading...</div>
+            </div>
+        </main>
+    </div>
+
+    <script src="assets/js/utils.js?v=4"></script>
+    <script src="assets/js/admin-dashboard.js?v=4"></script>
+</body>
+
+</html>

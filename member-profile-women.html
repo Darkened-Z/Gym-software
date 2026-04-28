@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Member Profile - Women</title>
+
+    <link rel="stylesheet" href="assets/css/member-profile.css">
+    <style>
+        .btn {
+            background: var(--primary-color);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.3s;
+            border: none;
+        }
+
+        .btn:hover {
+            opacity: 0.9;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Lookup -->
+    <div class="lookup-bar">
+        <div class="lookup-container">
+            <input id="memberCodeInput" class="lookup-input" placeholder="Enter member code">
+            <button id="lookupBtn" class="btn">Open Profile</button>
+        </div>
+    </div>
+
+    <!-- Profile -->
+    <div class="member-content">
+        <div id="memberContent">
+            <div class="loading">Search for a member to open the profile.</div>
+        </div>
+    </div>
+
+    <script src="assets/js/utils.js?v=5"></script>
+    <script src="assets/js/member-profile.js?v=5"></script>
+
+    <script>
+        window.MEMBER_GENDER = 'women';
+
+        document.addEventListener("DOMContentLoaded", () => {
+            fetch('api/auth.php?action=check')
+                .then(r => r.json())
+                .then(data => {
+                    if (data.authenticated && data.role === 'member' && data.gender === 'women') {
+                        loadMemberProfile(data.member_code);
+                    }
+                });
+        });
+    </script>
+
+</body>
+
+</html>

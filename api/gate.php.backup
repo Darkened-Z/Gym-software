@@ -1,0 +1,505 @@
+<?php
+/**
+ * Dual-Gate RFID System API
+ * Supports ESP32 + RC522 with separate entry and exit gates
+ * Type: entry | exit | force_open | poll
+ */
+
+require_once __DIR__ . '/../config/config.php';
+require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../app/models/Member.php';
+require_once __DIR__ . '/../app/models/Attendance.php';
+
+header('Content-Type: application/json');
+
+$method = $_SERVER['REQUEST_METHOD'];
+$type = $_GET['type'] ?? '';
+$rfidUid = $_GET['rfid_uid'] ?? ''; // RC522 RFID UID
+$gateId = $_GET['gate_id'] ?? ''; // Gate identifier (e.g., "ENTRY_01", "EXIT_01")
+
+try {
+    $database = new Database();
+    $db = $database->getConnection();
+
+    /**
+     * Helper function to find member by RFID UID (searches both genders)
+     */
+    function findMemberByRFID($db, $rfidUid) {
+        // Check men table first
+        $query = "SELECT * FROM members_men WHERE rfid_uid = :rfid_uid LIMIT 1";
+        $stmt = $db->prepare($query);
+        $stmt->bindValue(':rfid_uid', $rfidUid, PDO::PARAM_STR);
+        $stmt->execute();
+        $member = $stmt->fetch();
+
+        if ($member) {
+            return ['member' => $member, 'gender' => 'men'];
+        }
+
+        // Check women table
+        $query = "SELECT * FROM members_women WHERE rfid_uid = :rfid_uid LIMIT 1";
+        $stmt = $db->prepare($query);
+        $stmt->bindValue(':rfid_uid', $rfidUid, PDO::PARAM_STR);
+        $stmt->execute();
+        $member = $stmt->fetch();
+
+        if ($member) {
+            return ['member' => $member, 'gender' => 'women'];
+        }
+
+        return null;
+    }
+
+    /**
+     * Helper function to log gate activity
+     */
+    function logGateActivity($db, $data) {
+        $query = "INSERT INTO gate_activity_log 
+                  (gate_type, gate_id, rfid_uid, member_id, gender, member_name, action, status, reason, is_fee_defaulter) 
+                  VALUES 
+                  (:gate_type, :gate_id, :rfid_uid, :member_id, :gender, :member_name, :action, :status, :reason, :is_fee_defaulter)";
+        
+        $stmt = $db->prepare($query);
+        $stmt->bindValue(':gate_type', $data['gate_type'], PDO::PARAM_STR);
+        $stmt->bindValue(':gate_id', $data['gate_id'], PDO::PARAM_STR);
+        $stmt->bindValue(':rfid_uid', $data['rfid_uid'], PDO::PARAM_STR);
+        $stmt->bindValue(':member_id', $data['member_id'] ?? null, PDO::PARAM_INT);
+        $stmt->bindValue(':gender', $data['gender'] ?? null, PDO::PARAM_STR);
+        $stmt->bindValue(':member_name', $data['member_name'] ?? null, PDO::PARAM_STR);
+        $stmt->bindValue(':action', $data['action'], PDO::PARAM_STR);
+        $stmt->bindValue(':status', $data['status'], PDO::PARAM_STR);
+        $stmt->bindValue(':reason', $data['reason'] ?? null, PDO::PARAM_STR);
+        $stmt->bindValue(':is_fee_defaulter', $data['is_fee_defaulter'] ?? 0, PDO::PARAM_INT);
+        $stmt->execute();
+    }
+
+    switch ($type) {
+        /**
+         * ENTRY GATE - Check-in only
+         * URL: /api/gate.php?type=entry&rfid_uid=XXXXXXX&gate_id=ENTRY_01
+         */
+        case 'entry':
+            if (empty($rfidUid)) {
+                http_response_code(400);
+                echo json_encode([
+                    'success' => false,
+                    'action' => 'deny',
+                    'message' => 'RFID UID required',
+                    'gate_open_duration' => 0
+                ]);
+                exit;
+            }
+
+            // Find member by RFID UID
+            $result = findMemberByRFID($db, $rfidUid);
+
+            if (!$result) {
+                logGateActivity($db, [
+                    'gate_type' => 'entry',
+                    'gate_id' => $gateId,
+                    'rfid_uid' => $rfidUid,
+                    'action' => 'check-in-attempt',
+                    'status' => 'denied',
+                    'reason' => 'RFID not registered'
+                ]);
+
+                echo json_encode([
+                    'success' => false,
+                    'action' => 'deny',
+                    'message' => 'RFID card not registered. Please contact reception.',
+                    'gate_open_duration' => 0
+                ]);
+                exit;
+            }
+
+            $member = $result['member'];
+            $gender = $result['gender'];
+
+            // Validation 1: Check if member is active
+            if ($member['status'] !== 'active') {
+                logGateActivity($db, [
+                    'gate_type' => 'entry',
+                    'gate_id' => $gateId,
+                    'rfid_uid' => $rfidUid,
+                    'member_id' => $member['id'],
+                    'gender' => $gender,
+                    'member_name' => $member['name'],
+                    'action' => 'check-in-attempt',
+                    'status' => 'denied',
+                    'reason' => 'Membership inactive'
+                ]);
+
+                echo json_encode([
+                    'success' => false,
+                    'action' => 'deny',
+                    'message' => 'Membership inactive. Please contact reception.',
+                    'gate_open_duration' => 0
+                ]);
+                exit;
+            }
+
+            // Validation 2: Check if member is fee defaulter
+            $isDefaulter = floatval($member['total_due_amount'] ?? 0) > 0;
+            if ($isDefaulter) {
+                logGateActivity($db, [
+                    'gate_type' => 'entry',
+                    'gate_id' => $gateId,
+                    'rfid_uid' => $rfidUid,
+                    'member_id' => $member['id'],
+                    'gender' => $gender,
+                    'member_name' => $member['name'],
+                    'action' => 'check-in-attempt',
+                    'status' => 'denied',
+                    'reason' => 'Fee defaulter - Rs. ' . number_format($member['total_due_amount'], 2),
+                    'is_fee_defaulter' => 1
+                ]);
+
+                echo json_encode([
+                    'success' => false,
+                    'action' => 'deny',
+                    'message' => 'Fee payment pending. Please pay Rs. ' . number_format($member['total_due_amount'], 2) . ' at reception.',
+                    'due_amount' => $member['total_due_amount'],
+                    'gate_open_duration' => 0
+                ]);
+                exit;
+            }
+
+            $memberTable = 'members_' . $gender;
+            $attendanceTable = 'attendance_' . $gender;
+
+            $db->beginTransaction();
+
+            try {
+                $today = date('Y-m-d');
+                $checkInTime = date('Y-m-d H:i:s');
+
+                // Check if this is first entry for this member today
+                $countStmt = $db->prepare("SELECT COUNT(*) AS cnt FROM {$attendanceTable} WHERE member_id = :member_id AND DATE(check_in) = :date");
+                $countStmt->bindValue(':member_id', $member['id'], PDO::PARAM_INT);
+                $countStmt->bindValue(':date', $today, PDO::PARAM_STR);
+                $countStmt->execute();
+                $todayCount = (int)($countStmt->fetch()['cnt'] ?? 0);
+                $isFirstEntry = $todayCount === 0;
+
+                // Check if already checked in
+                $isCheckedIn = intval($member['is_checked_in'] ?? 0) === 1;
+
+                if ($isCheckedIn && !$isFirstEntry) {
+                    // Member is already inside (re-entry scenario)
+                    // Allow re-entry but don't create new attendance record
+                    logGateActivity($db, [
+                        'gate_type' => 'entry',
+                        'gate_id' => $gateId,
+                        'rfid_uid' => $rfidUid,
+                        'member_id' => $member['id'],
+                        'gender' => $gender,
+                        'member_name' => $member['name'],
+                        'action' => 're-entry',
+                        'status' => 'success',
+                        'reason' => 'Re-entry allowed'
+                    ]);
+
+                    $db->commit();
+
+                    echo json_encode([
+                        'success' => true,
+                        'action' => 'open',
+                        'message' => 'Welcome back, ' . $member['name'] . '! Re-entry granted.',
+                        'member' => [
+                            'name' => $member['name'],
+                            'member_code' => $member['member_code'],
+                            'is_first_entry_today' => false
+                        ],
+                        'gate_open_duration' => 3000
+                    ]);
+                    exit;
+                }
+
+                // Create new attendance record (first entry or new visit after checkout)
+                $attendanceQuery = "INSERT INTO {$attendanceTable} (member_id, check_in, is_first_entry_today, entry_gate_id) 
+                                    VALUES (:member_id, :check_in, :is_first_entry, :gate_id)";
+                $attendanceStmt = $db->prepare($attendanceQuery);
+                $attendanceStmt->bindValue(':member_id', $member['id'], PDO::PARAM_INT);
+                $attendanceStmt->bindValue(':check_in', $checkInTime, PDO::PARAM_STR);
+                $attendanceStmt->bindValue(':is_first_entry', $isFirstEntry ? 1 : 0, PDO::PARAM_INT);
+                $attendanceStmt->bindValue(':gate_id', $gateId, PDO::PARAM_STR);
+                $attendanceStmt->execute();
+
+                // Set is_checked_in = 1 (member is inside)
+                $updateQuery = "UPDATE {$memberTable} SET is_checked_in = 1 WHERE id = :id";
+                $updateStmt = $db->prepare($updateQuery);
+                $updateStmt->bindValue(':id', $member['id'], PDO::PARAM_INT);
+                $updateStmt->execute();
+
+                // Log successful check-in
+                logGateActivity($db, [
+                    'gate_type' => 'entry',
+                    'gate_id' => $gateId,
+                    'rfid_uid' => $rfidUid,
+                    'member_id' => $member['id'],
+                    'gender' => $gender,
+                    'member_name' => $member['name'],
+                    'action' => $isFirstEntry ? 'first-check-in' : 'check-in',
+                    'status' => 'success',
+                    'reason' => $isFirstEntry ? 'First entry of the day' : 'Check-in after previous check-out'
+                ]);
+
+                $db->commit();
+
+                $welcomeMessage = $isFirstEntry 
+                    ? "Welcome to the gym, " . $member['name'] . "! Have a great workout!" 
+                    : "Welcome back, " . $member['name'] . "!";
+
+                echo json_encode([
+                    'success' => true,
+                    'action' => 'open',
+                    'message' => $welcomeMessage,
+                    'member' => [
+                        'name' => $member['name'],
+                        'member_code' => $member['member_code'],
+                        'is_first_entry_today' => $isFirstEntry
+                    ],
+                    'gate_open_duration' => 3000
+                ]);
+            } catch (Exception $e) {
+                $db->rollBack();
+                throw $e;
+            }
+            break;
+
+        /**
+         * EXIT GATE - Check-out only
+         * URL: /api/gate.php?type=exit&rfid_uid=XXXXXXX&gate_id=EXIT_01
+         */
+        case 'exit':
+            if (empty($rfidUid)) {
+                http_response_code(400);
+                echo json_encode([
+                    'success' => false,
+                    'action' => 'deny',
+                    'message' => 'RFID UID required',
+                    'gate_open_duration' => 0
+                ]);
+                exit;
+            }
+
+            // Find member by RFID UID
+            $result = findMemberByRFID($db, $rfidUid);
+
+            if (!$result) {
+                logGateActivity($db, [
+                    'gate_type' => 'exit',
+                    'gate_id' => $gateId,
+                    'rfid_uid' => $rfidUid,
+                    'action' => 'check-out-attempt',
+                    'status' => 'denied',
+                    'reason' => 'RFID not registered'
+                ]);
+
+                echo json_encode([
+                    'success' => false,
+                    'action' => 'deny',
+                    'message' => 'RFID card not registered',
+                    'gate_open_duration' => 0
+                ]);
+                exit;
+            }
+
+            $member = $result['member'];
+            $gender = $result['gender'];
+
+            // Validation: Check if member is checked in
+            $isCheckedIn = intval($member['is_checked_in'] ?? 0) === 1;
+            if (!$isCheckedIn) {
+                logGateActivity($db, [
+                    'gate_type' => 'exit',
+                    'gate_id' => $gateId,
+                    'rfid_uid' => $rfidUid,
+                    'member_id' => $member['id'],
+                    'gender' => $gender,
+                    'member_name' => $member['name'],
+                    'action' => 'check-out-attempt',
+                    'status' => 'denied',
+                    'reason' => 'Not checked in'
+                ]);
+
+                echo json_encode([
+                    'success' => false,
+                    'action' => 'deny',
+                    'message' => 'Not checked in. Please use entry gate first.',
+                    'gate_open_duration' => 0
+                ]);
+                exit;
+            }
+
+            $memberTable = 'members_' . $gender;
+            $attendanceTable = 'attendance_' . $gender;
+
+            $db->beginTransaction();
+
+            try {
+                $today = date('Y-m-d');
+                $checkOutTime = date('Y-m-d H:i:s');
+
+                // Find today's open attendance record
+                $getAttendanceQuery = "SELECT id, check_in FROM {$attendanceTable} 
+                                       WHERE member_id = :member_id 
+                                       AND DATE(check_in) = :date 
+                                       AND check_out IS NULL 
+                                       ORDER BY check_in DESC LIMIT 1";
+                $getAttendanceStmt = $db->prepare($getAttendanceQuery);
+                $getAttendanceStmt->bindValue(':member_id', $member['id'], PDO::PARAM_INT);
+                $getAttendanceStmt->bindValue(':date', $today, PDO::PARAM_STR);
+                $getAttendanceStmt->execute();
+                $attendance = $getAttendanceStmt->fetch();
+
+                if ($attendance) {
+                    // Calculate duration
+                    $checkIn = new DateTime($attendance['check_in']);
+                    $checkOut = new DateTime($checkOutTime);
+                    $duration = $checkIn->diff($checkOut);
+                    $durationMinutes = ($duration->h * 60) + $duration->i;
+
+                    // Format duration for display
+                    $hours = floor($durationMinutes / 60);
+                    $minutes = $durationMinutes % 60;
+                    $durationText = $hours > 0 ? "{$hours} hour" . ($hours > 1 ? 's' : '') : "";
+                    $durationText .= $minutes > 0 ? ($durationText ? " {$minutes} min" : "{$minutes} minutes") : "";
+                    $durationText = $durationText ?: "less than a minute";
+
+                    // Update attendance with check-out time
+                    $updateAttendanceQuery = "UPDATE {$attendanceTable} 
+                                              SET check_out = :check_out, duration_minutes = :duration, exit_gate_id = :gate_id 
+                                              WHERE id = :id";
+                    $updateAttendanceStmt = $db->prepare($updateAttendanceQuery);
+                    $updateAttendanceStmt->bindValue(':check_out', $checkOutTime, PDO::PARAM_STR);
+                    $updateAttendanceStmt->bindValue(':duration', $durationMinutes, PDO::PARAM_INT);
+                    $updateAttendanceStmt->bindValue(':gate_id', $gateId, PDO::PARAM_STR);
+                    $updateAttendanceStmt->bindValue(':id', $attendance['id'], PDO::PARAM_INT);
+                    $updateAttendanceStmt->execute();
+                }
+
+                // Set is_checked_in = 0
+                $updateQuery = "UPDATE {$memberTable} SET is_checked_in = 0 WHERE id = :id";
+                $updateStmt = $db->prepare($updateQuery);
+                $updateStmt->bindValue(':id', $member['id'], PDO::PARAM_INT);
+                $updateStmt->execute();
+
+                // Log successful check-out
+                logGateActivity($db, [
+                    'gate_type' => 'exit',
+                    'gate_id' => $gateId,
+                    'rfid_uid' => $rfidUid,
+                    'member_id' => $member['id'],
+                    'gender' => $gender,
+                    'member_name' => $member['name'],
+                    'action' => 'check-out',
+                    'status' => 'success',
+                    'reason' => 'Successfully checked out'
+                ]);
+
+                $db->commit();
+
+                echo json_encode([
+                    'success' => true,
+                    'action' => 'open',
+                    'message' => "Goodbye, " . $member['name'] . "! You worked out for {$durationText}.",
+                    'member' => [
+                        'name' => $member['name'],
+                        'member_code' => $member['member_code'],
+                        'check_in_time' => $attendance['check_in'] ?? null,
+                        'duration' => $durationText ?? null
+                    ],
+                    'gate_open_duration' => 3000
+                ]);
+            } catch (Exception $e) {
+                $db->rollBack();
+                throw $e;
+            }
+            break;
+
+        /**
+         * FORCE OPEN - Admin can force-open gates
+         * URL: /api/gate.php?type=force_open&gate_type=entry&gate_id=ENTRY_01
+         */
+        case 'force_open':
+            // Requires admin authentication
+            if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
+                http_response_code(401);
+                echo json_encode(['success' => false, 'message' => 'Unauthorized']);
+                exit;
+            }
+
+            $forceGateType = $_GET['gate_type'] ?? ''; // entry or exit
+            $forceGateId = $_GET['gate_id'] ?? '';
+
+            // Insert force-open command
+            $query = "INSERT INTO gate_commands (gate_type, gate_id, command, executed) VALUES (:gate_type, :gate_id, 'open', 0)";
+            $stmt = $db->prepare($query);
+            $stmt->bindValue(':gate_type', $forceGateType, PDO::PARAM_STR);
+            $stmt->bindValue(':gate_id', $forceGateId, PDO::PARAM_STR);
+            $stmt->execute();
+
+            // Clean up old commands
+            $cleanupQuery = "DELETE FROM gate_commands WHERE executed = 1 OR created_at < DATE_SUB(NOW(), INTERVAL 5 MINUTE)";
+            $db->exec($cleanupQuery);
+
+            echo json_encode([
+                'success' => true,
+                'message' => 'Force open command sent to ' . $forceGateType . ' gate'
+            ]);
+            break;
+
+        /**
+         * POLL - ESP32 polls for force-open commands
+         * URL: /api/gate.php?type=poll&gate_id=ENTRY_01
+         */
+        case 'poll':
+            $pollGateId = $gateId;
+
+            // Get pending command for this specific gate
+            $query = "SELECT id, command FROM gate_commands 
+                     WHERE gate_id = :gate_id 
+                     AND executed = 0 
+                     AND created_at >= DATE_SUB(NOW(), INTERVAL 5 MINUTE)
+                     ORDER BY created_at ASC LIMIT 1";
+            $stmt = $db->prepare($query);
+            $stmt->bindValue(':gate_id', $pollGateId, PDO::PARAM_STR);
+            $stmt->execute();
+            $command = $stmt->fetch();
+
+            if ($command) {
+                // Mark as executed
+                $updateQuery = "UPDATE gate_commands SET executed = 1, executed_at = NOW() WHERE id = :id";
+                $updateStmt = $db->prepare($updateQuery);
+                $updateStmt->bindValue(':id', $command['id'], PDO::PARAM_INT);
+                $updateStmt->execute();
+
+                echo json_encode([
+                    'success' => true,
+                    'command' => 'open'
+                ]);
+            } else {
+                echo json_encode([
+                    'success' => true,
+                    'command' => 'none'
+                ]);
+            }
+            break;
+
+        default:
+            http_response_code(400);
+            echo json_encode([
+                'success' => false,
+                'message' => 'Invalid request type. Use: entry, exit, force_open, or poll'
+            ]);
+    }
+} catch (Exception $e) {
+    error_log('Gate API Error: ' . $e->getMessage());
+    http_response_code(500);
+    echo json_encode([
+        'success' => false,
+        'message' => 'Server error occurred',
+        'error' => DEBUG_MODE ? $e->getMessage() : 'Please contact support'
+    ]);
+}
