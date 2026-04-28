@@ -591,24 +591,19 @@ function renderDashboard(data) {
         : 'men';
 
     const html = `
-        ${renderSectionGuideCard({
-            chip: 'Start Here',
-            title: 'Fast dashboard actions',
-            description: 'Use the shortcuts below for the most common front-desk tasks, then open a single chart or table when you need detail.',
-            steps: [
-                'Add a new member when someone joins today.',
-                'Take payment right from the front desk.',
-                'Open the due list for unpaid members.',
-                'Use Check In / Out when a member arrives or leaves.'
-            ],
-            actions: `
+        <section class="dashboard-intro-card">
+            <div class="dashboard-intro-copy">
+                <span class="page-chip">Today</span>
+                <h2>Fast front-desk actions</h2>
+                <p>Keep the page quiet: use the shortcuts below for daily work, then switch charts one at a time when you need detail.</p>
+            </div>
+            <div class="dashboard-intro-actions">
                 <button class="btn btn-primary quick-action-btn" onclick="switchSection('members'); setTimeout(() => document.getElementById('addMemberBtn')?.click(), 150);">Add New Member</button>
                 <button class="btn btn-success quick-action-btn" onclick="switchSection('payments'); setTimeout(() => document.getElementById('addPaymentBtn')?.click(), 150);">Take Payment</button>
                 <button class="btn btn-warning quick-action-btn" onclick="switchSection('due-fees')">Open Due List</button>
                 <button class="btn btn-secondary quick-action-btn" onclick="switchSection('attendance')">Check In / Out</button>
-                ${isAdminUser() ? '<button class="btn btn-secondary quick-action-btn" onclick="showChangePasswordModal()">🔑 Change Password</button>' : ''}
-            `
-        })}
+            </div>
+        </section>
 
         <div class="dashboard-overview">
             <div class="dashboard-stats dashboard-stats--compact">
@@ -697,7 +692,6 @@ function renderDashboard(data) {
         document.body.appendChild(modalEl);
     }
 
-    renderDashboardCharts(chartTabs);
     setDashboardChartTab(activeChartTab);
     setDashboardRecentTab(activeRecentTab);
 }
@@ -714,10 +708,9 @@ function setDashboardChartTab(tabKey) {
 
     document.querySelectorAll('[data-dashboard-chart-tab]').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.dashboardChartTab === tabKey);
+        btn.setAttribute('aria-selected', btn.dataset.dashboardChartTab === tabKey ? 'true' : 'false');
     });
-    document.querySelectorAll('[data-dashboard-chart-panel]').forEach(panel => {
-        panel.classList.toggle('is-active', panel.dataset.dashboardChartPanel === tabKey);
-    });
+    renderDashboardActiveChart(tabKey);
 }
 
 function setDashboardRecentTab(tabKey) {
@@ -727,13 +720,93 @@ function setDashboardRecentTab(tabKey) {
     document.querySelectorAll('[data-dashboard-recent-tab]').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.dashboardRecentTab === tabKey);
     });
-    document.querySelectorAll('[data-dashboard-recent-panel]').forEach(panel => {
-        panel.classList.toggle('is-active', panel.dataset.dashboardRecentPanel === tabKey);
-    });
+
+    renderDashboardRecentViewport(tabKey);
+}
+
+function getDashboardChartConfig(tabKey, chartTabs = window.dashboardChartTabs || []) {
+    return chartTabs.find(chart => chart.key === tabKey) || chartTabs[0] || null;
+}
+
+function renderDashboardActiveChart(tabKey = window.dashboardUiState?.chartTab) {
+    const chartTabs = window.dashboardChartTabs || [];
+    const config = getDashboardChartConfig(tabKey, chartTabs);
+    const viewport = document.getElementById('dashboardChartViewport');
+    if (!viewport || !config) return;
+
+    const empty = !config.series || !config.series.length;
+    const chartCardClass = config.type === 'pie' ? 'chart-card chart-card--featured chart-card--pie' : 'chart-card chart-card--featured';
+    viewport.innerHTML = `
+        <section class="dashboard-chart-panel is-active" data-dashboard-chart-panel="${config.key}">
+            <div class="${chartCardClass}">
+                <div class="chart-card-header">
+                    <div>
+                        <h3>${config.label}</h3>
+                        <small>${config.subtitle}</small>
+                    </div>
+                    <span class="chart-card-pill">${config.type === 'heatmap' ? 'Calendar view' : config.type === 'pie' ? 'Breakdown' : 'Trend view'}</span>
+                </div>
+                <div class="dashboard-chart-stage">
+                    <canvas id="${config.chartId}" width="720" height="280"></canvas>
+                    ${empty ? '<div class="activity-muted chart-empty-state">No chart data available yet.</div>' : ''}
+                </div>
+            </div>
+        </section>
+    `;
+
+    setTimeout(() => {
+        if (config.type === 'heatmap') {
+            renderAttendanceHeatmap(config.chartId, config.series || []);
+        } else if (config.type === 'pie') {
+            renderPieChart(config.chartId, config.series || []);
+        } else if (config.type === 'bar') {
+            renderSimpleBarChart(config.chartId, config.series || [], config.color);
+        } else {
+            renderSimpleLineChart(config.chartId, config.series || [], config.color);
+        }
+    }, 0);
+}
+
+function renderDashboardRecentViewport(tabKey = window.dashboardUiState?.recentTab) {
+    const viewport = document.getElementById('dashboardRecentViewport');
+    const recentData = window.dashboardRecentData || { men: { recent: [] }, women: { recent: [] } };
+    if (!viewport) return;
+
+    const activeRows = tabKey === 'women' ? (recentData.women?.recent || []) : (recentData.men?.recent || []);
+    viewport.innerHTML = `
+        <div class="recent-table-wrap">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Code</th>
+                        <th>Name</th>
+                        <th>Phone</th>
+                        <th>Join Date</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${activeRows.length > 0 ? activeRows.map((m, idx) => `
+                        <tr>
+                            <td>${idx + 1}</td>
+                            <td>${m.member_code}</td>
+                            <td>${m.name}</td>
+                            <td>${m.phone}</td>
+                            <td>${Utils.formatDate(m.join_date)}</td>
+                            <td><span class="status-badge status-${m.status || 'unknown'}">${m.status || 'unknown'}</span></td>
+                        </tr>
+                    `).join('') : '<tr><td colspan="6" style="text-align:center;padding:2rem;">No members yet</td></tr>'}
+                </tbody>
+            </table>
+        </div>
+    `;
 }
 
 function renderDashboardChartHub(chartTabs = [], activeTab = '') {
     if (!chartTabs.length) return '';
+
+    window.dashboardChartTabs = chartTabs;
 
     return `
         <section class="dashboard-shell dashboard-chart-hub">
@@ -741,7 +814,7 @@ function renderDashboardChartHub(chartTabs = [], activeTab = '') {
                 <div>
                     <span class="page-chip">Analytics</span>
                     <h2>Chart menu</h2>
-                    <p>Pick one chart at a time for a cleaner, easier-to-read dashboard.</p>
+                    <p>Select one chart to keep the dashboard focused and readable.</p>
                 </div>
                 <div class="dashboard-chart-tabs" role="tablist" aria-label="Dashboard charts">
                     ${chartTabs.map(chart => `
@@ -757,42 +830,15 @@ function renderDashboardChartHub(chartTabs = [], activeTab = '') {
                     `).join('')}
                 </div>
             </div>
-            <div class="dashboard-chart-panels">
-                ${chartTabs.map(chart => {
-                    const empty = !chart.series || !chart.series.length;
-                    const chartCardClass = chart.type === 'pie' ? 'chart-card chart-card--featured chart-card--pie' : 'chart-card chart-card--featured';
-                    return `
-                        <section class="dashboard-chart-panel ${activeTab === chart.key ? 'is-active' : ''}" data-dashboard-chart-panel="${chart.key}">
-                            <div class="${chartCardClass}">
-                                <div class="chart-card-header">
-                                    <div>
-                                        <h3>${chart.label}</h3>
-                                        <small>${chart.subtitle}</small>
-                                    </div>
-                                    <span class="chart-card-pill">${chart.type === 'heatmap' ? 'Calendar view' : chart.type === 'pie' ? 'Breakdown' : 'Trend view'}</span>
-                                </div>
-                                <canvas id="${chart.chartId}" width="720" height="280"></canvas>
-                                ${empty ? '<div class="activity-muted chart-empty-state">No chart data available yet.</div>' : ''}
-                            </div>
-                        </section>
-                    `;
-                }).join('')}
+            <div class="dashboard-chart-viewport" id="dashboardChartViewport" aria-live="polite">
+                ${renderDashboardChartPanel(getDashboardChartConfig(activeTab, chartTabs))}
             </div>
         </section>
     `;
 }
 
 function renderDashboardRecentMembers(men = { recent: [] }, women = { recent: [] }, activeTab = 'men') {
-    const renderRows = (rows = []) => rows.length > 0 ? rows.map((m, idx) => `
-        <tr>
-            <td>${idx + 1}</td>
-            <td>${m.member_code}</td>
-            <td>${m.name}</td>
-            <td>${m.phone}</td>
-            <td>${Utils.formatDate(m.join_date)}</td>
-            <td><span class="status-badge status-${m.status || 'unknown'}">${m.status || 'unknown'}</span></td>
-        </tr>
-    `).join('') : '<tr><td colspan="6" style="text-align:center;padding:2rem;">No members yet</td></tr>';
+    window.dashboardRecentData = { men, women };
 
     return `
         <section class="dashboard-shell dashboard-recent-shell">
@@ -807,64 +853,42 @@ function renderDashboardRecentMembers(men = { recent: [] }, women = { recent: []
                     <button type="button" class="gender-tab ${activeTab === 'women' ? 'active' : ''}" data-dashboard-recent-tab="women" onclick="setDashboardRecentTab('women')">Women</button>
                 </div>
             </div>
-            <div class="dashboard-recent-panels">
-                <section class="dashboard-recent-panel ${activeTab === 'men' ? 'is-active' : ''}" data-dashboard-recent-panel="men">
-                    <div class="recent-table-wrap">
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>#</th>
-                                    <th>Code</th>
-                                    <th>Name</th>
-                                    <th>Phone</th>
-                                    <th>Join Date</th>
-                                    <th>Status</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${renderRows(men.recent || [])}
-                            </tbody>
-                        </table>
+            <div class="dashboard-recent-viewport" id="dashboardRecentViewport" aria-live="polite"></div>
+        </section>
+    `;
+}
+
+function renderDashboardChartPanel(config) {
+    if (!config) {
+        return '<div class="empty-state">No chart data available yet.</div>';
+    }
+
+    const empty = !config.series || !config.series.length;
+    const chartCardClass = config.type === 'pie' ? 'chart-card chart-card--featured chart-card--pie' : 'chart-card chart-card--featured';
+
+    return `
+        <section class="dashboard-chart-panel is-active" data-dashboard-chart-panel="${config.key}">
+            <div class="${chartCardClass}">
+                <div class="chart-card-header">
+                    <div>
+                        <h3>${config.label}</h3>
+                        <small>${config.subtitle}</small>
                     </div>
-                </section>
-                <section class="dashboard-recent-panel ${activeTab === 'women' ? 'is-active' : ''}" data-dashboard-recent-panel="women">
-                    <div class="recent-table-wrap">
-                        <table class="data-table">
-                            <thead>
-                                <tr>
-                                    <th>#</th>
-                                    <th>Code</th>
-                                    <th>Name</th>
-                                    <th>Phone</th>
-                                    <th>Join Date</th>
-                                    <th>Status</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${renderRows(women.recent || [])}
-                            </tbody>
-                        </table>
-                    </div>
-                </section>
+                    <span class="chart-card-pill">${config.type === 'heatmap' ? 'Calendar view' : config.type === 'pie' ? 'Breakdown' : 'Trend view'}</span>
+                </div>
+                <div class="dashboard-chart-stage">
+                    <canvas id="${config.chartId}" width="720" height="280"></canvas>
+                    ${empty ? '<div class="activity-muted chart-empty-state">No chart data available yet.</div>' : ''}
+                </div>
             </div>
         </section>
     `;
 }
 
 function renderDashboardCharts(configs = []) {
-    setTimeout(() => {
-        configs.forEach(config => {
-            if (config.type === 'heatmap') {
-                renderAttendanceHeatmap(config.chartId, config.series || []);
-            } else if (config.type === 'pie') {
-                renderPieChart(config.chartId, config.series || []);
-            } else if (config.type === 'bar') {
-                renderSimpleBarChart(config.chartId, config.series || [], config.color);
-            } else {
-                renderSimpleLineChart(config.chartId, config.series || [], config.color);
-            }
-        });
-    }, 0);
+    window.dashboardChartTabs = configs;
+    const activeTab = window.dashboardUiState?.chartTab || configs[0]?.key;
+    renderDashboardActiveChart(activeTab);
 }
 
 
