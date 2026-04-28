@@ -673,9 +673,9 @@ function renderDashboard(data) {
     if (!document.getElementById('changePasswordModal')) {
         const modalEl = document.createElement('div');
         modalEl.id = 'changePasswordModal';
-        modalEl.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center;';
+        modalEl.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(243,247,244,0.92);z-index:9999;align-items:center;justify-content:center;';
         modalEl.innerHTML = `
-            <div style="background:#fff;border-radius:12px;padding:2rem;width:100%;max-width:420px;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
+            <div style="background:#fff;border-radius:12px;padding:2rem;width:100%;max-width:420px;box-shadow:0 8px 32px rgba(20,41,28,0.12);border:1px solid #d1fae5;">
                 <h2 style="margin-top:0;">🔑 Change Password</h2>
                 <div id="changePwError" style="display:none;color:#dc2626;margin-bottom:1rem;padding:0.5rem;background:#fef2f2;border-radius:6px;"></div>
                 <label style="display:block;margin-bottom:0.4rem;font-weight:600;">Current Password</label>
@@ -1013,7 +1013,7 @@ function loadMembers() {
             </div>
             <div style="margin-bottom:1rem;">
                 <input type="text" id="crossGenderSearch" placeholder="🔍 Search across ALL members (both genders)…" class="search-input" style="width:100%;max-width:480px;">
-                <div id="crossGenderResults" style="display:none;margin-top:0.5rem;background:#fff;border:1px solid #d1fae5;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);"></div>
+                <div id="crossGenderResults" style="display:none;margin-top:0.5rem;background:#fff;border:1px solid #d1fae5;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(20,41,28,0.08);"></div>
             </div>
             <div id="membersAnalyticsContainer" style="margin-bottom:1.5rem;"></div>
             <div id="membersTableContainer"></div>
@@ -5982,7 +5982,7 @@ function toggleGlobalSearchScan() {
 
     // Create and show overlay
     const overlayHtml = `
-        <div id="scanSearchOverlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white;">
+        <div id="scanSearchOverlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(243,247,244,0.96); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--text-color);">
             <div style="font-size: 4rem; color: #2196F3; margin-bottom: 20px;">
                 <i class="fas fa-wifi fa-pulse"></i>
             </div>
@@ -6078,7 +6078,7 @@ function startCamera() {
                     <button class="modal-close" onclick="stopCamera()">&times;</button>
                 </div>
                 <div class="modal-body" style="text-align: center;">
-                    <video id="cameraVideo" autoplay playsinline style="width: 100%; max-height: 400px; background: #000; border-radius: 8px;"></video>
+                    <video id="cameraVideo" autoplay playsinline style="width: 100%; max-height: 400px; background: #f8fffb; border-radius: 8px;"></video>
                     <canvas id="cameraCanvas" style="display: none;"></canvas>
                 </div>
                 <div class="modal-footer" style="justify-content: center;">

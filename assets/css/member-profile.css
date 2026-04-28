@@ -208,7 +208,7 @@ body {
     overflow: hidden;
     border: 5px solid white;
     flex-shrink: 0;
-    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 8px 25px rgba(20, 41, 28, 0.16);
     animation: imagePop 0.8s ease-out;
     transition: transform 0.3s ease;
 }
