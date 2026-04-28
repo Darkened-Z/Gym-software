@@ -1178,16 +1178,7 @@ function loadMembersTable(page = 1) {
         .then(data => {
             if (data.success) {
                 const normalizedMembers = (data.data || []).map(normalizeMemberStatus);
-                const filteredMembers = memberStatusFilter
-                    ? normalizedMembers.filter(member => member.calculated_status === memberStatusFilter)
-                    : normalizedMembers;
-                renderMembersTable(filteredMembers, {
-                    ...(data.pagination || {}),
-                    total: filteredMembers.length,
-                    pages: 1,
-                    page: 1,
-                    limit: filteredMembers.length || limit
-                });
+                renderMembersTable(normalizedMembers, data.pagination || { page: 1, pages: 1, limit });
             } else {
                 document.getElementById('membersTableContainer').innerHTML =
                     '<div class="error">Failed to load members</div>';
