@@ -9,6 +9,12 @@ require_once __DIR__ . '/../app/models/Member.php';
 require_once __DIR__ . '/../app/models/Attendance.php';
 require_once __DIR__ . '/../app/helpers/AuthHelper.php';
 
+function fetchExportRows(PDO $db, string $sql): array {
+    $stmt = $db->prepare($sql);
+    $stmt->execute();
+    return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+}
+
 // Export action streams CSV — skip JSON content-type until we know the action
 $action = $_GET['action'] ?? '';
 if ($action !== 'export') {
@@ -427,7 +433,7 @@ try {
                 foreach ($genders as $g) {
                     $tbl = 'members_' . $g;
                     $dc = resolve_member_date_column($db, $tbl);
-                    $rows = $db->query("SELECT '{$g}' AS gender, member_code, name, phone, COALESCE(email,'') AS email, status, {$dc} AS join_date, monthly_fee, total_due_amount, next_fee_due_date, COALESCE(address,'') AS address FROM {$tbl} ORDER BY name ASC")->fetchAll(PDO::FETCH_ASSOC);
+                    $rows = fetchExportRows($db, "SELECT '{$g}' AS gender, member_code, name, phone, COALESCE(email,'') AS email, status, {$dc} AS join_date, monthly_fee, total_due_amount, next_fee_due_date, COALESCE(address,'') AS address FROM {$tbl} ORDER BY name ASC");
                     foreach ($rows as $row) {
                         fputcsv($out, $row);
                     }
@@ -437,7 +443,7 @@ try {
                 foreach ($genders as $g) {
                     $ptbl = 'payments_' . $g;
                     $mtbl = 'members_' . $g;
-                    $rows = $db->query("SELECT '{$g}' AS gender, m.member_code, m.name, p.amount, p.remaining_amount, p.payment_date, p.payment_method, p.invoice_number, p.received_by, p.status FROM {$ptbl} p JOIN {$mtbl} m ON p.member_id = m.id ORDER BY p.payment_date DESC")->fetchAll(PDO::FETCH_ASSOC);
+                    $rows = fetchExportRows($db, "SELECT '{$g}' AS gender, m.member_code, m.name, p.amount, p.remaining_amount, p.payment_date, p.payment_method, p.invoice_number, p.received_by, p.status FROM {$ptbl} p JOIN {$mtbl} m ON p.member_id = m.id ORDER BY p.payment_date DESC");
                     foreach ($rows as $row) {
                         fputcsv($out, $row);
                     }

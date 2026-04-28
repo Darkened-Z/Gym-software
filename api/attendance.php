@@ -16,6 +16,12 @@ $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? '';
 $gender = $_GET['gender'] ?? 'men';
 
+if (!in_array($gender, ['men', 'women'], true)) {
+    http_response_code(400);
+    echo json_encode(['success' => false, 'message' => 'Invalid gender']);
+    exit;
+}
+
 try {
     $database = new Database();
     $db = $database->getConnection();

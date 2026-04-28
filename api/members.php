@@ -13,6 +13,29 @@ header('Content-Type: application/json');
 
 AuthHelper::requireAdminOrStaff();
 
+function memberCodeExistsAcrossGenders(PDO $db, string $memberCode, ?string $excludeGender = null, ?int $excludeId = null): bool {
+    $memberCode = trim($memberCode);
+    foreach (['men', 'women'] as $gender) {
+        $sql = "SELECT id FROM members_{$gender} WHERE member_code = :member_code";
+        if ($excludeGender === $gender && $excludeId !== null) {
+            $sql .= ' AND id != :id';
+        }
+        $sql .= ' LIMIT 1';
+
+        $stmt = $db->prepare($sql);
+        $stmt->bindValue(':member_code', $memberCode, PDO::PARAM_STR);
+        if ($excludeGender === $gender && $excludeId !== null) {
+            $stmt->bindValue(':id', $excludeId, PDO::PARAM_INT);
+        }
+        $stmt->execute();
+        if ($stmt->fetch(PDO::FETCH_ASSOC)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 // Validate CSRF token for all state-mutating requests
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     AuthHelper::validateCSRF();
@@ -154,8 +177,7 @@ try {
                 }
 
                 // Check for duplicate member_code or phone
-                $existing = $member->getByCode($data['member_code']);
-                if ($existing) {
+                if (memberCodeExistsAcrossGenders($db, (string)$data['member_code'])) {
                     http_response_code(400);
                     echo json_encode(['success' => false, 'message' => 'Member code already exists']);
                     exit;
@@ -244,6 +266,12 @@ try {
                         echo json_encode(['success' => false, 'message' => "Missing required field: $field"]);
                         exit;
                     }
+                }
+
+                if (memberCodeExistsAcrossGenders($db, (string)$data['member_code'], $gender, (int)$id)) {
+                    http_response_code(400);
+                    echo json_encode(['success' => false, 'message' => 'Member code already exists']);
+                    exit;
                 }
 
                 $phoneCheck = $db->prepare("SELECT id FROM members_{$gender} WHERE phone = :phone AND id != :id LIMIT 1");
