@@ -50,9 +50,9 @@ try {
      */
     function checkRateLimit($gateId) {
         $cacheKey = 'gate_rate_limit_' . $gateId;
-        $requests = (int)Cache::get($cacheKey, 0);
+        $requests = Cache::increment($cacheKey, RATE_LIMIT_GATE_WINDOW);
         
-        if ($requests >= RATE_LIMIT_GATE_MAX) {
+        if ($requests > RATE_LIMIT_GATE_MAX) {
             http_response_code(429);
             echo json_encode([
                 'success' => false,
@@ -62,8 +62,6 @@ try {
             ]);
             exit;
         }
-        
-        Cache::set($cacheKey, $requests + 1, RATE_LIMIT_GATE_WINDOW);
     }
     
     // ========================================================================

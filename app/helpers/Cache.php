@@ -34,6 +34,11 @@ class Cache {
     private static function getCacheFile($key) {
         return self::$cacheDir . self::getCacheKey($key) . '.cache';
     }
+
+    private static function unserializeCacheValue(string $raw) {
+        $data = @unserialize($raw, ['allowed_classes' => false]);
+        return is_array($data) && array_key_exists('expires', $data) && array_key_exists('data', $data) ? $data : null;
+    }
     
     /**
      * Set cache value
@@ -57,6 +62,53 @@ class Cache {
         $cacheFile = self::getCacheFile($key);
         return file_put_contents($cacheFile, serialize($cacheData)) !== false;
     }
+
+    /**
+     * Atomically increment a numeric cache value.
+     * @param string $key Cache key
+     * @param int|null $ttl TTL to apply after increment
+     * @return int New counter value
+     */
+    public static function increment($key, $ttl = null) {
+        self::init();
+
+        if ($ttl === null) {
+            $ttl = self::$defaultTTL;
+        }
+
+        $cacheFile = self::getCacheFile($key);
+        $handle = fopen($cacheFile, 'c+');
+        if ($handle === false) {
+            return 0;
+        }
+
+        try {
+            flock($handle, LOCK_EX);
+            rewind($handle);
+            $raw = stream_get_contents($handle);
+            $cacheData = $raw !== false && $raw !== '' ? self::unserializeCacheValue($raw) : null;
+
+            $count = 0;
+            if ($cacheData !== null && ($cacheData['expires'] ?? 0) >= time()) {
+                $count = (int)($cacheData['data'] ?? 0);
+            }
+
+            $count++;
+            $cacheData = [
+                'expires' => time() + $ttl,
+                'data' => $count
+            ];
+
+            rewind($handle);
+            ftruncate($handle, 0);
+            fwrite($handle, serialize($cacheData));
+            fflush($handle);
+            return $count;
+        } finally {
+            flock($handle, LOCK_UN);
+            fclose($handle);
+        }
+    }
     
     /**
      * Get cache value
@@ -73,7 +125,11 @@ class Cache {
             return $default;
         }
         
-        $cacheData = unserialize(file_get_contents($cacheFile));
+        $cacheData = self::unserializeCacheValue((string)file_get_contents($cacheFile));
+        if ($cacheData === null) {
+            @unlink($cacheFile);
+            return $default;
+        }
         
         // Check if expired
         if ($cacheData['expires'] < time()) {
@@ -98,7 +154,11 @@ class Cache {
             return false;
         }
         
-        $cacheData = unserialize(file_get_contents($cacheFile));
+        $cacheData = self::unserializeCacheValue((string)file_get_contents($cacheFile));
+        if ($cacheData === null) {
+            @unlink($cacheFile);
+            return false;
+        }
         
         if ($cacheData['expires'] < time()) {
             unlink($cacheFile);

@@ -29,7 +29,7 @@ try {
         '6m' => 180,
         '12m' => 365,
     ];
-    $rangeDays = $daysByRange[$range] ?? 30;
+    $rangeDays = (int)($daysByRange[$range] ?? 30);
 
     switch ($action) {
         case 'members':

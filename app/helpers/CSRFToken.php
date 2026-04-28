@@ -13,11 +13,18 @@ class CSRFToken {
         if (session_status() === PHP_SESSION_NONE) {
             session_start();
         }
-        
+
+        if (!empty($_SESSION['csrf_token'])) {
+            if (empty($_SESSION['csrf_token_time'])) {
+                $_SESSION['csrf_token_time'] = time();
+            }
+            return $_SESSION['csrf_token'];
+        }
+
         $token = bin2hex(random_bytes(32));
         $_SESSION['csrf_token'] = $token;
         $_SESSION['csrf_token_time'] = time();
-        
+
         return $token;
     }
     
@@ -29,14 +36,17 @@ class CSRFToken {
         if (session_status() === PHP_SESSION_NONE) {
             session_start();
         }
-        
-        // Generate new token if doesn't exist or expired (1 hour)
-        if (!isset($_SESSION['csrf_token']) || 
-            !isset($_SESSION['csrf_token_time']) ||
-            (time() - $_SESSION['csrf_token_time']) > 3600) {
+
+        // Generate new token if it doesn't exist. Keep existing tokens stable.
+        if (!isset($_SESSION['csrf_token'])) {
             return self::generate();
         }
-        
+
+        if (!isset($_SESSION['csrf_token_time'])) {
+            $_SESSION['csrf_token_time'] = time();
+        } elseif ((time() - $_SESSION['csrf_token_time']) > 3600) {
+            return self::generate();
+        }
         return $_SESSION['csrf_token'];
     }
     

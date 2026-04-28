@@ -21,9 +21,20 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
     exit;
 }
 
+$requestData = $_POST;
+if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+    $rawInput = file_get_contents('php://input');
+    if (is_string($rawInput) && trim($rawInput) !== '') {
+        $jsonData = json_decode($rawInput, true);
+        if (is_array($jsonData)) {
+            $requestData = array_merge($requestData, $jsonData);
+        }
+    }
+}
+
 // CSRF validation for all POST requests
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $token = $_POST['csrf_token'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+    $token = $requestData['csrf_token'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
     if (!CSRFToken::validate($token)) {
         http_response_code(403);
         echo json_encode(['success' => false, 'error' => 'Invalid CSRF token']);
@@ -71,9 +82,9 @@ try {
                 exit;
             }
             
-            $memberId = (int)($_POST['member_id'] ?? 0);
-            $gender = $_POST['gender'] ?? '';
-            $reason = trim($_POST['reason'] ?? '');
+            $memberId = (int)($requestData['member_id'] ?? 0);
+            $gender = $requestData['gender'] ?? '';
+            $reason = trim($requestData['reason'] ?? '');
             
             // Validate inputs
             if (!$memberId || !in_array($gender, ['men', 'women'])) {
@@ -170,9 +181,9 @@ try {
                 exit;
             }
             
-            $memberId = (int)($_POST['member_id'] ?? 0);
-            $gender = $_POST['gender'] ?? '';
-            $reason = trim($_POST['reason'] ?? '');
+            $memberId = (int)($requestData['member_id'] ?? 0);
+            $gender = $requestData['gender'] ?? '';
+            $reason = trim($requestData['reason'] ?? '');
             
             // Validate
             if (!$memberId || !in_array($gender, ['men', 'women'])) {
@@ -288,8 +299,8 @@ try {
                 exit;
             }
             
-            $gateId = $_POST['gate_id'] ?? '';
-            $reason = trim($_POST['reason'] ?? '');
+            $gateId = $requestData['gate_id'] ?? '';
+            $reason = trim($requestData['reason'] ?? '');
             
             $minReasonLength = (int)env('ADMIN_OVERRIDE_REASON_MIN_LENGTH', 10);
             if (strlen($reason) < $minReasonLength) {

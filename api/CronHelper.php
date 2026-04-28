@@ -20,9 +20,14 @@ class CronHelper {
         // Create table if not exists
         $query = "CREATE TABLE IF NOT EXISTS system_jobs (
             id INT AUTO_INCREMENT PRIMARY KEY,
-            job_name VARCHAR(50) UNIQUE NOT NULL,
-            last_run DATETIME DEFAULT NULL,
-            status VARCHAR(20) DEFAULT 'idle'
+            job_name VARCHAR(100) NOT NULL,
+            last_run TIMESTAMP NULL,
+            next_run TIMESTAMP NULL,
+            status ENUM('pending', 'running', 'completed', 'failed') DEFAULT 'pending',
+            result TEXT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY idx_job_name (job_name)
         )";
         $this->db->exec($query);
     }
@@ -52,14 +57,25 @@ class CronHelper {
         }
 
         if ($shouldRun) {
-            $this->performArchive();
-            
-            // Update last run
-            $upd = $this->db->prepare("UPDATE system_jobs SET last_run = NOW(), status = 'idle' WHERE job_name = :name");
-            $upd->bindValue(':name', $jobName);
-            $upd->execute();
-            
-            return true; // Ran successfully
+            $this->db->prepare("UPDATE system_jobs SET status = 'running' WHERE job_name = :name")
+                ->execute([':name' => $jobName]);
+
+            try {
+                $this->performArchive();
+
+                // Update last run
+                $upd = $this->db->prepare("UPDATE system_jobs SET last_run = NOW(), status = 'completed' WHERE job_name = :name");
+                $upd->bindValue(':name', $jobName);
+                $upd->execute();
+
+                return true; // Ran successfully
+            } catch (Throwable $e) {
+                $fail = $this->db->prepare("UPDATE system_jobs SET last_run = NOW(), status = 'failed', result = :result WHERE job_name = :name");
+                $fail->bindValue(':name', $jobName);
+                $fail->bindValue(':result', $e->getMessage(), PDO::PARAM_STR);
+                $fail->execute();
+                throw $e;
+            }
         }
 
         return false; // Already ran today

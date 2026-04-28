@@ -35,35 +35,51 @@ function checkRateLimit() {
     $maxAttempts = defined('RATE_LIMIT_LOGIN_MAX') ? RATE_LIMIT_LOGIN_MAX : 5;
     $window = defined('RATE_LIMIT_LOGIN_WINDOW') ? RATE_LIMIT_LOGIN_WINDOW : 900;
 
-    $data = ['count' => 0, 'time' => time()];
-    if (file_exists($rateFile)) {
-        $raw = @file_get_contents($rateFile);
+    $handle = @fopen($rateFile, 'c+');
+    if ($handle === false) {
+        return;
+    }
+
+    try {
+        if (!flock($handle, LOCK_EX)) {
+            return;
+        }
+
+        rewind($handle);
+        $raw = stream_get_contents($handle);
+        $data = ['count' => 0, 'time' => time()];
         if ($raw) {
             $decoded = json_decode($raw, true);
             if (is_array($decoded)) {
                 $data = $decoded;
             }
         }
-    }
 
-    // Reset counter after window expires
-    if (time() - $data['time'] > $window) {
-        $data = ['count' => 0, 'time' => time()];
-    }
+        // Reset counter after window expires
+        if (time() - $data['time'] > $window) {
+            $data = ['count' => 0, 'time' => time()];
+        }
 
-    // Block if too many attempts
-    if ($data['count'] >= $maxAttempts) {
-        http_response_code(429);
-        echo json_encode([
-            'success' => false,
-            'message' => 'Too many login attempts. Please try again later.',
-            'error_code' => 'RATE_LIMIT_EXCEEDED'
-        ]);
-        exit;
-    }
+        // Block if too many attempts
+        if ($data['count'] >= $maxAttempts) {
+            http_response_code(429);
+            echo json_encode([
+                'success' => false,
+                'message' => 'Too many login attempts. Please try again later.',
+                'error_code' => 'RATE_LIMIT_EXCEEDED'
+            ]);
+            exit;
+        }
 
-    $data['count']++;
-    @file_put_contents($rateFile, json_encode($data), LOCK_EX);
+        $data['count']++;
+        rewind($handle);
+        ftruncate($handle, 0);
+        fwrite($handle, json_encode($data));
+        fflush($handle);
+    } finally {
+        flock($handle, LOCK_UN);
+        fclose($handle);
+    }
 }
 
 // Sanitize input

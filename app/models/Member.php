@@ -50,6 +50,22 @@ class Member {
         return strtoupper((string)$sortDir) === 'ASC' ? 'ASC' : 'DESC';
     }
 
+    private function limitString($value, int $max): string {
+        $value = trim((string)$value);
+        if (function_exists('mb_substr')) {
+            return mb_substr($value, 0, $max);
+        }
+        return substr($value, 0, $max);
+    }
+
+    private function bindNullableString(PDOStatement $stmt, string $placeholder, $value): void {
+        if ($value === null || $value === '') {
+            $stmt->bindValue($placeholder, null, PDO::PARAM_NULL);
+            return;
+        }
+        $stmt->bindValue($placeholder, (string)$value, PDO::PARAM_STR);
+    }
+
     private function baseSelect(): string {
         return "SELECT m.*, m.{$this->dateColumn} AS join_date FROM {$this->table} m";
     }
@@ -130,7 +146,7 @@ class Member {
     public function getByCode($memberCode) {
         $query = $this->baseSelect() . ' WHERE m.member_code = :member_code LIMIT 1';
         $stmt = $this->conn->prepare($query);
-        $stmt->bindValue(':member_code', trim((string)$memberCode), PDO::PARAM_STR);
+        $stmt->bindValue(':member_code', $this->limitString($memberCode, 50), PDO::PARAM_STR);
         $stmt->execute();
         return $stmt->fetch(PDO::FETCH_ASSOC);
     }
@@ -155,14 +171,14 @@ class Member {
             (:member_code, :name, :email, :phone, :rfid_uid, :address, :profile_image, :membership_type, :join_date, :admission_fee, :monthly_fee, :locker_fee, :next_fee_due_date, :total_due_amount, :status, :is_checked_in)";
 
         $stmt = $this->conn->prepare($query);
-        $stmt->bindValue(':member_code', trim((string)($data['member_code'] ?? '')), PDO::PARAM_STR);
-        $stmt->bindValue(':name', trim((string)($data['name'] ?? '')), PDO::PARAM_STR);
-        $stmt->bindValue(':email', $data['email'] ?? null, PDO::PARAM_STR);
-        $stmt->bindValue(':phone', $phone, PDO::PARAM_STR);
-        $stmt->bindValue(':rfid_uid', $data['rfid_uid'] ?? null, PDO::PARAM_STR);
-        $stmt->bindValue(':address', $data['address'] ?? null, PDO::PARAM_STR);
-        $stmt->bindValue(':profile_image', $data['profile_image'] ?? null, PDO::PARAM_STR);
-        $stmt->bindValue(':membership_type', $data['membership_type'] ?? 'Basic', PDO::PARAM_STR);
+        $stmt->bindValue(':member_code', $this->limitString($data['member_code'] ?? '', 50), PDO::PARAM_STR);
+        $stmt->bindValue(':name', $this->limitString($data['name'] ?? '', 200), PDO::PARAM_STR);
+        $this->bindNullableString($stmt, ':email', $this->limitString($data['email'] ?? '', 255) ?: null);
+        $stmt->bindValue(':phone', $this->limitString($phone, 20), PDO::PARAM_STR);
+        $this->bindNullableString($stmt, ':rfid_uid', $this->limitString($data['rfid_uid'] ?? '', 20) ?: null);
+        $this->bindNullableString($stmt, ':address', $this->limitString($data['address'] ?? '', 255) ?: null);
+        $this->bindNullableString($stmt, ':profile_image', $this->limitString($data['profile_image'] ?? '', 255) ?: null);
+        $stmt->bindValue(':membership_type', $this->limitString($data['membership_type'] ?? 'Basic', 50), PDO::PARAM_STR);
         $stmt->bindValue(':join_date', $data['join_date'] ?? date('Y-m-d'), PDO::PARAM_STR);
         $stmt->bindValue(':admission_fee', $data['admission_fee'] ?? 0.00, PDO::PARAM_STR);
         $stmt->bindValue(':monthly_fee', $data['monthly_fee'] ?? 0.00, PDO::PARAM_STR);
@@ -204,14 +220,14 @@ class Member {
 
         $stmt = $this->conn->prepare($query);
         $stmt->bindValue(':id', (int)$id, PDO::PARAM_INT);
-        $stmt->bindValue(':member_code', trim((string)($data['member_code'] ?? '')), PDO::PARAM_STR);
-        $stmt->bindValue(':name', trim((string)($data['name'] ?? '')), PDO::PARAM_STR);
-        $stmt->bindValue(':email', $data['email'] ?? null, PDO::PARAM_STR);
-        $stmt->bindValue(':phone', $phone, PDO::PARAM_STR);
-        $stmt->bindValue(':rfid_uid', $data['rfid_uid'] ?? null, PDO::PARAM_STR);
-        $stmt->bindValue(':address', $data['address'] ?? null, PDO::PARAM_STR);
-        $stmt->bindValue(':profile_image', $data['profile_image'] ?? null, PDO::PARAM_STR);
-        $stmt->bindValue(':membership_type', $data['membership_type'] ?? 'Basic', PDO::PARAM_STR);
+        $stmt->bindValue(':member_code', $this->limitString($data['member_code'] ?? '', 50), PDO::PARAM_STR);
+        $stmt->bindValue(':name', $this->limitString($data['name'] ?? '', 200), PDO::PARAM_STR);
+        $this->bindNullableString($stmt, ':email', $this->limitString($data['email'] ?? '', 255) ?: null);
+        $stmt->bindValue(':phone', $this->limitString($phone, 20), PDO::PARAM_STR);
+        $this->bindNullableString($stmt, ':rfid_uid', $this->limitString($data['rfid_uid'] ?? '', 20) ?: null);
+        $this->bindNullableString($stmt, ':address', $this->limitString($data['address'] ?? '', 255) ?: null);
+        $this->bindNullableString($stmt, ':profile_image', $this->limitString($data['profile_image'] ?? '', 255) ?: null);
+        $stmt->bindValue(':membership_type', $this->limitString($data['membership_type'] ?? 'Basic', 50), PDO::PARAM_STR);
         $stmt->bindValue(':join_date', $data['join_date'] ?? date('Y-m-d'), PDO::PARAM_STR);
         $stmt->bindValue(':admission_fee', $data['admission_fee'] ?? 0.00, PDO::PARAM_STR);
         $stmt->bindValue(':monthly_fee', $data['monthly_fee'] ?? 0.00, PDO::PARAM_STR);

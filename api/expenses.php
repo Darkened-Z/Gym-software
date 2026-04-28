@@ -17,9 +17,13 @@ ob_clean();
 
 header('Content-Type: application/json');
 
-AuthHelper::requireAdminOrStaff();
-
 $method = $_SERVER['REQUEST_METHOD'];
+
+AuthHelper::requireAdminOrStaff();
+if ($method !== 'GET') {
+    AuthHelper::validateCSRF();
+}
+
 $action = $_GET['action'] ?? '';
 
 try {
@@ -277,14 +281,14 @@ try {
     http_response_code(500);
     echo json_encode([
         'success' => false,
-        'message' => 'Server error: ' . $e->getMessage()
+        'message' => (defined('DEBUG_MODE') && DEBUG_MODE) ? $e->getMessage() : 'An unexpected server error occurred.'
     ]);
 } catch (Error $e) {
     ob_clean();
     http_response_code(500);
     echo json_encode([
         'success' => false,
-        'message' => 'Fatal error: ' . $e->getMessage()
+        'message' => (defined('DEBUG_MODE') && DEBUG_MODE) ? $e->getMessage() : 'An unexpected server error occurred.'
     ]);
 }
 

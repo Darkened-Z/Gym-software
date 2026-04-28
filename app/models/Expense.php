@@ -7,6 +7,22 @@ class Expense {
     private $conn;
     private $table = 'expenses';
 
+    private function limitString($value, int $max): string {
+        $value = trim((string)$value);
+        if (function_exists('mb_substr')) {
+            return mb_substr($value, 0, $max);
+        }
+        return substr($value, 0, $max);
+    }
+
+    private function bindNullableString(PDOStatement $stmt, string $placeholder, $value): void {
+        if ($value === null || $value === '') {
+            $stmt->bindValue($placeholder, null, PDO::PARAM_NULL);
+            return;
+        }
+        $stmt->bindValue($placeholder, (string)$value, PDO::PARAM_STR);
+    }
+
     public function __construct($db) {
         $this->conn = $db;
     }
@@ -73,17 +89,17 @@ class Expense {
     }
 
     public function create($data) {
-        $query = "INSERT INTO " . $this->table . " 
-            (expense_type, description, amount, expense_date, category, created_by, notes) 
-            VALUES 
+        $query = "INSERT INTO " . $this->table . "
+            (expense_type, description, amount, expense_date, category, created_by, notes)
+            VALUES
             (:expense_type, :description, :amount, :expense_date, :category, :created_by, :notes)";
-        
+
         $stmt = $this->conn->prepare($query);
-        $stmt->bindValue(':expense_type', $data['expense_type'] ?? '', PDO::PARAM_STR);
-        $stmt->bindValue(':description', $data['description'] ?? null, PDO::PARAM_STR);
+        $stmt->bindValue(':expense_type', $this->limitString($data['expense_type'] ?? '', 100), PDO::PARAM_STR);
+        $this->bindNullableString($stmt, ':description', $this->limitString($data['description'] ?? '', 255) ?: null);
         $stmt->bindValue(':amount', $data['amount'] ?? 0.00, PDO::PARAM_STR);
         $stmt->bindValue(':expense_date', $data['expense_date'] ?? date('Y-m-d'), PDO::PARAM_STR);
-        $stmt->bindValue(':category', $data['category'] ?? null, PDO::PARAM_STR);
+        $this->bindNullableString($stmt, ':category', $this->limitString($data['category'] ?? '', 50) ?: null);
         $stmt->bindValue(':created_by', $data['created_by'] ?? null, PDO::PARAM_INT);
         $stmt->bindValue(':notes', $data['notes'] ?? null, PDO::PARAM_STR);
 
@@ -105,11 +121,11 @@ class Expense {
         
         $stmt = $this->conn->prepare($query);
         $stmt->bindValue(':id', $id, PDO::PARAM_INT);
-        $stmt->bindValue(':expense_type', $data['expense_type'] ?? '', PDO::PARAM_STR);
-        $stmt->bindValue(':description', $data['description'] ?? null, PDO::PARAM_STR);
+        $stmt->bindValue(':expense_type', $this->limitString($data['expense_type'] ?? '', 100), PDO::PARAM_STR);
+        $this->bindNullableString($stmt, ':description', $this->limitString($data['description'] ?? '', 255) ?: null);
         $stmt->bindValue(':amount', $data['amount'] ?? 0.00, PDO::PARAM_STR);
         $stmt->bindValue(':expense_date', $data['expense_date'] ?? date('Y-m-d'), PDO::PARAM_STR);
-        $stmt->bindValue(':category', $data['category'] ?? null, PDO::PARAM_STR);
+        $this->bindNullableString($stmt, ':category', $this->limitString($data['category'] ?? '', 50) ?: null);
         $stmt->bindValue(':notes', $data['notes'] ?? null, PDO::PARAM_STR);
 
         return $stmt->execute();

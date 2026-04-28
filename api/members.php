@@ -50,11 +50,11 @@ try {
             $syncCheckStmt->execute();
             $syncJob = $syncCheckStmt->fetch(PDO::FETCH_ASSOC);
             $shouldSync = !$syncJob || !$syncJob['last_run'] || (time() - strtotime($syncJob['last_run'])) > 300;
-            if ($shouldSync) {
-                $member->syncAllActivityStatuses();
-                $db->prepare("INSERT INTO system_jobs (job_name, last_run, status) VALUES (:name, NOW(), 'idle')
-                              ON DUPLICATE KEY UPDATE last_run = NOW()")->execute([':name' => $syncJobName]);
-            }
+                if ($shouldSync) {
+                    $member->syncAllActivityStatuses();
+                    $db->prepare("INSERT INTO system_jobs (job_name, last_run, status) VALUES (:name, NOW(), 'completed')
+                              ON DUPLICATE KEY UPDATE last_run = NOW(), status = 'completed'")->execute([':name' => $syncJobName]);
+                }
             $result = $member->getAll($page, $limit, $search, $status, $filters);
             echo json_encode([
                 'success' => true,

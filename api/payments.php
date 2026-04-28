@@ -202,7 +202,8 @@ try {
 
                 $memberId = filter_var($data['member_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
                 $amount = isset($data['amount']) && is_numeric($data['amount']) ? round((float)$data['amount'], 2) : null;
-                $remainingAmount = isset($data['remaining_amount']) && is_numeric($data['remaining_amount']) ? max(0, round((float)$data['remaining_amount'], 2)) : 0.00;
+                $hasRemainingAmount = array_key_exists('remaining_amount', $data) && $data['remaining_amount'] !== '' && $data['remaining_amount'] !== null && is_numeric($data['remaining_amount']);
+                $remainingAmount = $hasRemainingAmount ? max(0, round((float)$data['remaining_amount'], 2)) : null;
                 $totalDueAmount = isset($data['total_due_amount']) && $data['total_due_amount'] !== '' && $data['total_due_amount'] !== null
                     ? max(0, round((float)$data['total_due_amount'], 2))
                     : null;
@@ -228,7 +229,7 @@ try {
                 }
 
                 $memberTable = 'members_' . $gender;
-                $memberStmt = $db->prepare("SELECT id, name, phone FROM {$memberTable} WHERE id = :id LIMIT 1");
+                $memberStmt = $db->prepare("SELECT id, name, phone, monthly_fee, total_due_amount, status FROM {$memberTable} WHERE id = :id LIMIT 1");
                 $memberStmt->bindValue(':id', $memberId, PDO::PARAM_INT);
                 $memberStmt->execute();
                 $memberRow = $memberStmt->fetch(PDO::FETCH_ASSOC);
@@ -244,7 +245,6 @@ try {
                 $paymentData = [
                     'member_id' => $memberId,
                     'amount' => $amount,
-                    'remaining_amount' => $remainingAmount,
                     'total_due_amount' => $totalDueAmount,
                     'payment_date' => $paymentDate,
                     'due_date' => $data['due_date'] ?? null,
@@ -253,9 +253,30 @@ try {
                     'payment_method' => $data['payment_method'] ?? 'Cash',
                     'status' => $data['status'] ?? 'completed'
                 ];
+                if ($hasRemainingAmount) {
+                    $paymentData['remaining_amount'] = $remainingAmount;
+                }
 
                 $id = $payment->create($paymentData);
                 if ($id) {
+                    $currentDue = round((float)($memberRow['total_due_amount'] ?? 0), 2);
+                    $monthlyFee = round((float)($memberRow['monthly_fee'] ?? 0), 2);
+                    $paymentStatus = $paymentData['status'] ?? 'completed';
+                    if ($hasRemainingAmount) {
+                        $newDue = $remainingAmount;
+                    } elseif ($paymentStatus === 'completed') {
+                        $newDue = max(0, round(($currentDue + $monthlyFee) - $amount, 2));
+                    } else {
+                        $newDue = max(0, round($currentDue, 2));
+                    }
+
+                    $updateDueStmt = $db->prepare("UPDATE {$memberTable} SET total_due_amount = :due WHERE id = :id");
+                    $updateDueStmt->bindValue(':due', $newDue, PDO::PARAM_STR);
+                    $updateDueStmt->bindValue(':id', $memberId, PDO::PARAM_INT);
+                    $updateDueStmt->execute();
+
+                    $memberModel->syncActivityStatus((int)$memberId);
+
                     $consentModel = new MemberConsent($db);
                     $templateModel = new MessageTemplate($db);
                     $queueModel = new MessageQueue($db);

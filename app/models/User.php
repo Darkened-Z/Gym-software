@@ -12,6 +12,14 @@ class User {
         return min($value, $max);
     }
 
+    private function limitString($value, int $max): string {
+        $value = trim((string)$value);
+        if (function_exists('mb_substr')) {
+            return mb_substr($value, 0, $max);
+        }
+        return substr($value, 0, $max);
+    }
+
     public function __construct($db) {
         $this->conn = $db;
     }
@@ -52,13 +60,15 @@ class User {
 
         $where = '';
         if ($search !== '') {
-            $where = 'WHERE username LIKE :search OR name LIKE :search OR role LIKE :search';
+            $where = 'WHERE username LIKE :search_username OR name LIKE :search_name OR role LIKE :search_role';
         }
 
         $query = "SELECT id, username, role, name, created_at FROM {$this->table} {$where} ORDER BY id DESC LIMIT :limit OFFSET :offset";
         $stmt = $this->conn->prepare($query);
         if ($search !== '') {
-            $stmt->bindValue(':search', '%' . $search . '%', PDO::PARAM_STR);
+            $stmt->bindValue(':search_username', '%' . $search . '%', PDO::PARAM_STR);
+            $stmt->bindValue(':search_name', '%' . $search . '%', PDO::PARAM_STR);
+            $stmt->bindValue(':search_role', '%' . $search . '%', PDO::PARAM_STR);
         }
         $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
@@ -67,7 +77,9 @@ class User {
         $countQuery = "SELECT COUNT(*) AS total FROM {$this->table} {$where}";
         $countStmt = $this->conn->prepare($countQuery);
         if ($search !== '') {
-            $countStmt->bindValue(':search', '%' . $search . '%', PDO::PARAM_STR);
+            $countStmt->bindValue(':search_username', '%' . $search . '%', PDO::PARAM_STR);
+            $countStmt->bindValue(':search_name', '%' . $search . '%', PDO::PARAM_STR);
+            $countStmt->bindValue(':search_role', '%' . $search . '%', PDO::PARAM_STR);
         }
         $countStmt->execute();
         $total = (int)($countStmt->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);
@@ -86,10 +98,10 @@ class User {
     public function create(array $data) {
         $query = "INSERT INTO {$this->table} (username, password, role, name) VALUES (:username, :password, :role, :name)";
         $stmt = $this->conn->prepare($query);
-        $stmt->bindValue(':username', trim((string)$data['username']), PDO::PARAM_STR);
+        $stmt->bindValue(':username', $this->limitString($data['username'] ?? '', 50), PDO::PARAM_STR);
         $stmt->bindValue(':password', password_hash((string)$data['password'], PASSWORD_DEFAULT), PDO::PARAM_STR);
-        $stmt->bindValue(':role', trim((string)($data['role'] ?? 'staff')), PDO::PARAM_STR);
-        $stmt->bindValue(':name', trim((string)$data['name']), PDO::PARAM_STR);
+        $stmt->bindValue(':role', $this->limitString($data['role'] ?? 'staff', 50), PDO::PARAM_STR);
+        $stmt->bindValue(':name', $this->limitString($data['name'] ?? '', 100), PDO::PARAM_STR);
         $stmt->execute();
         return $this->conn->lastInsertId();
     }
@@ -109,9 +121,9 @@ class User {
         $query .= ' WHERE id = :id';
         $stmt = $this->conn->prepare($query);
         $stmt->bindValue(':id', (int)$id, PDO::PARAM_INT);
-        $stmt->bindValue(':username', trim((string)$data['username']), PDO::PARAM_STR);
-        $stmt->bindValue(':role', trim((string)($data['role'] ?? 'staff')), PDO::PARAM_STR);
-        $stmt->bindValue(':name', trim((string)$data['name']), PDO::PARAM_STR);
+        $stmt->bindValue(':username', $this->limitString($data['username'] ?? '', 50), PDO::PARAM_STR);
+        $stmt->bindValue(':role', $this->limitString($data['role'] ?? 'staff', 50), PDO::PARAM_STR);
+        $stmt->bindValue(':name', $this->limitString($data['name'] ?? '', 100), PDO::PARAM_STR);
         if (!empty($data['password'])) {
             $stmt->bindValue(':password', password_hash((string)$data['password'], PASSWORD_DEFAULT), PDO::PARAM_STR);
         }

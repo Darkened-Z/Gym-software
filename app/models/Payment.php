@@ -9,6 +9,14 @@ class Payment {
     private $table;
     private $availableColumns;
 
+    private function limitString($value, int $max): string {
+        $value = trim((string)$value);
+        if (function_exists('mb_substr')) {
+            return mb_substr($value, 0, $max);
+        }
+        return substr($value, 0, $max);
+    }
+
     public function __construct($db, $gender = 'men') {
         $this->conn = $db;
         $this->gender = in_array($gender, ['men', 'women']) ? $gender : 'men';
@@ -79,6 +87,16 @@ class Payment {
         $stmt->bindValue($placeholder, $value, PDO::PARAM_STR);
     }
 
+    private function normalizePaymentData(array $data): array {
+        foreach (['invoice_number' => 100, 'payment_method' => 50, 'received_by' => 100, 'payment_type' => 50, 'status' => 20, 'due_date' => 10, 'payment_date' => 10] as $column => $max) {
+            if (array_key_exists($column, $data) && $data[$column] !== null) {
+                $data[$column] = $this->limitString($data[$column], $max);
+            }
+        }
+
+        return $data;
+    }
+
     public function getByMemberId($memberId, $limit = null, $offset = 0) {
         $query = "SELECT * FROM " . $this->table . " WHERE member_id = :member_id ORDER BY payment_date DESC";
         
@@ -128,6 +146,7 @@ class Payment {
     }
 
     public function create($data) {
+        $data = $this->normalizePaymentData($data);
         $filteredData = $this->filterDataForSchema($data);
         $columns = array_keys($filteredData);
         $placeholders = array_map(static fn($column) => ':' . $column, $columns);
@@ -146,6 +165,7 @@ class Payment {
     }
 
     public function update($id, $data) {
+        $data = $this->normalizePaymentData($data);
         $filteredData = $this->filterDataForSchema($data);
         $assignments = [];
 

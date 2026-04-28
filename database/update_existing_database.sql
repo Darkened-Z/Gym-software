@@ -391,7 +391,7 @@ CREATE TABLE IF NOT EXISTS system_jobs (
     job_name VARCHAR(100) NOT NULL,
     last_run TIMESTAMP NULL,
     next_run TIMESTAMP NULL,
-    status VARCHAR(20) DEFAULT 'idle',
+    status ENUM('pending', 'running', 'completed', 'failed') DEFAULT 'pending',
     result TEXT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -524,10 +524,10 @@ INSERT INTO gate_configuration (gate_id, gate_type, gate_name, location, open_du
 ON DUPLICATE KEY UPDATE gate_name = VALUES(gate_name), location = VALUES(location), open_duration_ms = VALUES(open_duration_ms);
 
 INSERT INTO system_jobs (job_name, status) VALUES
-('cleanup_orphaned_sessions', 'idle'),
-('cleanup_old_logs', 'idle'),
-('cleanup_old_gate_activity', 'idle')
-ON DUPLICATE KEY UPDATE job_name = VALUES(job_name);
+('cleanup_orphaned_sessions', 'pending'),
+('cleanup_old_logs', 'pending'),
+('cleanup_old_gate_activity', 'pending')
+ON DUPLICATE KEY UPDATE job_name = VALUES(job_name), status = VALUES(status);
 
 INSERT INTO message_templates (template_key, template_name, channel, language_code, body, variables_json)
 VALUES

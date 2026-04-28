@@ -7,7 +7,7 @@
 require_once __DIR__ . '/config/config.php';
 
 function checkAdminAuth() {
-    if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
+    if (!isset($_SESSION['role']) || !in_array($_SESSION['role'], ['admin', 'staff'], true)) {
         header('Location: index.html');
         exit;
     }
@@ -29,7 +29,7 @@ function checkMemberAuth($requiredGender = null) {
 
 function redirectIfAuthenticated() {
     if (isset($_SESSION['role'])) {
-        if ($_SESSION['role'] === 'admin') {
+        if (in_array($_SESSION['role'], ['admin', 'staff'], true)) {
             header('Location: admin-dashboard.html');
             exit;
         } elseif ($_SESSION['role'] === 'member') {
