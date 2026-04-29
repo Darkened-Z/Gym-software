@@ -44,7 +44,13 @@ try {
             // Get payments for current month
             $memberTable = 'members_' . $gender;
             $joinDateColumn = resolve_member_date_column($db, $memberTable);
-            $statusExpr = Member::getStatusCaseExpression($joinDateColumn, 'attendance_' . $gender, 'm.id', 'm.status');
+            $statusExpr = Member::getStatusCaseExpression(
+                $joinDateColumn,
+                'attendance_' . $gender,
+                'm.id',
+                'status',
+                table_has_column($db, $memberTable, 'status_force_active') ? 'm.status_force_active' : '0'
+            );
             $offset = ($page - 1) * $limit;
             
             if ($defaulters) {

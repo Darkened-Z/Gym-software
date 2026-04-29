@@ -397,7 +397,13 @@ try {
             foreach (['men', 'women'] as $g) {
                 $tbl = 'members_' . $g;
                 $dc = resolve_member_date_column($db, $tbl);
-                $statusExpr = Member::getStatusCaseExpression($dc, 'attendance_' . $g, 'id', 'status');
+                $statusExpr = Member::getStatusCaseExpression(
+                    $dc,
+                    'attendance_' . $g,
+                    'id',
+                    'status',
+                    table_has_column($db, $tbl, 'status_force_active') ? 'status_force_active' : '0'
+                );
                 $stmt = $db->prepare("SELECT id, member_code, name, phone, status, {$statusExpr} AS calculated_status, total_due_amount, '{$g}' AS gender, {$dc} AS join_date
                                       FROM {$tbl}
                                       WHERE member_code LIKE :q1 OR name LIKE :q2 OR phone LIKE :q3

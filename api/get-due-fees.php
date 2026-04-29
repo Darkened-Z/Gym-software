@@ -53,7 +53,13 @@ try {
     foreach ($tables as $entry) {
         $tableName = $entry['table'];
         $resolvedDateColumn = resolve_member_date_column($db, $tableName);
-        $statusExpr = Member::getStatusCaseExpression($resolvedDateColumn, 'attendance_' . $entry['gender'], 'id', 'status');
+        $statusExpr = Member::getStatusCaseExpression(
+            $resolvedDateColumn,
+            'attendance_' . $entry['gender'],
+            'id',
+            'status',
+            table_has_column($db, $tableName, 'status_force_active') ? 'status_force_active' : '0'
+        );
         $unionParts[] = "SELECT id, member_code, name, phone, total_due_amount, next_fee_due_date, status, {$statusExpr} AS calculated_status, '{$entry['gender']}' AS gender, {$resolvedDateColumn} AS join_date, created_at
                          FROM {$tableName}
                          WHERE COALESCE(total_due_amount, 0) > 0 AND ({$statusExpr}) = 'active'";

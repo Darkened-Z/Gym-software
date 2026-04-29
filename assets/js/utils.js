@@ -54,9 +54,10 @@ const Utils = {
     debounce: function(func, wait) {
         let timeout;
         return function executedFunction(...args) {
+            const context = this;
             const later = () => {
                 clearTimeout(timeout);
-                func(...args);
+                func.apply(context, args);
             };
             clearTimeout(timeout);
             timeout = setTimeout(later, wait);

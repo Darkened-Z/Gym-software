@@ -113,6 +113,31 @@ function resolve_member_date_column(PDO $db, string $tableName): string {
     return $cache[$tableName] = 'join_date';
 }
 
+/**
+ * Check whether a table contains a given column.
+ */
+function table_has_column(PDO $db, string $tableName, string $columnName): bool {
+    static $cache = [];
+    $key = $tableName . '|' . $columnName;
+
+    if (isset($cache[$key])) {
+        return $cache[$key];
+    }
+
+    $query = "SELECT COUNT(*)
+              FROM INFORMATION_SCHEMA.COLUMNS
+              WHERE TABLE_SCHEMA = DATABASE()
+                AND TABLE_NAME = :table_name
+                AND COLUMN_NAME = :column_name";
+
+    $stmt = $db->prepare($query);
+    $stmt->bindValue(':table_name', $tableName, PDO::PARAM_STR);
+    $stmt->bindValue(':column_name', $columnName, PDO::PARAM_STR);
+    $stmt->execute();
+
+    return $cache[$key] = ((int)($stmt->fetchColumn() ?: 0) > 0);
+}
+
 // ============================================================================
 // Application Configuration
 // ============================================================================

@@ -9,6 +9,7 @@ class Member {
     private $table;
     private $dateColumn;
     private $attendanceTable;
+    private $hasStatusForceActive;
 
     public static function getStatusCaseExpression(string $joinDateExpression = 'join_date', string $attendanceTable = '', string $memberIdExpression = 'id', string $statusExpression = 'status', string $forceActiveExpression = 'status_force_active'): string {
         $attendanceRule = '';
@@ -36,6 +37,21 @@ class Member {
         $this->table = 'members_' . $this->gender;
         $this->dateColumn = resolve_member_date_column($this->conn, $this->table);
         $this->attendanceTable = 'attendance_' . $this->gender;
+        $this->hasStatusForceActive = table_has_column($this->conn, $this->table, 'status_force_active');
+    }
+
+    private function statusForceActiveExpression(): string {
+        return $this->hasStatusForceActive ? 'status_force_active' : '0';
+    }
+
+    private function statusCaseExpression(string $joinDateExpression = 'join_date', string $attendanceTable = '', string $memberIdExpression = 'id'): string {
+        return self::getStatusCaseExpression(
+            $joinDateExpression,
+            $attendanceTable,
+            $memberIdExpression,
+            'status',
+            $this->statusForceActiveExpression()
+        );
     }
 
     private function normalizePositiveInt($value, int $default, int $max = 500): int {
@@ -77,7 +93,7 @@ class Member {
     }
 
     private function baseSelect(): string {
-        return "SELECT m.*, m.{$this->dateColumn} AS join_date, " . self::getStatusCaseExpression('m.' . $this->dateColumn, $this->attendanceTable, 'm.id', 'm.status') . " AS calculated_status FROM {$this->table} m";
+        return "SELECT m.*, m.{$this->dateColumn} AS join_date, " . $this->statusCaseExpression('m.' . $this->dateColumn, $this->attendanceTable, 'm.id') . " AS calculated_status FROM {$this->table} m";
     }
 
     public function getAll($page = 1, $limit = 20, $search = '', $status = null, array $filters = []) {
@@ -100,7 +116,7 @@ class Member {
         }
 
         if ($status !== null && in_array($status, ['active', 'inactive'], true)) {
-            $where[] = self::getStatusCaseExpression('m.' . $this->dateColumn, $this->attendanceTable, 'm.id', 'm.status') . ' = :status';
+            $where[] = $this->statusCaseExpression('m.' . $this->dateColumn, $this->attendanceTable, 'm.id') . ' = :status';
             $params[':status'] = $status;
         }
 
@@ -175,10 +191,22 @@ class Member {
             throw new InvalidArgumentException('Phone number is required.');
         }
 
-        $query = "INSERT INTO {$this->table}
-            (member_code, name, email, phone, rfid_uid, address, profile_image, membership_type, {$this->dateColumn}, admission_fee, monthly_fee, locker_fee, next_fee_due_date, total_due_amount, status, status_force_active, is_checked_in)
-            VALUES
-            (:member_code, :name, :email, :phone, :rfid_uid, :address, :profile_image, :membership_type, :join_date, :admission_fee, :monthly_fee, :locker_fee, :next_fee_due_date, :total_due_amount, :status, :status_force_active, :is_checked_in)";
+        $columns = [
+            'member_code', 'name', 'email', 'phone', 'rfid_uid', 'address', 'profile_image', 'membership_type',
+            $this->dateColumn, 'admission_fee', 'monthly_fee', 'locker_fee', 'next_fee_due_date', 'total_due_amount', 'status'
+        ];
+        $placeholders = [
+            ':member_code', ':name', ':email', ':phone', ':rfid_uid', ':address', ':profile_image', ':membership_type',
+            ':join_date', ':admission_fee', ':monthly_fee', ':locker_fee', ':next_fee_due_date', ':total_due_amount', ':status'
+        ];
+        if ($this->hasStatusForceActive) {
+            $columns[] = 'status_force_active';
+            $placeholders[] = ':status_force_active';
+        }
+        $columns[] = 'is_checked_in';
+        $placeholders[] = ':is_checked_in';
+
+        $query = "INSERT INTO {$this->table} (" . implode(', ', $columns) . ") VALUES (" . implode(', ', $placeholders) . ")";
 
         $stmt = $this->conn->prepare($query);
         $stmt->bindValue(':member_code', $this->limitString($data['member_code'] ?? '', 50), PDO::PARAM_STR);
@@ -196,7 +224,9 @@ class Member {
         $stmt->bindValue(':next_fee_due_date', $data['next_fee_due_date'] ?? null, PDO::PARAM_STR);
         $stmt->bindValue(':total_due_amount', $data['total_due_amount'] ?? 0.00, PDO::PARAM_STR);
         $stmt->bindValue(':status', $data['status'] ?? 'active', PDO::PARAM_STR);
-        $stmt->bindValue(':status_force_active', (int)($data['status_force_active'] ?? 0), PDO::PARAM_INT);
+        if ($this->hasStatusForceActive) {
+            $stmt->bindValue(':status_force_active', (int)($data['status_force_active'] ?? 0), PDO::PARAM_INT);
+        }
         $stmt->bindValue(':is_checked_in', (int)($data['is_checked_in'] ?? 0), PDO::PARAM_INT);
 
         if ($stmt->execute()) {
@@ -211,26 +241,35 @@ class Member {
             throw new InvalidArgumentException('Phone number is required.');
         }
 
-        $query = "UPDATE {$this->table} SET
-            member_code = :member_code,
-            name = :name,
-            email = :email,
-            phone = :phone,
-            rfid_uid = :rfid_uid,
-            address = :address,
-            profile_image = :profile_image,
-            membership_type = :membership_type,
-            {$this->dateColumn} = :join_date,
-            admission_fee = :admission_fee,
-            monthly_fee = :monthly_fee,
-            locker_fee = :locker_fee,
-            next_fee_due_date = :next_fee_due_date,
-            total_due_amount = :total_due_amount,
-            status = :status,
-            status_force_active = :status_force_active
-            WHERE id = :id";
+        $setParts = [
+            'member_code = :member_code',
+            'name = :name',
+            'email = :email',
+            'phone = :phone',
+            'rfid_uid = :rfid_uid',
+            'address = :address',
+            'profile_image = :profile_image',
+            'membership_type = :membership_type',
+            $this->dateColumn . ' = :join_date',
+            'admission_fee = :admission_fee',
+            'monthly_fee = :monthly_fee',
+            'locker_fee = :locker_fee',
+            'next_fee_due_date = :next_fee_due_date',
+            'total_due_amount = :total_due_amount',
+            'status = :status'
+        ];
+        if ($this->hasStatusForceActive) {
+            $setParts[] = 'status_force_active = :status_force_active';
+        }
+        $query = "UPDATE {$this->table} SET\n            " . implode(",\n            ", $setParts) . "\n            WHERE id = :id";
 
-        $currentStmt = $this->conn->prepare("SELECT status, COALESCE(status_force_active, 0) AS status_force_active FROM {$this->table} WHERE id = :id LIMIT 1");
+        $currentSelect = 'SELECT status';
+        if ($this->hasStatusForceActive) {
+            $currentSelect .= ', COALESCE(status_force_active, 0) AS status_force_active';
+        }
+        $currentSelect .= " FROM {$this->table} WHERE id = :id LIMIT 1";
+
+        $currentStmt = $this->conn->prepare($currentSelect);
         $currentStmt->bindValue(':id', (int)$id, PDO::PARAM_INT);
         $currentStmt->execute();
         $current = $currentStmt->fetch(PDO::FETCH_ASSOC) ?: null;
@@ -265,7 +304,9 @@ class Member {
         $stmt->bindValue(':next_fee_due_date', $data['next_fee_due_date'] ?? null, PDO::PARAM_STR);
         $stmt->bindValue(':total_due_amount', $data['total_due_amount'] ?? 0.00, PDO::PARAM_STR);
         $stmt->bindValue(':status', $incomingStatus, PDO::PARAM_STR);
-        $stmt->bindValue(':status_force_active', $statusForceActive, PDO::PARAM_INT);
+        if ($this->hasStatusForceActive) {
+            $stmt->bindValue(':status_force_active', $statusForceActive, PDO::PARAM_INT);
+        }
 
         return $stmt->execute();
     }
@@ -295,7 +336,7 @@ class Member {
 
     public function syncActivityStatus($id): array {
         $query = "UPDATE {$this->table} m
-                  SET status = " . self::getStatusCaseExpression('m.' . $this->dateColumn, $this->attendanceTable, 'm.id', 'm.status') . "
+                  SET status = " . $this->statusCaseExpression('m.' . $this->dateColumn, $this->attendanceTable, 'm.id') . "
                   WHERE m.id = :id";
 
         $stmt = $this->conn->prepare($query);
@@ -317,7 +358,7 @@ class Member {
 
     public function syncAllActivityStatuses(): array {
         $query = "UPDATE {$this->table} m
-                  SET status = " . self::getStatusCaseExpression('m.' . $this->dateColumn, $this->attendanceTable, 'm.id', 'm.status');
+                  SET status = " . $this->statusCaseExpression('m.' . $this->dateColumn, $this->attendanceTable, 'm.id');
         $updatedStmt = $this->conn->prepare($query);
         $updatedStmt->execute();
 
@@ -347,7 +388,7 @@ class Member {
     }
 
     public function getStats() {
-        $statusExpr = self::getStatusCaseExpression($this->dateColumn, $this->attendanceTable, 'id', 'status');
+        $statusExpr = $this->statusCaseExpression($this->dateColumn, $this->attendanceTable, 'id');
         $statsQuery = "SELECT
                 COUNT(*) as total,
                 SUM(CASE WHEN {$statusExpr} = 'active' THEN 1 ELSE 0 END) as active,
@@ -374,7 +415,7 @@ class Member {
     }
 
     public function getOperationalSnapshot(): array {
-        $statusExpr = self::getStatusCaseExpression($this->dateColumn, $this->attendanceTable, 'id', 'status');
+        $statusExpr = $this->statusCaseExpression($this->dateColumn, $this->attendanceTable, 'id');
         $query = "SELECT
                 SUM(CASE WHEN {$statusExpr} = 'active' AND is_checked_in = 1 THEN 1 ELSE 0 END) as checked_in_now,
                 SUM(CASE WHEN {$statusExpr} = 'active' AND next_fee_due_date = CURDATE() THEN 1 ELSE 0 END) as due_today,
