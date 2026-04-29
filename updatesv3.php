@@ -167,12 +167,19 @@ try {
 
     foreach ($memberTables as $table) {
         $dateColumn = $table === 'members_men' || $table === 'members_women' ? 'join_date' : 'created_at';
+        $attendanceTable = str_replace('members_', 'attendance_', $table);
         $statusCase = "CASE
             WHEN COALESCE(total_due_amount, 0) <= 0 THEN 'active'
             WHEN COALESCE(monthly_fee, 0) > 0
                  AND COALESCE(total_due_amount, 0) >= (COALESCE(monthly_fee, 0) * 2) - 0.01
             THEN 'inactive'
             WHEN COALESCE(next_fee_due_date, {$dateColumn}) <= DATE_SUB(CURDATE(), INTERVAL 2 MONTH)
+            THEN 'inactive'
+            WHEN COALESCE((
+                SELECT MAX(att.check_in)
+                FROM {$attendanceTable} att
+                WHERE att.member_id = id
+            ), {$dateColumn}) <= DATE_SUB(CURDATE(), INTERVAL 60 DAY)
             THEN 'inactive'
             ELSE 'active'
         END";
