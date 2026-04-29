@@ -116,7 +116,8 @@ class Member {
         }
 
         if ($status !== null && in_array($status, ['active', 'inactive'], true)) {
-            $where[] = $this->statusCaseExpression('m.' . $this->dateColumn, $this->attendanceTable, 'm.id') . ' = :status';
+            // The list endpoint syncs persisted member status before querying, so filter on the stored column.
+            $where[] = 'm.status = :status';
             $params[':status'] = $status;
         }
 
