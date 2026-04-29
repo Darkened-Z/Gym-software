@@ -1348,11 +1348,12 @@ function showAddMemberForm() {
                         <input type="date" id="nextFeeDueDate" name="next_fee_due_date">
                     </div>
                     <div class="form-group">
-                        <label>Status</label>
+                        <label>Membership Status (admin only)</label>
                         <select id="status" name="status">
                             <option value="active">Active</option>
                             <option value="inactive">Inactive</option>
                         </select>
+                        <small>Only admins can activate a member.</small>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" onclick="closeMemberModal()">Cancel</button>

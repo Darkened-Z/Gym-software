@@ -29,11 +29,11 @@
 - **Real-time Updates**: AJAX-based dynamic content loading
 - **Responsive Design**: Mobile-first CSS with breakpoints
 - **Dual-Gate System**: Separate entry and exit gates with RFID
-- **Security**: CSRF protection, rate limiting, input sanitization
+- **Security**: rate limiting, input sanitization
 
 ### Latest Enhancements (v2.0)
 - ✅ Dual-gate RFID system (ESP32 + RC522)
-- ✅ CSRF token protection
+- ✅ Session hardening
 - ✅ API response caching
 - ✅ PDF export functionality
 - ✅ Database performance indexes
@@ -943,7 +943,7 @@ Profit = Revenue - Expenses
 ### Session Security
 - **HttpOnly**: Cookies not accessible via JavaScript
 - **Secure**: Cookies only sent over HTTPS (when available)
-- **SameSite**: Set to 'Strict' for CSRF protection
+- **SameSite**: Set to 'Strict' for cookie safety
 - **Lifetime**: 1 hour
 - **Regeneration**: Session ID regenerated every 30 minutes
 
@@ -1065,66 +1065,7 @@ public function isSystemActivated()
 
 ## Helper Classes
 
-### 1. CSRFToken Helper (`app/helpers/CSRFToken.php`)
-
-**Purpose**: Prevents Cross-Site Request Forgery attacks
-
-#### generate()
-```php
-public static function generate()
-```
-- **Purpose**: Generate a new CSRF token
-- **Returns**: String (32-byte hex token)
-- **Logic**:
-  1. Generates random 32-byte value
-  2. Converts to hexadecimal string
-  3. Stores in session with timestamp
-  4. Returns token
-
-#### get()
-```php
-public static function get()
-```
-- **Purpose**: Get current token or generate new one
-- **Returns**: String (CSRF token)
-- **Logic**:
-  1. Checks if token exists in session
-  2. Checks if token expired (> 1 hour)
-  3. If expired/missing: generates new token
-  4. Returns current token
-
-#### validate()
-```php
-public static function validate($token)
-```
-- **Purpose**: Validate submitted CSRF token
-- **Parameters**: `$token` (string): Token to validate
-- **Returns**: Boolean (true if valid)
-- **Logic**:
-  1. Checks token exists in session
-  2. Checks expiration time
-  3. Uses `hash_equals()` to prevent timing attacks
-  4. Returns validation result
-
-#### field()
-```php
-public static function field()
-```
-- **Purpose**: Generate HTML hidden input with token
-- **Returns**: String (HTML input element)
-- **Use Case**: Add to HTML forms
-
-#### getForAjax()
-```php
-public static function getForAjax()
-```
-- **Purpose**: Get token for AJAX requests
-- **Returns**: Array `['csrf_token' => 'xxx']`
-- **Use Case**: JavaScript/AJAX form submissions
-
----
-
-### 2. Cache Helper (`app/helpers/Cache.php`)
+### 1. Cache Helper (`app/helpers/Cache.php`)
 
 **Purpose**: File-based caching for API responses
 
@@ -1516,25 +1457,21 @@ ORDER BY attempts DESC;
 
 ## Advanced Features
 
-### 1. CSRF Protection
+### 1. Form Submission Validation
 
 **Implementation**:
 ```php
-// In form
-<?php echo CSRFToken::field(); ?>
-
-// In API endpoint
-if (!CSRFToken::validate($_POST['csrf_token'] ?? '')) {
-    http_response_code(403);
-    die(json_encode(['error' => 'Invalid CSRF token']));
+// Validate required fields and permissions server-side
+if (empty($_POST['name']) || empty($_POST['phone'])) {
+    http_response_code(422);
+    die(json_encode(['error' => 'Missing required fields']));
 }
 ```
 
 **Security Benefits**:
-- Prevents cross-site request forgery
-- Tokens expire after 1 hour
-- Uses timing-attack resistant validation
-- Automatic regeneration
+- Validates form payloads at the server boundary
+- Keeps request handling consistent without per-form tokens
+- Works with normal session-based access control
 
 ---
 
@@ -1604,7 +1541,7 @@ PDFExport::exportMembersReport($members['data'], 'men');
 9. **Session Timeout**: Sessions expire after 1 hour
 10. **Rate Limiting**: Maximum 5 login attempts per 15 minutes
 11. **Cache Expiration**: Cached data expires after configured TTL
-12. **CSRF Validation**: All POST/PUT/DELETE requests require CSRF token
+12. **Request Validation**: All mutating requests are validated server-side
 
 ---
 

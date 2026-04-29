@@ -100,7 +100,7 @@ try {
             $unionParts = [];
             foreach ($memberSources as $source) {
                 $dateColumn = resolve_member_date_column($db, $source['table']);
-                $statusExpr = Member::getStatusCaseExpression('m.' . $dateColumn, 'attendance_' . $source['gender'], 'm.id');
+                $statusExpr = Member::getStatusCaseExpression('m.' . $dateColumn, 'attendance_' . $source['gender'], 'm.id', 'm.status');
                 $unionParts[] = "SELECT m.id, m.member_code, m.name, m.phone, m.status, {$statusExpr} AS calculated_status, m.total_due_amount, m.next_fee_due_date, m.{$dateColumn} AS join_date, '{$source['gender']}' AS gender
                                  FROM {$source['table']} m
                                  WHERE ({$statusExpr}) = 'active'
@@ -434,7 +434,7 @@ try {
                 foreach ($genders as $g) {
                     $tbl = 'members_' . $g;
                     $dc = resolve_member_date_column($db, $tbl);
-                    $statusExpr = Member::getStatusCaseExpression($dc, 'attendance_' . $g, 'id');
+                    $statusExpr = Member::getStatusCaseExpression($dc, 'attendance_' . $g, 'id', 'status');
                     $rows = fetchExportRows($db, "SELECT '{$g}' AS gender, member_code, name, phone, COALESCE(email,'') AS email, {$statusExpr} AS status, {$dc} AS join_date, monthly_fee, total_due_amount, next_fee_due_date, COALESCE(address,'') AS address FROM {$tbl} ORDER BY name ASC");
                     foreach ($rows as $row) {
                         fputcsv($out, $row);

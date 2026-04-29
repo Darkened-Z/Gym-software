@@ -178,13 +178,13 @@ try {
             WHEN COALESCE((
                 SELECT MAX(att.check_in)
                 FROM {$attendanceTable} att
-                WHERE att.member_id = id
+                WHERE att.member_id = m.id
             ), {$dateColumn}) <= DATE_SUB(CURDATE(), INTERVAL 60 DAY)
             THEN 'inactive'
             ELSE 'active'
         END";
 
-        $db->exec("UPDATE {$table} SET status = {$statusCase}");
+        $db->exec("UPDATE {$table} m SET status = {$statusCase}");
         out("OK: synced member statuses for {$table}");
     }
 
