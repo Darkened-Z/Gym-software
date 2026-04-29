@@ -1043,8 +1043,8 @@ function loadMembers() {
     const crossSearch = document.getElementById('crossGenderSearch');
     const crossResults = document.getElementById('crossGenderResults');
     if (crossSearch && crossResults) {
-        crossSearch.addEventListener('input', Utils.debounce(function () {
-            const q = this.value.trim();
+        crossSearch.addEventListener('input', Utils.debounce(function (event) {
+            const q = (event?.target?.value || '').trim();
             if (q.length < 2) { crossResults.style.display = 'none'; crossResults.innerHTML = ''; return; }
             fetch(`api/members.php?action=search_all&q=${encodeURIComponent(q)}`)
                 .then(r => r.json())

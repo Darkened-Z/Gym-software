@@ -68,11 +68,15 @@ try {
             $syncCheckStmt->execute();
             $syncJob = $syncCheckStmt->fetch(PDO::FETCH_ASSOC);
             $shouldSync = !$syncJob || !$syncJob['last_run'] || (time() - strtotime($syncJob['last_run'])) > 300;
-                if ($shouldSync) {
+            if ($shouldSync) {
+                try {
                     $member->syncAllActivityStatuses();
                     $db->prepare("INSERT INTO system_jobs (job_name, last_run, status) VALUES (:name, NOW(), 'completed')
                               ON DUPLICATE KEY UPDATE last_run = NOW(), status = 'completed'")->execute([':name' => $syncJobName]);
+                } catch (Throwable $syncError) {
+                    error_log('Members API status sync skipped: ' . $syncError->getMessage());
                 }
+            }
             $result = $member->getAll($page, $limit, $search, $status, $filters);
             echo json_encode([
                 'success' => true,
