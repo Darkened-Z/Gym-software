@@ -93,15 +93,6 @@ function sanitizeInput($input) {
 $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? '';
 
-if ($action === 'csrf_token') {
-    // Return a session-bound token without requiring a database connection.
-    echo json_encode([
-        'success' => true,
-        'token' => AuthHelper::generateCSRFToken()
-    ]);
-    exit;
-}
-
 try {
     $database = new Database();
     $db = $database->getConnection();
@@ -109,7 +100,6 @@ try {
     switch ($action) {
         case 'login':
             if ($method === 'POST') {
-                AuthHelper::validateCSRF();
                 // Check rate limiting
                 checkRateLimit();
                 
@@ -224,7 +214,6 @@ try {
 
         case 'change_password':
             if ($method !== 'POST') { http_response_code(405); echo json_encode(['success' => false, 'message' => 'Method not allowed']); break; }
-            AuthHelper::validateCSRF();
             AuthHelper::requireAdmin();
 
             $data = json_decode(file_get_contents('php://input'), true);

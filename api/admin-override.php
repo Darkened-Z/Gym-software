@@ -7,7 +7,6 @@
 
 require_once __DIR__ . '/../config/config.php';
 require_once __DIR__ . '/../config/database.php';
-require_once __DIR__ . '/../app/helpers/CSRFToken.php';
 
 header('Content-Type: application/json');
 
@@ -29,16 +28,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         if (is_array($jsonData)) {
             $requestData = array_merge($requestData, $jsonData);
         }
-    }
-}
-
-// CSRF validation for all POST requests
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $token = $requestData['csrf_token'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
-    if (!CSRFToken::validate($token)) {
-        http_response_code(403);
-        echo json_encode(['success' => false, 'error' => 'Invalid CSRF token']);
-        exit;
     }
 }
 

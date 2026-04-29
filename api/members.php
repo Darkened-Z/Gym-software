@@ -36,11 +36,6 @@ function memberCodeExistsAcrossGenders(PDO $db, string $memberCode, ?string $exc
     return false;
 }
 
-// Validate CSRF token for all state-mutating requests
-if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
-    AuthHelper::validateCSRF();
-}
-
 $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? '';
 $gender = $_GET['gender'] ?? 'men';
@@ -402,7 +397,7 @@ try {
             foreach (['men', 'women'] as $g) {
                 $tbl = 'members_' . $g;
                 $dc = resolve_member_date_column($db, $tbl);
-                $statusExpr = Member::getStatusCaseExpression($dc, 'attendance_' . $g, 'id');
+                $statusExpr = Member::getStatusCaseExpression($dc, 'attendance_' . $g, 'id', 'status');
                 $stmt = $db->prepare("SELECT id, member_code, name, phone, status, {$statusExpr} AS calculated_status, total_due_amount, '{$g}' AS gender, {$dc} AS join_date
                                       FROM {$tbl}
                                       WHERE member_code LIKE :q1 OR name LIKE :q2 OR phone LIKE :q3

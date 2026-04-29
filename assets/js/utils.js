@@ -2,49 +2,6 @@
  * Utility Functions
  */
 
-const originalFetch = window.fetch.bind(window);
-
-async function getCsrfToken() {
-    try {
-        const res = await originalFetch('api/auth.php?action=csrf_token', { credentials: 'same-origin' });
-        if (!res.ok) throw new Error(`CSRF token request failed (${res.status})`);
-        const data = await res.json();
-        return data.token || null;
-    } catch (e) {
-        console.error('Failed to fetch CSRF token', e);
-        return null;
-    }
-}
-
-function isSameOriginRequest(input) {
-    try {
-        const url = input instanceof Request ? new URL(input.url) : new URL(String(input), window.location.href);
-        return url.origin === window.location.origin;
-    } catch {
-        return false;
-    }
-}
-
-function getRequestMethod(input, init) {
-    return String((init && init.method) || (input instanceof Request ? input.method : 'GET') || 'GET').toUpperCase();
-}
-
-window.fetch = async function(input, init = {}) {
-    const method = getRequestMethod(input, init);
-    const mutating = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
-
-    if (mutating && isSameOriginRequest(input)) {
-        const token = await getCsrfToken();
-        if (token) {
-            const headers = new Headers((init && init.headers) || (input instanceof Request ? input.headers : undefined));
-            headers.set('X-CSRF-Token', token);
-            init = { ...init, headers };
-        }
-    }
-
-    return originalFetch(input, init);
-};
-
 const Utils = {
     // Show notification
     showNotification: function(message, type = 'info') {
@@ -151,7 +108,7 @@ const Utils = {
         }
     },
 
-    // Authenticated POST with automatic CSRF header
+    // Authenticated POST helper
     apiPost: async function(url, data) {
         return fetch(url, {
             method: 'POST',

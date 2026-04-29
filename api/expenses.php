@@ -20,9 +20,6 @@ header('Content-Type: application/json');
 $method = $_SERVER['REQUEST_METHOD'];
 
 AuthHelper::requireAdminOrStaff();
-if ($method !== 'GET') {
-    AuthHelper::validateCSRF();
-}
 
 $action = $_GET['action'] ?? '';
 

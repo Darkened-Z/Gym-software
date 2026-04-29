@@ -43,26 +43,4 @@ class AuthHelper {
             exit;
         }
     }
-
-    public static function generateCSRFToken(): string {
-        self::ensureSession();
-        if (empty($_SESSION['csrf_token'])) {
-            $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-            $_SESSION['csrf_token_time'] = time();
-        } elseif (empty($_SESSION['csrf_token_time'])) {
-            $_SESSION['csrf_token_time'] = time();
-        }
-        return $_SESSION['csrf_token'];
-    }
-
-    public static function validateCSRF(): void {
-        self::ensureSession();
-        $token = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? $_POST['csrf_token'] ?? '';
-        $sessionToken = $_SESSION['csrf_token'] ?? '';
-        if (empty($token) || empty($sessionToken) || !hash_equals($sessionToken, $token)) {
-            http_response_code(403);
-            echo json_encode(['success' => false, 'message' => 'Invalid or missing CSRF token.']);
-            exit;
-        }
-    }
 }
