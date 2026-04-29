@@ -59,7 +59,7 @@ try {
                 ? 'm.next_fee_due_date < CURDATE()'
                 : 'm.next_fee_due_date <= DATE_ADD(CURDATE(), INTERVAL :days_ahead DAY)';
 
-            $statusExpr = Member::getStatusCaseExpression('m.' . resolve_member_date_column($db, $memberTable));
+            $statusExpr = Member::getStatusCaseExpression('m.' . resolve_member_date_column($db, $memberTable), 'attendance_' . str_replace('members_', '', $memberTable), 'm.id');
             $query = "SELECT m.id, m.name, m.phone, m.total_due_amount, m.next_fee_due_date
                       FROM {$memberTable} m
                       WHERE ({$statusExpr}) = 'active'

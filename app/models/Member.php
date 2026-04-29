@@ -8,15 +8,21 @@ class Member {
     private $gender;
     private $table;
     private $dateColumn;
+    private $attendanceTable;
 
-    public static function getStatusCaseExpression(string $joinDateExpression = 'join_date'): string {
+    public static function getStatusCaseExpression(string $joinDateExpression = 'join_date', string $attendanceTable = '', string $memberIdExpression = 'id'): string {
+        $attendanceRule = '';
+        if ($attendanceTable !== '') {
+            $attendanceRule = "\n            WHEN COALESCE((\n                SELECT MAX(att.check_in)\n                FROM {$attendanceTable} att\n                WHERE att.member_id = {$memberIdExpression}\n            ), {$joinDateExpression}) <= DATE_SUB(CURDATE(), INTERVAL 60 DAY)\n            THEN 'inactive'";
+        }
+
         return "CASE
-            WHEN COALESCE(total_due_amount, 0) <= 0 THEN 'active'
             WHEN COALESCE(monthly_fee, 0) > 0
                  AND COALESCE(total_due_amount, 0) >= (COALESCE(monthly_fee, 0) * 2) - 0.01
             THEN 'inactive'
             WHEN COALESCE(next_fee_due_date, {$joinDateExpression}) <= DATE_SUB(CURDATE(), INTERVAL 2 MONTH)
             THEN 'inactive'
+            {$attendanceRule}
             ELSE 'active'
         END";
     }
@@ -26,6 +32,7 @@ class Member {
         $this->gender = in_array($gender, ['men', 'women'], true) ? $gender : 'men';
         $this->table = 'members_' . $this->gender;
         $this->dateColumn = resolve_member_date_column($this->conn, $this->table);
+        $this->attendanceTable = 'attendance_' . $this->gender;
     }
 
     private function normalizePositiveInt($value, int $default, int $max = 500): int {
@@ -67,7 +74,7 @@ class Member {
     }
 
     private function baseSelect(): string {
-        return "SELECT m.*, m.{$this->dateColumn} AS join_date, " . self::getStatusCaseExpression('m.' . $this->dateColumn) . " AS calculated_status FROM {$this->table} m";
+        return "SELECT m.*, m.{$this->dateColumn} AS join_date, " . self::getStatusCaseExpression('m.' . $this->dateColumn, $this->attendanceTable, 'm.id') . " AS calculated_status FROM {$this->table} m";
     }
 
     public function getAll($page = 1, $limit = 20, $search = '', $status = null, array $filters = []) {
@@ -90,7 +97,7 @@ class Member {
         }
 
         if ($status !== null && in_array($status, ['active', 'inactive'], true)) {
-            $where[] = self::getStatusCaseExpression('m.' . $this->dateColumn) . ' = :status';
+            $where[] = self::getStatusCaseExpression('m.' . $this->dateColumn, $this->attendanceTable, 'm.id') . ' = :status';
             $params[':status'] = $status;
         }
 
@@ -264,7 +271,7 @@ class Member {
 
     public function syncActivityStatus($id): array {
         $query = "UPDATE {$this->table}
-                  SET status = " . self::getStatusCaseExpression($this->dateColumn) . "
+                  SET status = " . self::getStatusCaseExpression($this->dateColumn, $this->attendanceTable, 'id') . "
                   WHERE id = :id";
 
         $stmt = $this->conn->prepare($query);
@@ -286,7 +293,7 @@ class Member {
 
     public function syncAllActivityStatuses(): array {
         $query = "UPDATE {$this->table}
-                  SET status = " . self::getStatusCaseExpression($this->dateColumn);
+                  SET status = " . self::getStatusCaseExpression($this->dateColumn, $this->attendanceTable, 'id');
         $updatedStmt = $this->conn->prepare($query);
         $updatedStmt->execute();
 
@@ -316,7 +323,7 @@ class Member {
     }
 
     public function getStats() {
-        $statusExpr = self::getStatusCaseExpression($this->dateColumn);
+        $statusExpr = self::getStatusCaseExpression($this->dateColumn, $this->attendanceTable, 'id');
         $statsQuery = "SELECT
                 COUNT(*) as total,
                 SUM(CASE WHEN {$statusExpr} = 'active' THEN 1 ELSE 0 END) as active,
@@ -343,7 +350,7 @@ class Member {
     }
 
     public function getOperationalSnapshot(): array {
-        $statusExpr = self::getStatusCaseExpression($this->dateColumn);
+        $statusExpr = self::getStatusCaseExpression($this->dateColumn, $this->attendanceTable, 'id');
         $query = "SELECT
                 SUM(CASE WHEN {$statusExpr} = 'active' AND is_checked_in = 1 THEN 1 ELSE 0 END) as checked_in_now,
                 SUM(CASE WHEN {$statusExpr} = 'active' AND next_fee_due_date = CURDATE() THEN 1 ELSE 0 END) as due_today,
