@@ -326,3 +326,7 @@ This project is provided as-is for educational and commercial use.
 
 For issues or questions, please refer to the project documentation or contact the development team.
 
+## WhatsApp Automation
+
+A standalone Node.js automation layer lives in `whatsapp-bot/` and reads from the same CRM MySQL database.
+See `WHATSAPP_AUTOMATION.md` for setup and run notes.

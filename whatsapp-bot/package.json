@@ -1,0 +1,23 @@
+{
+  "name": "gym-whatsapp-automation",
+  "version": "1.0.0",
+  "description": "WhatsApp automation layer for the gym CRM using whatsapp-web.js, MySQL, and node-cron.",
+  "type": "commonjs",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dry-run": "WHATSAPP_DRY_RUN=true node src/index.js",
+    "daily": "WHATSAPP_MODE=daily node src/index.js",
+    "monthly": "WHATSAPP_MODE=monthly node src/index.js",
+    "queue": "WHATSAPP_MODE=queue node src/index.js",
+    "test": "node --test test/*.test.js",
+    "check": "node --check src/index.js && node --check src/config.js && node --check src/db.js && node --check src/repository.js && node --check src/scheduler.js && node --check src/whatsapp-service.js && node --check src/utils.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "mysql2": "^3.11.3",
+    "node-cron": "^3.0.3",
+    "qrcode-terminal": "^0.12.0",
+    "whatsapp-web.js": "^1.27.0"
+  }
+}
