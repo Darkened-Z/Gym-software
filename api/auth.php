@@ -9,6 +9,7 @@ require_once __DIR__ . '/../app/models/User.php';
 require_once __DIR__ . '/../app/models/Member.php';
 require_once __DIR__ . '/../app/helpers/LicenseHelper.php';
 require_once __DIR__ . '/../app/helpers/AuthHelper.php';
+require_once __DIR__ . '/../app/services/AttendanceWriteService.php';
 
 header('Content-Type: application/json');
 
@@ -154,39 +155,28 @@ try {
                         $_SESSION['member_code'] = $member['member_code'];
                         $_SESSION['member_gender'] = $gender;
                         $_SESSION['role'] = 'member';
-                        
+
                         // Automatically record attendance on login
-                        require_once __DIR__ . '/../app/models/Attendance.php';
-                        $attendance = new Attendance($db, $gender);
-                        $checkInTime = date('Y-m-d H:i:s');
-                        $today = date('Y-m-d');
-                        
-                        // Check if already checked in today
-                        $checkQuery = "SELECT id FROM attendance_{$gender} 
-                                     WHERE member_id = :member_id 
-                                     AND DATE(check_in) = :date 
-                                     AND check_out IS NULL 
-                                     LIMIT 1";
-                        $checkStmt = $db->prepare($checkQuery);
-                        $checkStmt->bindValue(':member_id', $member['id'], PDO::PARAM_INT);
-                        $checkStmt->bindValue(':date', $today, PDO::PARAM_STR);
-                        $checkStmt->execute();
-                        
-                        if ($checkStmt->rowCount() == 0) {
-                            // Record attendance
-                            $insertQuery = "INSERT INTO attendance_{$gender} (member_id, check_in) VALUES (:member_id, :check_in)";
-                            $insertStmt = $db->prepare($insertQuery);
-                            $insertStmt->bindValue(':member_id', $member['id'], PDO::PARAM_INT);
-                            $insertStmt->bindValue(':check_in', $checkInTime, PDO::PARAM_STR);
-                            $insertStmt->execute();
+                        $attendanceService = new AttendanceWriteService($db, $gender);
+                        $attendanceResult = $attendanceService->recordCheckIn((int)$member['id'], [
+                            'source' => 'member-login'
+                        ]);
+
+                        if (empty($attendanceResult['success'])) {
+                            error_log('[AUTH] Member attendance write failed: ' . ($attendanceResult['message'] ?? 'Unknown error'));
                         }
-                        
-                        echo json_encode([
+
+                        $payload = [
                             'success' => true,
                             'role' => 'member',
                             'gender' => $gender,
                             'message' => 'Login successful'
-                        ]);
+                        ];
+                        if (empty($attendanceResult['success'])) {
+                            $payload['attendance_warning'] = $attendanceResult['message'] ?? 'Attendance write unavailable';
+                        }
+
+                        echo json_encode($payload);
                     } else {
                         http_response_code(401);
                         echo json_encode([

@@ -164,12 +164,17 @@ CREATE TABLE IF NOT EXISTS attendance_men (
     is_first_entry_today TINYINT(1) DEFAULT 1,
     entry_gate_id VARCHAR(20) NULL,
     exit_gate_id VARCHAR(20) NULL,
+    write_journal_id BIGINT NULL,
+    write_source VARCHAR(50) NULL,
+    write_signature VARCHAR(128) NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_attendance_men_member FOREIGN KEY (member_id) REFERENCES members_men(id) ON DELETE CASCADE,
     INDEX idx_member_id (member_id),
     INDEX idx_check_in (check_in),
     INDEX idx_daily_attendance (member_id, check_in),
     INDEX idx_men_active_session (member_id, check_in),
+    INDEX idx_write_journal_id (write_journal_id),
+    INDEX idx_write_signature (write_signature),
     CONSTRAINT chk_men_duration_positive CHECK (duration_minutes IS NULL OR duration_minutes >= 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -182,12 +187,17 @@ CREATE TABLE IF NOT EXISTS attendance_women (
     is_first_entry_today TINYINT(1) DEFAULT 1,
     entry_gate_id VARCHAR(20) NULL,
     exit_gate_id VARCHAR(20) NULL,
+    write_journal_id BIGINT NULL,
+    write_source VARCHAR(50) NULL,
+    write_signature VARCHAR(128) NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_attendance_women_member FOREIGN KEY (member_id) REFERENCES members_women(id) ON DELETE CASCADE,
     INDEX idx_member_id (member_id),
     INDEX idx_check_in (check_in),
     INDEX idx_daily_attendance (member_id, check_in),
     INDEX idx_women_active_session (member_id, check_in),
+    INDEX idx_write_journal_id (write_journal_id),
+    INDEX idx_write_signature (write_signature),
     CONSTRAINT chk_women_duration_positive CHECK (duration_minutes IS NULL OR duration_minutes >= 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -198,6 +208,9 @@ ALTER TABLE attendance_men
     ADD COLUMN IF NOT EXISTS is_first_entry_today TINYINT(1) DEFAULT 1,
     ADD COLUMN IF NOT EXISTS entry_gate_id VARCHAR(20) NULL,
     ADD COLUMN IF NOT EXISTS exit_gate_id VARCHAR(20) NULL,
+    ADD COLUMN IF NOT EXISTS write_journal_id BIGINT NULL,
+    ADD COLUMN IF NOT EXISTS write_source VARCHAR(50) NULL,
+    ADD COLUMN IF NOT EXISTS write_signature VARCHAR(128) NULL,
     ADD COLUMN IF NOT EXISTS created_at DATETIME DEFAULT CURRENT_TIMESTAMP;
 
 ALTER TABLE attendance_women
@@ -207,17 +220,47 @@ ALTER TABLE attendance_women
     ADD COLUMN IF NOT EXISTS is_first_entry_today TINYINT(1) DEFAULT 1,
     ADD COLUMN IF NOT EXISTS entry_gate_id VARCHAR(20) NULL,
     ADD COLUMN IF NOT EXISTS exit_gate_id VARCHAR(20) NULL,
+    ADD COLUMN IF NOT EXISTS write_journal_id BIGINT NULL,
+    ADD COLUMN IF NOT EXISTS write_source VARCHAR(50) NULL,
+    ADD COLUMN IF NOT EXISTS write_signature VARCHAR(128) NULL,
     ADD COLUMN IF NOT EXISTS created_at DATETIME DEFAULT CURRENT_TIMESTAMP;
 
 CREATE INDEX IF NOT EXISTS idx_member_id ON attendance_men (member_id);
 CREATE INDEX IF NOT EXISTS idx_check_in ON attendance_men (check_in);
 CREATE INDEX IF NOT EXISTS idx_daily_attendance ON attendance_men (member_id, check_in);
 CREATE INDEX IF NOT EXISTS idx_men_active_session ON attendance_men (member_id, check_in);
+CREATE INDEX IF NOT EXISTS idx_write_journal_id ON attendance_men (write_journal_id);
+CREATE INDEX IF NOT EXISTS idx_write_signature ON attendance_men (write_signature);
 
 CREATE INDEX IF NOT EXISTS idx_member_id ON attendance_women (member_id);
 CREATE INDEX IF NOT EXISTS idx_check_in ON attendance_women (check_in);
 CREATE INDEX IF NOT EXISTS idx_daily_attendance ON attendance_women (member_id, check_in);
 CREATE INDEX IF NOT EXISTS idx_women_active_session ON attendance_women (member_id, check_in);
+CREATE INDEX IF NOT EXISTS idx_write_journal_id ON attendance_women (write_journal_id);
+CREATE INDEX IF NOT EXISTS idx_write_signature ON attendance_women (write_signature);
+
+CREATE TABLE IF NOT EXISTS attendance_operation_journal (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    operation_type ENUM('checkin', 'checkout') NOT NULL,
+    source_system VARCHAR(50) NOT NULL,
+    gender ENUM('men', 'women') NOT NULL,
+    member_id INT NOT NULL,
+    attendance_id INT NULL,
+    gate_id VARCHAR(20) NULL,
+    request_signature VARCHAR(128) NULL,
+    status ENUM('started', 'success', 'duplicate', 'failed') NOT NULL DEFAULT 'started',
+    request_payload JSON NULL,
+    response_payload JSON NULL,
+    error_message TEXT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_member_operation (member_id, operation_type, created_at),
+    INDEX idx_member_gate_operation (member_id, gate_id, operation_type, created_at),
+    INDEX idx_attendance_id (attendance_id),
+    INDEX idx_request_signature (request_signature),
+    INDEX idx_status (status),
+    INDEX idx_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================================
 -- Payments

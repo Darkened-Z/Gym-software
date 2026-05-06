@@ -18,6 +18,7 @@ require_once __DIR__ . '/../app/models/Member.php';
 require_once __DIR__ . '/../app/helpers/Cache.php';
 require_once __DIR__ . '/../app/helpers/AuthHelper.php';
 require_once __DIR__ . '/../app/helpers/AdminLogger.php';
+require_once __DIR__ . '/../app/services/AttendanceWriteService.php';
 
 header('Content-Type: application/json');
 
@@ -221,7 +222,7 @@ try {
             $member = $result['member'];
             $gender = $result['gender'];
             $membersTable = "members_{$gender}";
-            $attendanceTable = "attendance_{$gender}";
+            $attendanceService = new AttendanceWriteService($db, $gender);
             
             // Check member status
             $effectiveStatus = $member['calculated_status'] ?? $member['status'] ?? 'inactive';
@@ -317,33 +318,35 @@ try {
                     exit;
                 }
                 
-                // Check first entry today
-                $query = "SELECT COUNT(*) AS cnt 
-                          FROM {$attendanceTable} 
-                          WHERE member_id = :member_id 
-                          AND DATE(check_in) = CURDATE()";
-                $stmt = $db->prepare($query);
-                $stmt->bindValue(':member_id', $member['id'], PDO::PARAM_INT);
-                $stmt->execute();
-                $todayCount = (int)($stmt->fetch()['cnt'] ?? 0);
-                $isFirstEntry = $todayCount === 0;
-                
-                // Create attendance record
-                $query = "INSERT INTO {$attendanceTable} 
-                          (member_id, check_in, is_first_entry_today, entry_gate_id) 
-                          VALUES 
-                          (:member_id, NOW(), :is_first_entry, :gate_id)";
-                $stmt = $db->prepare($query);
-                $stmt->bindValue(':member_id', $member['id'], PDO::PARAM_INT);
-                $stmt->bindValue(':is_first_entry', $isFirstEntry ? 1 : 0, PDO::PARAM_INT);
-                $stmt->bindValue(':gate_id', $gateId, PDO::PARAM_STR);
-                $stmt->execute();
-                
-                // Update member check-in status
-                $query = "UPDATE {$membersTable} SET is_checked_in = 1 WHERE id = :id";
-                $stmt = $db->prepare($query);
-                $stmt->bindValue(':id', $member['id'], PDO::PARAM_INT);
-                $stmt->execute();
+                $attendanceResult = $attendanceService->recordCheckIn((int)$member['id'], [
+                    'source' => 'gate-entry',
+                    'gate_id' => $gateId,
+                ]);
+
+                if (empty($attendanceResult['success'])) {
+                    $db->rollBack();
+                    logGateActivity($db, [
+                        'gate_type' => 'entry',
+                        'gate_id' => $gateId,
+                        'rfid_uid' => $rfidUid,
+                        'member_id' => $member['id'],
+                        'gender' => $gender,
+                        'member_name' => $member['name'],
+                        'action' => 'check-in_attempt',
+                        'status' => 'error',
+                        'reason' => $attendanceResult['message'] ?? 'Attendance write failed'
+                    ]);
+
+                    echo json_encode([
+                        'success' => false,
+                        'action' => 'deny',
+                        'message' => 'System error. Please contact reception.',
+                        'gate_open_duration' => 0
+                    ]);
+                    exit;
+                }
+
+                $isFirstEntry = (int)($attendanceResult['attendance']['is_first_entry_today'] ?? 0) === 1;
                 
                 // Log successful entry
                 logGateActivity($db, [
@@ -465,7 +468,6 @@ try {
             $member = $result['member'];
             $gender = $result['gender'];
             $membersTable = "members_{$gender}";
-            $attendanceTable = "attendance_{$gender}";
             
             // Check if member is checked in
             if ($member['is_checked_in'] != 1) {
@@ -526,22 +528,13 @@ try {
                     exit;
                 }
                 
-                // Find active attendance session - check today first, then yesterday (midnight crossover)
-                $query = "SELECT id, check_in 
-                          FROM {$attendanceTable} 
-                          WHERE member_id = :member_id 
-                          AND check_out IS NULL
-                          AND check_in >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
-                          ORDER BY check_in DESC 
-                          LIMIT 1";
-                $stmt = $db->prepare($query);
-                $stmt->bindValue(':member_id', $member['id'], PDO::PARAM_INT);
-                $stmt->execute();
-                $attendance = $stmt->fetch();
-                
-                if (!$attendance) {
+                $attendanceResult = $attendanceService->recordCheckoutByMemberId((int)$member['id'], [
+                    'source' => 'gate-exit',
+                    'gate_id' => $gateId,
+                ]);
+
+                if (empty($attendanceResult['success'])) {
                     $db->rollBack();
-                    
                     logGateActivity($db, [
                         'gate_type' => 'exit',
                         'gate_id' => $gateId,
@@ -551,47 +544,20 @@ try {
                         'member_name' => $member['name'],
                         'action' => 'check-out_attempt',
                         'status' => 'error',
-                        'reason' => 'No active attendance session found'
+                        'reason' => $attendanceResult['message'] ?? 'Attendance write failed'
                     ]);
-                    
-                    // Force update member status to prevent lock
-                    $query = "UPDATE {$membersTable} SET is_checked_in = 0 WHERE id = :id";
-                    $stmt = $db->prepare($query);
-                    $stmt->bindValue(':id', $member['id'], PDO::PARAM_INT);
-                    $stmt->execute();
-                    
+
                     echo json_encode([
                         'success' => false,
                         'action' => 'deny',
-                        'message' => 'No check-in record found. Status reset. Please contact reception.',
+                        'message' => $attendanceResult['message'] ?? 'System error. Please contact reception.',
                         'gate_open_duration' => 0
                     ]);
                     exit;
                 }
-                
-                // Calculate duration
-                $checkInTime = new DateTime($attendance['check_in']);
-                $now = new DateTime();
-                $interval = $checkInTime->diff($now);
-                $durationMinutes = ($interval->days * 24 * 60) + ($interval->h * 60) + $interval->i;
-                
-                // Update attendance with check-out
-                $query = "UPDATE {$attendanceTable} 
-                          SET check_out = NOW(), 
-                              duration_minutes = :duration,
-                              exit_gate_id = :gate_id
-                          WHERE id = :id";
-                $stmt = $db->prepare($query);
-                $stmt->bindValue(':duration', $durationMinutes, PDO::PARAM_INT);
-                $stmt->bindValue(':gate_id', $gateId, PDO::PARAM_STR);
-                $stmt->bindValue(':id', $attendance['id'], PDO::PARAM_INT);
-                $stmt->execute();
-                
-                // Update member status
-                $query = "UPDATE {$membersTable} SET is_checked_in = 0 WHERE id = :id";
-                $stmt = $db->prepare($query);
-                $stmt->bindValue(':id', $member['id'], PDO::PARAM_INT);
-                $stmt->execute();
+
+                $attendance = $attendanceResult['attendance'] ?? [];
+                $durationMinutes = (int)($attendanceResult['duration_minutes'] ?? $attendance['duration_minutes'] ?? 0);
                 
                 // Log successful exit
                 logGateActivity($db, [
@@ -610,17 +576,17 @@ try {
                 updateCooldown($db, $gateId, $rfidUid);
                 
                 // Format duration  message
-                $hours = floor($durationMinutes / 60);
+                $hours = intdiv($durationMinutes, 60);
                 $minutes = $durationMinutes % 60;
                 $durationText = '';
                 if ($hours > 0) {
                     $durationText .= $hours . ' hour' . ($hours > 1 ? 's' : '');
                 }
-                if ($minutes > 0) {
+                if ($minutes > 0 || $durationText === '') {
                     if ($hours > 0) $durationText .= ' ';
                     $durationText .= $minutes . ' minute' . ($minutes > 1 ? 's' : '');
                 }
-                
+
                 echo json_encode([
                     'success' => true,
                     'action' => 'open',
@@ -628,7 +594,7 @@ try {
                     'member' => [
                         'name' => $member['name'],
                         'member_code' => $member['member_code'],
-                        'check_in_time' => $attendance['check_in'],
+                        'check_in_time' => $attendance['check_in'] ?? null,
                         'duration' => $durationText,
                         'duration_minutes' => $durationMinutes
                     ],
