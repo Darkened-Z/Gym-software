@@ -3,6 +3,8 @@
  * Member Model (Gender-Aware)
  */
 
+require_once __DIR__ . '/../../config/config.php';
+
 class Member {
     private $conn;
     private $gender;
