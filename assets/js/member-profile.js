@@ -53,6 +53,18 @@ const MEMBER_PROFILE_SNAPSHOT_LIMIT = 10;
 const MEMBER_PROFILE_SNAPSHOT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const MEMBER_PROFILE_SNAPSHOT_STALE_MS = 24 * 60 * 60 * 1000;
 const MEMBER_PROFILE_SNAPSHOT_MODULE = 'member-profile';
+const MEMBER_PROFILE_PUBLIC_FIELDS = [
+    'id',
+    'member_code',
+    'name',
+    'membership_type',
+    'join_date',
+    'status',
+    'calculated_status',
+    'next_fee_due_date',
+    'total_due_amount',
+    'is_checked_in'
+];
 
 function getOfflineStateApi() {
     return window.OfflineState && typeof window.OfflineState.getCapabilityStatus === 'function' ? window.OfflineState : null;
@@ -155,6 +167,16 @@ function normalizeMemberProfileSnapshot(entry) {
     const memberCode = String(entry.member_code || profile?.member_code || '').trim();
     const gender = entry.gender === 'women' ? 'women' : 'men';
     const cachedAt = typeof entry.cached_at === 'string' && entry.cached_at ? entry.cached_at : new Date().toISOString();
+    const renewalStatus = entry.renewal_status && typeof entry.renewal_status === 'object' ? {
+        status: entry.renewal_status.status || 'unknown',
+        online: Boolean(entry.renewal_status.online),
+        windowDays: Number(entry.renewal_status.windowDays || 7),
+        warningLeadHours: Number(entry.renewal_status.warningLeadHours || 24),
+        expiresAt: entry.renewal_status.expiresAt || null,
+        label: entry.renewal_status.label || 'Offline renewal status',
+        message: entry.renewal_status.message || null,
+        canUseFullOffline: Boolean(entry.renewal_status.canUseFullOffline)
+    } : null;
 
     if (!memberCode || !profile || !profile.id) return null;
 
@@ -164,20 +186,11 @@ function normalizeMemberProfileSnapshot(entry) {
         cached_at: cachedAt,
         last_used_at: typeof entry.last_used_at === 'string' && entry.last_used_at ? entry.last_used_at : cachedAt,
         source: typeof entry.source === 'string' && entry.source ? entry.source : 'live',
-        profile: {
-            id: profile.id,
-            member_code: memberCode,
-            name: profile.name || '',
-            membership_type: profile.membership_type || 'Basic',
-            join_date: profile.join_date || null,
-            status: profile.status || 'active',
-            calculated_status: profile.calculated_status || profile.status || 'active',
-            next_fee_due_date: profile.next_fee_due_date || null,
-            total_due_amount: profile.total_due_amount || 0,
-            is_checked_in: profile.is_checked_in ?? null
-        },
+        profile: redactMemberProfileForOffline(profile),
         is_defaulter: Boolean(entry.is_defaulter),
-        default_date: entry.default_date || profile.next_fee_due_date || null
+        default_date: entry.default_date || profile.next_fee_due_date || null,
+        read_only: true,
+        renewal_status: renewalStatus
     };
 }
 
@@ -213,6 +226,7 @@ function getMemberProfileSnapshots() {
 function persistMemberProfileSnapshot(data, source = 'live') {
     const member = data?.profile || data?.data || null;
     if (!member || !member.id || !member.member_code) return null;
+    const renewalStatus = getRenewalStatus();
 
     const snapshot = normalizeMemberProfileSnapshot({
         member_code: member.member_code,
@@ -220,9 +234,10 @@ function persistMemberProfileSnapshot(data, source = 'live') {
         cached_at: new Date().toISOString(),
         last_used_at: new Date().toISOString(),
         source,
-        profile: member,
+        profile: redactMemberProfileForOffline(member),
         is_defaulter: data.is_defaulter,
-        default_date: data.default_date
+        default_date: data.default_date,
+        renewal_status: renewalStatus
     });
 
     if (!snapshot) return null;
@@ -278,6 +293,44 @@ function isSnapshotStale(cachedAt) {
     return Number.isFinite(timestamp) && (Date.now() - timestamp) > MEMBER_PROFILE_SNAPSHOT_STALE_MS;
 }
 
+function redactMemberProfileForOffline(member) {
+    if (!member || typeof member !== 'object') return null;
+
+    const redacted = {};
+    MEMBER_PROFILE_PUBLIC_FIELDS.forEach(field => {
+        if (Object.prototype.hasOwnProperty.call(member, field)) {
+            redacted[field] = member[field];
+        }
+    });
+
+    return {
+        ...redacted,
+        member_code: String(redacted.member_code || '').trim(),
+        name: redacted.name || '',
+        membership_type: redacted.membership_type || 'Basic',
+        join_date: redacted.join_date || null,
+        status: redacted.status || 'active',
+        calculated_status: redacted.calculated_status || redacted.status || 'active',
+        next_fee_due_date: redacted.next_fee_due_date || null,
+        total_due_amount: Number(redacted.total_due_amount || 0),
+        is_checked_in: redacted.is_checked_in ?? null
+    };
+}
+
+function getMemberProfileReadOnlyContext(snapshot = null) {
+    const offlineState = getOfflineStateApi();
+    const capability = offlineState ? offlineState.getCapabilityStatus('member-profile') : null;
+    const renewalStatus = snapshot?.renewal_status || getRenewalStatus();
+
+    return {
+        capability,
+        renewalStatus,
+        isOffline: !Utils.isOnline(),
+        isSnapshot: Boolean(snapshot),
+        isReadOnly: Boolean(snapshot) || !Utils.isOnline()
+    };
+}
+
 function renderMemberHistoryNotice(title, message) {
     return `
         <div class="snapshot-notice">
@@ -308,18 +361,21 @@ async function fetchMemberProfile(memberCode) {
 
 function buildSnapshotProfileData(snapshot) {
     if (!snapshot) return null;
+    const profile = redactMemberProfileForOffline(snapshot.profile || snapshot.data || snapshot);
 
     return {
         success: true,
-        profile: snapshot.profile,
+        profile,
         gender: snapshot.gender,
         is_defaulter: snapshot.is_defaulter,
         default_date: snapshot.default_date,
         is_snapshot: true,
+        read_only: true,
         snapshot_at: snapshot.cached_at,
         snapshot_age: formatSnapshotAge(snapshot.cached_at),
         snapshot_stale: isSnapshotStale(snapshot.cached_at),
-        snapshot_source: snapshot.source || 'snapshot'
+        snapshot_source: snapshot.source || 'snapshot',
+        renewal_status: snapshot.renewal_status || null
     };
 }
 
@@ -441,7 +497,7 @@ async function loadMemberProfile(searchTerm) {
             const snapshotData = buildSnapshotProfileData(cachedSnapshot);
             if (snapshotData) {
                 renderMemberProfile(snapshotData);
-                Utils.showNotification('Showing a cached snapshot for this recently used member.', 'warning');
+                Utils.showNotification('Showing a cached, read-only profile for this recently used member.', 'warning');
                 focusLookupInputAfterRender(true);
                 return snapshotData;
             }
@@ -451,7 +507,7 @@ async function loadMemberProfile(searchTerm) {
         Utils.renderOfflineNotice(
             contentDiv,
             'Member profile offline',
-            `Offline lookup only works for recently used members that were already cached on this device.${renewalStatus && renewalStatus.status !== 'fresh' ? ' ' + renewalStatus.message : ''}`
+            `Offline lookup only works for recently used members that were already cached on this device. The view is read-only and only stores redacted profile fields.${renewalStatus && renewalStatus.status !== 'fresh' ? ' ' + renewalStatus.message : ''}`
         );
         focusLookupInput({ select: true });
         return null;
@@ -463,7 +519,7 @@ async function loadMemberProfile(searchTerm) {
         if (data && data.success) {
             const offlineState = getOfflineStateApi();
             if (offlineState && typeof offlineState.recordOnlineSuccess === 'function') {
-                offlineState.recordOnlineSuccess('member-profile', { source: 'loadMemberProfile' });
+                offlineState.recordOnlineSuccess('member-profile', { source: 'loadMemberProfile', member_code: memberCode, read_only: true });
             }
             persistMemberProfileSnapshot(data, 'live');
             renderMemberProfile(data);
@@ -483,7 +539,7 @@ async function loadMemberProfile(searchTerm) {
             const snapshotData = buildSnapshotProfileData(cachedSnapshot);
             if (snapshotData) {
                 renderMemberProfile(snapshotData);
-                Utils.showNotification('Loaded a cached snapshot because live lookup failed.', 'warning');
+                Utils.showNotification('Loaded a cached, read-only snapshot because live lookup failed.', 'warning');
                 focusLookupInputAfterRender(true);
                 return snapshotData;
             }
@@ -504,7 +560,7 @@ function loadMemberPayments(memberId) {
     historyContainer.innerHTML = '<div class="loading-small">Loading payment history...</div>';
 
     if (currentMemberData?.isSnapshot) {
-        historyContainer.innerHTML = '<div class="error-small">Payment history is not cached in this offline snapshot.</div>';
+        historyContainer.innerHTML = '<div class="error-small">Payment history is intentionally not stored in this read-only cache.</div>';
         return;
     }
 
@@ -541,7 +597,7 @@ function loadMemberAttendance(memberId) {
     if (!calendarContainer) return;
 
     if (currentMemberData?.isSnapshot) {
-        calendarContainer.innerHTML = '<div class="error-small">Attendance history is not cached in this offline snapshot.</div>';
+        calendarContainer.innerHTML = '<div class="error-small">Attendance history is intentionally not stored in this read-only cache.</div>';
         return;
     }
 
@@ -566,7 +622,7 @@ function loadMemberAttendance(memberId) {
         .then(data => {
             if (data.success) {
                 // Update calendar
-                const calendarHTML = renderAttendanceCalendar(year, month, data.calendar, currentMemberData.next_fee_due_date);
+                const calendarHTML = renderAttendanceCalendar(year, month, data.calendar, currentMemberData.defaultDate);
                 calendarContainer.innerHTML = calendarHTML;
             }
         })
@@ -607,15 +663,21 @@ function renderMemberProfile(data) {
     const snapshotStale = Boolean(data.snapshot_stale);
     const isDefaulter = data.is_defaulter || false;
     const defaultDate = data.default_date || member.next_fee_due_date || null;
-    const renewalStatus = getRenewalStatus();
-    const renewalNoticeBlock = !isSnapshot && renewalStatus && renewalStatus.status !== 'fresh' && window.OfflineState && typeof window.OfflineState.renderCapabilityNotice === 'function'
+    const offlineContext = getMemberProfileReadOnlyContext(isSnapshot ? data : null);
+    const renewalStatus = offlineContext.renewalStatus;
+    const capabilityNotice = offlineContext.capability && window.OfflineState && typeof window.OfflineState.renderCapabilityNotice === 'function' && (!offlineContext.capability.online || (renewalStatus && renewalStatus.status !== 'fresh'))
         ? window.OfflineState.renderCapabilityNotice('member-profile', {
-            title: 'Offline renewal status',
-            body: renewalStatus.message
+            title: isSnapshot ? 'Read-only cached profile' : 'Offline renewal status',
+            body: isSnapshot
+                ? `${offlineContext.capability.message} This cached profile only keeps redacted identity and renewal fields.`
+                : offlineContext.capability.message
         })
         : '';
-    const renewalNote = renewalStatus && renewalStatus.status !== 'fresh'
+    const renewalNote = !isSnapshot && renewalStatus && renewalStatus.status !== 'fresh'
         ? `<div class="snapshot-banner__body snapshot-banner__body--small" style="margin-top:0.5rem;color:${renewalStatus.status === 'expired' ? '#7f1d1d' : '#78350f'};">${renewalStatus.message}</div>`
+        : '';
+    const snapshotRenewalNote = isSnapshot && data.renewal_status && data.renewal_status.message
+        ? `<div class="snapshot-banner__body snapshot-banner__body--small" style="margin-top:0.5rem;color:${data.renewal_status.status === 'expired' ? '#7f1d1d' : '#78350f'};">Synced when renewal was ${String(data.renewal_status.label || 'offline renewal status').toLowerCase()}. ${data.renewal_status.message}</div>`
         : '';
 
     // Store member data for attendance check-in
@@ -625,11 +687,15 @@ function renderMemberProfile(data) {
         gender: gender,
         isDefaulter: isDefaulter,
         status: member.status,
+        next_fee_due_date: member.next_fee_due_date || null,
+        defaultDate,
         isSnapshot,
         snapshotAt,
         snapshotAge,
         snapshotStale,
-        source: isSnapshot ? 'snapshot' : 'live'
+        source: isSnapshot ? 'snapshot' : 'live',
+        readOnly: isSnapshot,
+        renewalStatus: renewalStatus || null
     };
 
     // Store payments for pagination
@@ -644,13 +710,14 @@ function renderMemberProfile(data) {
     const profileCardClass = isDefaulter ? 'profile-card defaulter' : 'profile-card';
     const snapshotBanner = isSnapshot ? `
         <div class="snapshot-banner ${snapshotStale ? 'snapshot-banner--stale' : 'snapshot-banner--offline'}">
-            <div class="snapshot-banner__title">${snapshotStale ? 'Stale offline snapshot' : 'Offline snapshot'}</div>
+            <div class="snapshot-banner__title">${snapshotStale ? 'Stale read-only offline snapshot' : 'Read-only offline snapshot'}</div>
             <div class="snapshot-banner__body">
                 Cached ${snapshotAge || 'recently'}. Live profile reads are unavailable right now.
             </div>
             <div class="snapshot-banner__body snapshot-banner__body--small">
-                This cached view keeps only the minimal identity and attendance fields needed at the desk.
+                This cached view keeps only the minimal identity and renewal fields needed at the desk.
             </div>
+            ${snapshotRenewalNote}
             ${renewalNote}
         </div>
     ` : '';
@@ -687,7 +754,7 @@ function renderMemberProfile(data) {
 
     const html = `
         <div class="member-profile">
-            ${renewalNoticeBlock}
+            ${capabilityNotice}
             ${snapshotBanner}
             <div class="profile-layout" style="display: grid; grid-template-columns: 450px 1fr; gap: 2rem; align-items: start;">
                 <!-- Left Side: Profile Info -->
