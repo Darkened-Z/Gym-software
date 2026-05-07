@@ -14,9 +14,9 @@ const Utils = {
         const notification = document.createElement('div');
         notification.className = `notification notification-${type}`;
         notification.textContent = message;
-        
+
         document.body.appendChild(notification);
-        
+
         // Trigger animation
         setTimeout(() => {
             notification.classList.add('show');
@@ -33,10 +33,10 @@ const Utils = {
     formatDate: function(dateString) {
         if (!dateString) return 'N/A';
         const date = new Date(dateString);
-        return date.toLocaleDateString('en-US', { 
-            year: 'numeric', 
-            month: 'short', 
-            day: 'numeric' 
+        return date.toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
         });
     },
 
@@ -107,6 +107,32 @@ const Utils = {
             button.disabled = false;
             button.innerHTML = button.dataset.originalText || button.innerHTML;
         }
+    },
+
+    isOnline: function() {
+        return navigator.onLine !== false;
+    },
+
+    renderOfflineNotice: function(target, title, message, actionLabel = 'Try again') {
+        const container = typeof target === 'string' ? document.querySelector(target) || document.getElementById(target) : target;
+        if (!container) return;
+
+        container.innerHTML = `
+            <div class="section-card" style="border-left: 4px solid #f59e0b; background: #fff7ed;">
+                <div class="page-chip" style="background: #fef3c7; color: #92400e;">Offline</div>
+                <h2 style="margin-top: 0.75rem;">${title}</h2>
+                <p>${message}</p>
+                <div style="margin-top: 1rem; display: flex; gap: 0.75rem; flex-wrap: wrap;">
+                    <button class="btn btn-secondary" onclick="window.location.reload()">${actionLabel}</button>
+                </div>
+            </div>
+        `;
+    },
+
+    clearSensitiveCaches: async function() {
+        if (!('caches' in window)) return;
+        const keys = await caches.keys();
+        await Promise.all(keys.filter(key => key === 'gym-data-v1').map(key => caches.delete(key)));
     },
 
     // Authenticated POST helper

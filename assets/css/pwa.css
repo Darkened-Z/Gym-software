@@ -1,0 +1,49 @@
+/* PWA shell/status styles */
+.pwa-status-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid transparent;
+    font-size: 0.95rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    position: sticky;
+    top: 0;
+    z-index: 9998;
+}
+
+.pwa-status-bar__message {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.pwa-status-bar__detail {
+    font-size: 0.85rem;
+    font-weight: 400;
+    opacity: 0.9;
+}
+
+.pwa-status-bar.is-online {
+    background: #dcfce7;
+    color: #14532d;
+    border-color: #bbf7d0;
+}
+
+.pwa-status-bar.is-offline {
+    background: #fef3c7;
+    color: #92400e;
+    border-color: #fcd34d;
+}
+
+body.pwa-offline .dashboard-container,
+body.pwa-offline .login-container,
+body.pwa-offline .member-content {
+    scroll-margin-top: 64px;
+}
+
+body.pwa-offline .loading::after {
+    content: ' (offline)';
+}

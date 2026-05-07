@@ -19,6 +19,18 @@ document.addEventListener('DOMContentLoaded', function () {
     startSectionAutoRefresh();
     startAutoSync(); // Start auto-sync timer
 
+    window.addEventListener('online', () => {
+        if (currentSection === 'dashboard') {
+            loadDashboard();
+        }
+        startSectionAutoRefresh();
+        startAutoSync();
+    });
+
+    window.addEventListener('offline', () => {
+        stopSectionAutoRefresh();
+    });
+
     document.addEventListener('visibilitychange', () => {
         if (!document.hidden) {
             startSectionAutoRefresh();
@@ -80,6 +92,20 @@ function applyRolePermissions() {
 }
 
 function checkAuth() {
+    if (!Utils.isOnline()) {
+        const storedRole = sessionStorage.getItem('gym_last_role');
+        const storedName = sessionStorage.getItem('gym_last_username');
+        if (['admin', 'staff'].includes(storedRole)) {
+            currentUserRole = storedRole;
+            const userName = document.getElementById('userName');
+            if (userName) {
+                userName.textContent = storedName || (storedRole === 'staff' ? 'Staff' : 'Admin');
+            }
+            applyRolePermissions();
+        }
+        return;
+    }
+
     fetch('api/auth.php?action=check')
         .then(res => res.json())
         .then(data => {
@@ -87,6 +113,8 @@ function checkAuth() {
                 window.location.href = 'index.html';
             } else {
                 currentUserRole = data.role;
+                sessionStorage.setItem('gym_last_role', data.role);
+                sessionStorage.setItem('gym_last_username', data.username || data.name || (data.role === 'staff' ? 'Staff' : 'Admin'));
                 const userName = document.getElementById('userName');
                 if (userName) {
                     userName.textContent = data.username || data.name || (data.role === 'staff' ? 'Staff' : 'Admin');
@@ -96,6 +124,9 @@ function checkAuth() {
         })
         .catch(err => {
             console.error('Auth check error:', err);
+            if (!Utils.isOnline()) {
+                return;
+            }
             window.location.href = 'index.html';
         });
 }
@@ -156,6 +187,7 @@ function startSectionAutoRefresh() {
     sectionRefreshInterval = setInterval(() => {
         if (document.hidden) return;
         if (document.querySelector('.modal')) return;
+        if (!Utils.isOnline()) return;
 
         try {
             config.refresh();
@@ -236,6 +268,15 @@ function loadSection(section) {
     if (!contentBody) return;
 
     contentBody.innerHTML = '<div class="loading">Loading...</div>';
+
+    if (!Utils.isOnline() && section !== 'dashboard') {
+        Utils.renderOfflineNotice(
+            contentBody,
+            `${section.replace(/-/g, ' ')} unavailable offline`,
+            'This section uses live data or mutations, so it is intentionally left out of the offline cache for safety.'
+        );
+        return;
+    }
 
     switch (section) {
         case 'dashboard':
@@ -374,6 +415,16 @@ function loadDashboard() {
         return;
     }
 
+    if (!Utils.isOnline() && !sessionStorage.getItem('gym_last_role')) {
+        isLoadingDashboard = false;
+        Utils.renderOfflineNotice(
+            '#contentBody',
+            'Dashboard unavailable offline',
+            'Sign in online at least once from this browser session to unlock the cached dashboard snapshot. The shell is still available.'
+        );
+        return;
+    }
+
     // Cancel any existing dashboard request
     if (activeRequests['dashboard']) {
         activeRequests['dashboard'].abort();
@@ -465,8 +516,16 @@ function loadDashboard() {
             console.error('Dashboard error:', err);
             const contentBody = document.getElementById('contentBody');
             if (contentBody && currentSection === 'dashboard') {
-                contentBody.innerHTML =
-                    '<div class="error">Error loading dashboard: ' + err.message + '</div>';
+                if (!Utils.isOnline()) {
+                    Utils.renderOfflineNotice(
+                        contentBody,
+                        'Dashboard offline',
+                        'A cached dashboard snapshot was not available. Reconnect to refresh the live dashboard.'
+                    );
+                } else {
+                    contentBody.innerHTML =
+                        '<div class="error">Error loading dashboard: ' + err.message + '</div>';
+                }
             }
         });
 }
@@ -590,7 +649,12 @@ function renderDashboard(data) {
         ? window.dashboardUiState.recentTab
         : 'men';
 
+    const offlineBanner = !Utils.isOnline()
+        ? `<section class="section-card" style="border-left: 4px solid #f59e0b; background: #fff7ed; margin-bottom: 1rem;"><strong>Offline snapshot</strong><p style="margin-top: 0.4rem;">Cached dashboard data is shown when available. Live refresh is paused until you reconnect.</p></section>`
+        : '';
+
     const html = `
+        ${offlineBanner}
         <section class="dashboard-intro-card">
             <div class="dashboard-intro-copy">
                 <span class="page-chip">Today</span>
@@ -2450,7 +2514,7 @@ function showUpdateFeeForm(member) {
                     <div class="form-group" style="background: rgba(33, 150, 243, 0.2); padding: 1rem; border-radius: 5px; border-left: 4px solid #2196F3;">
                         <label><strong style="color: #2196F3;">Full amount to clear now:</strong></label>
                         <p style="margin: 0.5rem 0; font-size: 1.2rem; font-weight: bold; color: #64b5f6;">
-                            ${Utils.formatCurrency((parseFloat(member.total_due_amount) || 0) + parseFloat(member.monthly_fee) || 0)} 
+                            ${Utils.formatCurrency((parseFloat(member.total_due_amount) || 0) + parseFloat(member.monthly_fee) || 0)}
                             <small style="font-size: 0.9rem; font-weight: normal;">
                                 (Previous Due: ${Utils.formatCurrency(member.total_due_amount || 0)} + Monthly Fee: ${Utils.formatCurrency(member.monthly_fee || 0)})
                             </small>
@@ -4061,12 +4125,12 @@ function showUpdateDueFeeModal(memberId, gender, currentDueAmount, memberName) {
                 <form id="updateDueFeeForm" class="modal-body">
                     <input type="hidden" id="dueFeeMemberId" value="${memberId}">
                     <input type="hidden" id="dueFeeGender" value="${gender}">
-                    
+
                     <div class="form-group">
                         <label>Current unpaid amount:</label>
                         <strong style="font-size: 1.2rem; color: #e74c3c;">${Utils.formatCurrency(currentDueAmount)}</strong>
                     </div>
-                    
+
                     <div class="form-group">
                         <label>What do you want to do? *</label>
                         <select id="dueFeeAction" name="action" required>
@@ -4075,19 +4139,19 @@ function showUpdateDueFeeModal(memberId, gender, currentDueAmount, memberName) {
                             <option value="clear">Clear all unpaid amount (set to 0)</option>
                         </select>
                     </div>
-                    
+
                     <div class="form-group" id="dueFeeAmountGroup">
                         <label>Amount *</label>
                         <input type="number" step="0.01" id="dueFeeAmount" name="amount" value="${currentDueAmount}" min="0" required>
                         <small>Enter the amount for the option you selected above.</small>
                     </div>
-                    
+
                     <div class="form-group">
                         <div id="dueFeePreview" style="background: #f8fffb; color: #14291c; padding: 1rem; border-radius: 5px; margin-top: 1rem; border: 1px solid var(--border-color);">
                             <strong style="color: #166534;">Preview:</strong> <span style="color: #4b7a5e;">New unpaid amount will be: <span id="previewAmount" style="color: #14291c; font-weight: bold;">${Utils.formatCurrency(currentDueAmount)}</span></span>
                         </div>
                     </div>
-                    
+
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" onclick="closeUpdateDueFeeModal()">Cancel</button>
                         <button type="submit" class="btn btn-primary">Save Unpaid Amount</button>
@@ -5376,11 +5440,11 @@ function loadImport() {
             </form>
             <div id="importResults"></div>
                 </div>
-                
+
                 <!-- Export/Download Section -->
                 <div class="export-card">
                     <h2>📤 Download Data</h2>
-                    
+
                     <!-- Download Members -->
                     <div class="download-section">
                         <h3>Download Members Data</h3>
@@ -5403,7 +5467,7 @@ function loadImport() {
                             📥 Download Members
                         </button>
                     </div>
-                    
+
                     <!-- Download Expenses -->
                     <div class="download-section">
                         <h3>Download Expenses Data</h3>
@@ -5428,7 +5492,7 @@ function loadImport() {
                             📥 Download Expenses
                         </button>
                     </div>
-                    
+
                     <!-- Download Payments -->
                     <div class="download-section">
                         <h3>Download Payments Data</h3>
@@ -5919,6 +5983,7 @@ function startAutoSync() {
 
     // Auto-sync every 30 minutes (1800000 ms)
     autoSyncInterval = setInterval(() => {
+        if (!Utils.isOnline()) return;
         // Auto-sync triggered
         fetch('api/sync-local.php?type=auto')
             .then(async res => {
@@ -5942,21 +6007,27 @@ function startAutoSync() {
 }
 
 
-function handleLogout() {
+async function handleLogout() {
     // Stop auto-sync on logout
     if (autoSyncInterval) {
         clearInterval(autoSyncInterval);
     }
 
     stopSectionAutoRefresh();
-    fetch('api/auth.php?action=logout', {
-        method: 'POST',
-        keepalive: true
-    })
-        .catch(() => null)
-        .finally(() => {
-            window.location.replace('index.html');
+    try {
+        await fetch('api/auth.php?action=logout', {
+            method: 'POST',
+            keepalive: true
         });
+    } catch (err) {
+        console.error('Logout error:', err);
+    } finally {
+        localStorage.clear();
+        sessionStorage.removeItem('gym_last_role');
+        sessionStorage.removeItem('gym_last_username');
+        await Utils.clearSensitiveCaches();
+        window.location.replace('index.html');
+    }
 }
 
 

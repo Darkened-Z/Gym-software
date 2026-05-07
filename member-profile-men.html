@@ -5,8 +5,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Member Profile - Men</title>
-
+    <meta name="theme-color" content="#166534">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" type="image/svg+xml" href="assets/icons/gym-icon.svg">
+    <link rel="apple-touch-icon" href="assets/icons/gym-icon-192.png">
     <link rel="stylesheet" href="assets/css/member-profile.css?v=7">
+    <link rel="stylesheet" href="assets/css/pwa.css">
     <style>
         .btn {
             background: var(--primary-color);
@@ -44,12 +49,14 @@
     </div>
 
     <script src="assets/js/utils.js?v=6"></script>
+    <script src="assets/js/pwa.js"></script>
     <script src="assets/js/member-profile.js?v=6"></script>
 
     <script>
         window.MEMBER_GENDER = 'men';
 
         document.addEventListener("DOMContentLoaded", () => {
+            if (!Utils.isOnline()) return;
             fetch('api/auth.php?action=check')
                 .then(r => r.json())
                 .then(data => {

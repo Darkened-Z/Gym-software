@@ -17,6 +17,12 @@ Options -Indexes
     Header set X-XSS-Protection "1; mode=block"
 </IfModule>
 
+# PWA asset MIME types
+<IfModule mod_mime.c>
+    AddType application/manifest+json .webmanifest
+    AddType image/svg+xml .svg
+</IfModule>
+
 # PHP settings (for PHP 7 and 8)
 <IfModule mod_php7.c>
     php_value upload_max_filesize 10M

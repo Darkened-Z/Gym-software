@@ -41,6 +41,11 @@ function handleLookup() {
         return;
     }
 
+    if (!Utils.isOnline()) {
+        Utils.showNotification('You are offline. Member profile lookup needs a connection.', 'warning');
+        return;
+    }
+
     // Use member-profile.php which checks both genders by exact member code.
     // This is the same endpoint used to load the profile, so we get member data and check in.
     fetch(`api/member-profile.php?code=${encodeURIComponent(memberCode)}`)
@@ -128,6 +133,15 @@ function loadMemberProfile(searchTerm) {
     const contentDiv = document.getElementById('memberContent');
     contentDiv.innerHTML = '<div class="loading">Opening member profile...</div>';
 
+    if (!Utils.isOnline()) {
+        Utils.renderOfflineNotice(
+            contentDiv,
+            'Member profile offline',
+            'This page can load its shell offline, but the read path is not cached because it contains member PII and session-specific data.'
+        );
+        return;
+    }
+
     // Load profile directly by exact member code
     fetch(`api/member-profile.php?code=${encodeURIComponent(searchTerm)}`)
         .then(async res => {
@@ -166,6 +180,11 @@ function loadMemberPayments(memberId) {
 
     historyContainer.innerHTML = '<div class="loading-small">Loading payment history...</div>';
 
+    if (!Utils.isOnline()) {
+        historyContainer.innerHTML = '<div class="error-small">Payment history is unavailable offline.</div>';
+        return;
+    }
+
     // Use the code we already searched for or what's in the data.
     const memberCode = currentMemberData?.code || '';
 
@@ -193,7 +212,12 @@ function loadMemberAttendance(memberId) {
     const calendarContainer = document.getElementById('attendanceCalendar');
     if (!calendarContainer) return;
 
-    // We don't want to wipe the container immediately if we want to show a skeleton, 
+    if (!Utils.isOnline()) {
+        calendarContainer.innerHTML = '<div class="error-small">Attendance calendar is unavailable offline.</div>';
+        return;
+    }
+
+    // We don't want to wipe the container immediately if we want to show a skeleton,
     // but for now simple loading text or keeping it empty until load is fine.
     // Actually, renderAttendanceCalendar is called in renderMemberProfile with empty data?
     // No, I removed it from renderMemberProfile context in the PHP?
@@ -222,15 +246,22 @@ let allMemberPayments = [];
 let currentPaymentPage = 1;
 const PAYMENTS_PER_PAGE = 14;
 
-function logoutMemberProfile() {
-    fetch('api/auth.php?action=logout', {
-        method: 'POST',
-        keepalive: true
-    })
-        .catch(() => null)
-        .finally(() => {
-            window.location.replace('index.html');
+async function logoutMemberProfile() {
+    try {
+        await fetch('api/auth.php?action=logout', {
+            method: 'POST',
+            keepalive: true
         });
+    } catch (err) {
+        console.error('Logout error:', err);
+    } finally {
+        sessionStorage.removeItem('gym_last_role');
+        sessionStorage.removeItem('gym_last_username');
+        sessionStorage.removeItem('gym_last_member_code');
+        sessionStorage.removeItem('gym_last_gender');
+        await Utils.clearSensitiveCaches();
+        window.location.replace('index.html');
+    }
 }
 
 function renderMemberProfile(data) {
@@ -357,7 +388,7 @@ function renderMemberProfile(data) {
                     </div>
                 </div>
             </div>
-            
+
             <!-- Bottom: Attendance This Month -->
             <div class="calendar-wrapper" style="margin-top: 2rem; padding: 0 2rem; display: flex; justify-content: center;">
                 <div class="calendar-section" style="width: 100%; max-width: 600px;">
@@ -603,16 +634,16 @@ function renderFeeHistory(payments) {
     if (totalPages > 1) {
         html += `
             <div class="pagination" style="display: flex; justify-content: center; gap: 1rem; margin-top: 1rem;">
-                <button class="btn btn-sm btn-secondary" 
-                    onclick="changePaymentPage(-1)" 
+                <button class="btn btn-sm btn-secondary"
+                    onclick="changePaymentPage(-1)"
                     ${currentPaymentPage === 1 ? 'disabled' : ''}>
                     &laquo; Prev
                 </button>
                 <span style="align-self: center; color: var(--text-secondary);">
                     Page ${currentPaymentPage} of ${totalPages}
                 </span>
-                <button class="btn btn-sm btn-secondary" 
-                    onclick="changePaymentPage(1)" 
+                <button class="btn btn-sm btn-secondary"
+                    onclick="changePaymentPage(1)"
                     ${currentPaymentPage === totalPages ? 'disabled' : ''}>
                     Next &raquo;
                 </button>

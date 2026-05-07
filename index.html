@@ -7,7 +7,13 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>Gym Management System - Login</title>
+    <meta name="theme-color" content="#166534">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" type="image/svg+xml" href="assets/icons/gym-icon.svg">
+    <link rel="apple-touch-icon" href="assets/icons/gym-icon-192.png">
     <link rel="stylesheet" href="assets/css/style.css?v=7">
+    <link rel="stylesheet" href="assets/css/pwa.css">
 </head>
 <body>
     <div class="login-container">
@@ -29,10 +35,10 @@
                         <form id="adminForm" aria-label="Admin Login Form">
                             <div class="form-group">
                                 <label for="adminUsername">Username</label>
-                                <input 
-                                    type="text" 
-                                    id="adminUsername" 
-                                    name="username" 
+                                <input
+                                    type="text"
+                                    id="adminUsername"
+                                    name="username"
                                     autocomplete="username"
                                     aria-required="true"
                                     placeholder="Type staff username"
@@ -40,10 +46,10 @@
                             </div>
                             <div class="form-group">
                                 <label for="adminPassword">Password</label>
-                                <input 
-                                    type="password" 
-                                    id="adminPassword" 
-                                    name="password" 
+                                <input
+                                    type="password"
+                                    id="adminPassword"
+                                    name="password"
                                     autocomplete="current-password"
                                     aria-required="true"
                                     placeholder="Type password"
@@ -65,10 +71,10 @@
                         <form id="memberForm" aria-label="Member Login Form">
                             <div class="form-group">
                                 <label for="memberCode">Member Code / Account No.</label>
-                                <input 
-                                    type="text" 
-                                    id="memberCode" 
-                                    name="member_code" 
+                                <input
+                                    type="text"
+                                    id="memberCode"
+                                    name="member_code"
                                     autocomplete="off"
                                     aria-required="true"
                                     placeholder="Example: M001"
@@ -84,6 +90,7 @@
     </div>
 
     <script src="assets/js/utils.js?v=6"></script>
+    <script src="assets/js/pwa.js"></script>
     <script src="assets/js/auth.js?v=6"></script>
     <script>
         // Check authentication status on page load
@@ -92,13 +99,29 @@
         });
 
         function checkAuthStatus() {
+            if (!Utils.isOnline()) {
+                const storedRole = sessionStorage.getItem('gym_last_role');
+                const storedGender = sessionStorage.getItem('gym_last_gender') || 'men';
+                if (storedRole === 'admin' || storedRole === 'staff') {
+                    window.location.href = 'admin-dashboard.html';
+                } else if (storedRole === 'member') {
+                    window.location.href = storedGender === 'women' ? 'member-profile-women.html' : 'member-profile-men.html';
+                }
+                return;
+            }
+
             fetch('api/auth.php?action=check')
                 .then(res => res.json())
                 .then(data => {
                     if (data.authenticated) {
                         if (data.role === 'admin' || data.role === 'staff') {
+                            sessionStorage.setItem('gym_last_role', data.role);
+                            sessionStorage.setItem('gym_last_username', data.username || data.name || 'Admin');
                             window.location.href = 'admin-dashboard.html';
                         } else if (data.role === 'member') {
+                            sessionStorage.setItem('gym_last_role', 'member');
+                            sessionStorage.setItem('gym_last_username', data.username || data.member_code || 'Member');
+                            sessionStorage.setItem('gym_last_gender', data.gender || 'men');
                             if (data.gender === 'men') {
                                 window.location.href = 'member-profile-men.html';
                             } else {

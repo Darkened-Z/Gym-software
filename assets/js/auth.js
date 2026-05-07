@@ -26,6 +26,11 @@ function handleAdminLogin() {
     const password = document.getElementById('adminPassword').value;
     const submitBtn = document.querySelector('#adminForm button[type="submit"]');
 
+    if (!Utils.isOnline()) {
+        Utils.showNotification('You are offline. Staff login needs an internet connection.', 'warning');
+        return;
+    }
+
     // Validate inputs
     if (!username || !password) {
         Utils.showNotification('Please enter your username and password.', 'error');
@@ -48,6 +53,8 @@ function handleAdminLogin() {
     Utils.apiPost('api/auth.php?action=login', { username, password })
         .then(data => {
             if (data.success) {
+                sessionStorage.setItem('gym_last_role', data.role || 'staff');
+                sessionStorage.setItem('gym_last_username', data.username || username);
                 Utils.showNotification('Login successful. Opening dashboard...', 'success');
                 setTimeout(() => {
                     if (data.role === 'admin' || data.role === 'staff') {
@@ -75,6 +82,11 @@ function handleMemberLogin() {
     const memberCode = document.getElementById('memberCode').value.trim();
     const submitBtn = document.querySelector('#memberForm button[type="submit"]');
 
+    if (!Utils.isOnline()) {
+        Utils.showNotification('You are offline. Member sign-in needs an internet connection.', 'warning');
+        return;
+    }
+
     // Validate input
     if (!memberCode) {
         Utils.showNotification('Please enter member code or account number.', 'error');
@@ -92,6 +104,9 @@ function handleMemberLogin() {
     Utils.apiPost('api/auth.php?action=login', { member_code: memberCode })
         .then(data => {
             if (data.success) {
+                sessionStorage.setItem('gym_last_role', 'member');
+                sessionStorage.setItem('gym_last_member_code', memberCode);
+                sessionStorage.setItem('gym_last_gender', data.gender || 'men');
                 Utils.showNotification('Login successful. Opening profile...', 'success');
                 setTimeout(() => {
                     if (data.gender === 'men') {
@@ -115,19 +130,21 @@ function handleMemberLogin() {
         });
 }
 
-function handleLogout() {
-    fetch('api/auth.php?action=logout', {
-        method: 'POST'
-    })
-        .then(res => res.json())
-        .then(data => {
-            localStorage.clear();
-            window.location.href = 'index.html';
-        })
-        .catch(err => {
-            console.error('Logout error:', err);
-            localStorage.clear();
-            window.location.href = 'index.html';
+async function handleLogout() {
+    try {
+        await fetch('api/auth.php?action=logout', {
+            method: 'POST'
         });
+    } catch (err) {
+        console.error('Logout error:', err);
+    } finally {
+        localStorage.clear();
+        sessionStorage.removeItem('gym_last_role');
+        sessionStorage.removeItem('gym_last_username');
+        sessionStorage.removeItem('gym_last_member_code');
+        sessionStorage.removeItem('gym_last_gender');
+        await Utils.clearSensitiveCaches();
+        window.location.href = 'index.html';
+    }
 }
 
