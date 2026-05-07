@@ -45,6 +45,19 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 
+    window.addEventListener('member-write-outbox:flush-end', event => {
+        const detail = event?.detail || {};
+        if ((detail.replayed || 0) <= 0 && (detail.dropped || 0) <= 0) {
+            return;
+        }
+        if (currentSection === 'members' && !document.querySelector('.modal')) {
+            const currentPage = parseInt(document.getElementById('membersPageInput')?.value || '1', 10) || 1;
+            loadMembersTable(currentPage);
+        } else if (currentSection === 'dashboard') {
+            loadDashboard();
+        }
+    });
+
     document.addEventListener('visibilitychange', () => {
         if (!document.hidden) {
             startSectionAutoRefresh();
@@ -1114,7 +1127,7 @@ async function lookupMemberByCodeAcrossGenders(memberCode) {
         return {
             success: false,
             offline: true,
-            message: 'Reconnect to look up live member records safely. Offline member edits are not queued.'
+            message: 'Reconnect to look up live member records safely. Existing-member edits still need a live record.'
         };
     }
 
@@ -1137,7 +1150,7 @@ function loadMembers() {
         const offlineNotice = window.OfflineState && typeof window.OfflineState.renderCapabilityNotice === 'function'
             ? window.OfflineState.renderCapabilityNotice('members', {
                 title: 'Members section offline',
-                body: 'Member browsing, edit forms, and payment lookup stay live-only for now. Reconnect to refresh the roster safely.'
+                body: 'Member browsing and existing-member edits stay live-only. You can still open a blank add-member form and queue a text-only create locally.'
             })
             : '';
 
@@ -1150,10 +1163,11 @@ function loadMembers() {
                     steps: [
                         'Use the search box to find an existing member.',
                         'Use Active only or Inactive only if the list looks too long.',
-                        'Click Take Fee if you want to update dues quickly.'
+                        'Use Add New Member to queue a new member locally when you are offline.'
                     ]
                 })}
                 ${offlineNotice}
+                ${isAdminUser() ? '<div style="margin-top:1rem;"><button class="btn btn-primary" onclick="showAddMemberForm()">Add New Member</button></div>' : ''}
             </div>
         `;
         return;
@@ -1461,6 +1475,10 @@ function renderMembersTable(members, pagination) {
 function showAddMemberForm() {
     if (!requireAdminAccess('add members')) return;
 
+    const offlineDraftNote = !Utils.isOnline()
+        ? '<div class="simple-note" style="border-left: 4px solid #f59e0b; background: #fffbeb;"><strong>Offline save:</strong> New members can queue locally without a fresh photo. Deletions stay online-only.</div>'
+        : '';
+
     const html = `
         <div class="modal" id="memberModal">
             <div class="modal-content">
@@ -1470,7 +1488,10 @@ function showAddMemberForm() {
                 </div>
                 <form id="memberForm" class="modal-body">
                     <input type="hidden" id="memberId" name="id">
+                    <input type="hidden" id="memberUpdatedAt" name="expected_updated_at">
+                    <input type="hidden" id="existingProfileImage" name="existing_profile_image">
                     <div class="simple-note"><strong>Tip:</strong> Start with code, name, phone, join date, and monthly fee. Other fields can be filled later.</div>
+                    ${offlineDraftNote}
                     <div class="form-group">
                         <label>Member Code / Account No. *</label>
                         <input type="text" id="memberCode" name="member_code" placeholder="Example: M001" required>
@@ -1599,8 +1620,8 @@ function saveMember() {
     const hasImage = profileImageInput && profileImageInput.files.length > 0;
     const memberCodeValue = document.getElementById('memberCode')?.value || '';
 
-    if (!Utils.isOnline()) {
-        Utils.showNotification('Reconnect before saving member details. Offline member edits are not queued.', 'warning');
+    if (hasImage && !Utils.isOnline()) {
+        Utils.showNotification('Reconnect before attaching a new photo. Offline member saves are text-only.', 'warning');
         return;
     }
 
@@ -1635,11 +1656,6 @@ function saveMember() {
 }
 
 function saveMemberData(profileImagePath) {
-    if (!Utils.isOnline()) {
-        Utils.showNotification('Reconnect before saving member details. Offline member edits are not queued.', 'warning');
-        return;
-    }
-
     const formData = {
         id: document.getElementById('memberId').value || null,
         member_code: document.getElementById('memberCode').value,
@@ -1655,19 +1671,29 @@ function saveMemberData(profileImagePath) {
         monthly_fee: parseFloat(document.getElementById('monthlyFee').value) || 0,
         locker_fee: parseFloat(document.getElementById('lockerFee').value) || 0,
         next_fee_due_date: document.getElementById('nextFeeDueDate').value || null,
-        status: document.getElementById('status').value
+        status: document.getElementById('status').value,
+        expected_updated_at: document.getElementById('memberUpdatedAt')?.value || null
     };
 
     const action = formData.id ? 'update' : 'create';
     const url = `api/members.php?action=${action}&gender=${currentGender}`;
 
-    fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
-    })
-        .then(res => res.json())
+    const submitMutation = window.MemberWriteOutbox && typeof window.MemberWriteOutbox.submitMemberMutation === 'function'
+        ? window.MemberWriteOutbox.submitMemberMutation(action, { ...formData, profile_image: profileImagePath, gender: currentGender }, { gender: currentGender })
+        : fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...formData, profile_image: profileImagePath })
+        }).then(res => res.json());
+
+    submitMutation
         .then(data => {
+            if (data.queued) {
+                Utils.showNotification(data.message || 'Member saved offline. It will replay automatically when the connection returns.', 'warning');
+                closeMemberModal();
+                return;
+            }
+
             if (data.success) {
                 Utils.showNotification(data.message || 'Member saved successfully', 'success');
                 closeMemberModal();
@@ -1753,7 +1779,7 @@ function stopRFIDScan(message, type) {
 function editMember(id) {
     if (!requireAdminAccess('edit members')) return;
     if (!Utils.isOnline()) {
-        Utils.showNotification('Reconnect before editing member details. Offline editing is read-only.', 'warning');
+        Utils.showNotification('Reconnect before editing member details. Existing-member edits need a live record.', 'warning');
         return;
     }
 
@@ -1777,6 +1803,8 @@ function editMember(id) {
                 document.getElementById('lockerFee').value = m.locker_fee;
                 document.getElementById('nextFeeDueDate').value = m.next_fee_due_date || '';
                 document.getElementById('status').value = m.status;
+                document.getElementById('memberUpdatedAt').value = m.updated_at || '';
+                document.getElementById('existingProfileImage').value = m.profile_image || '';
 
                 // Show existing profile image if available
                 if (m.profile_image) {
@@ -1784,12 +1812,6 @@ function editMember(id) {
                     const previewImg = document.getElementById('previewImg');
                     previewImg.src = m.profile_image;
                     preview.style.display = 'block';
-                    // Store existing image path
-                    const existingInput = document.createElement('input');
-                    existingInput.type = 'hidden';
-                    existingInput.id = 'existingProfileImage';
-                    existingInput.value = m.profile_image;
-                    document.getElementById('memberForm').appendChild(existingInput);
                 }
 
                 // Update modal title
@@ -1806,6 +1828,10 @@ function editMember(id) {
 
 function deleteMember(id) {
     if (!requireAdminAccess('delete members')) return;
+    if (!Utils.isOnline()) {
+        Utils.showNotification('Reconnect before deleting members. Offline deletions are not queued.', 'warning');
+        return;
+    }
     if (!confirm('Are you sure you want to delete this member?')) return;
 
     fetch(`api/members.php?action=delete&id=${id}&gender=${currentGender}`, {

@@ -36,6 +36,73 @@ function memberCodeExistsAcrossGenders(PDO $db, string $memberCode, ?string $exc
     return false;
 }
 
+function normalizeMemberComparableValue($value): ?string {
+    if ($value === null) {
+        return null;
+    }
+
+    $value = trim((string)$value);
+    return $value === '' ? null : $value;
+}
+
+function normalizeMemberMoneyValue($value): string {
+    return number_format((float)$value, 2, '.', '');
+}
+
+function memberPayloadComparableArray(array $data, bool $includeStatus = true): array {
+    $payload = [
+        'member_code' => trim((string)($data['member_code'] ?? '')),
+        'name' => trim((string)($data['name'] ?? '')),
+        'email' => normalizeMemberComparableValue($data['email'] ?? null),
+        'phone' => trim((string)($data['phone'] ?? '')),
+        'rfid_uid' => normalizeMemberComparableValue($data['rfid_uid'] ?? null),
+        'address' => normalizeMemberComparableValue($data['address'] ?? null),
+        'profile_image' => normalizeMemberComparableValue($data['profile_image'] ?? null),
+        'membership_type' => trim((string)($data['membership_type'] ?? 'Basic')),
+        'join_date' => trim((string)($data['join_date'] ?? '')),
+        'admission_fee' => normalizeMemberMoneyValue($data['admission_fee'] ?? 0),
+        'monthly_fee' => normalizeMemberMoneyValue($data['monthly_fee'] ?? 0),
+        'locker_fee' => normalizeMemberMoneyValue($data['locker_fee'] ?? 0),
+        'next_fee_due_date' => normalizeMemberComparableValue($data['next_fee_due_date'] ?? null),
+        'total_due_amount' => normalizeMemberMoneyValue($data['total_due_amount'] ?? 0)
+    ];
+
+    if ($includeStatus) {
+        $payload['status'] = in_array($data['status'] ?? 'active', ['active', 'inactive'], true) ? $data['status'] : 'active';
+    }
+
+    return $payload;
+}
+
+function memberRecordComparableArray(array $record, bool $includeStatus = true): array {
+    $payload = [
+        'member_code' => trim((string)($record['member_code'] ?? '')),
+        'name' => trim((string)($record['name'] ?? '')),
+        'email' => normalizeMemberComparableValue($record['email'] ?? null),
+        'phone' => trim((string)($record['phone'] ?? '')),
+        'rfid_uid' => normalizeMemberComparableValue($record['rfid_uid'] ?? null),
+        'address' => normalizeMemberComparableValue($record['address'] ?? null),
+        'profile_image' => normalizeMemberComparableValue($record['profile_image'] ?? null),
+        'membership_type' => trim((string)($record['membership_type'] ?? 'Basic')),
+        'join_date' => trim((string)($record['join_date'] ?? '')),
+        'admission_fee' => normalizeMemberMoneyValue($record['admission_fee'] ?? 0),
+        'monthly_fee' => normalizeMemberMoneyValue($record['monthly_fee'] ?? 0),
+        'locker_fee' => normalizeMemberMoneyValue($record['locker_fee'] ?? 0),
+        'next_fee_due_date' => normalizeMemberComparableValue($record['next_fee_due_date'] ?? null),
+        'total_due_amount' => normalizeMemberMoneyValue($record['total_due_amount'] ?? 0)
+    ];
+
+    if ($includeStatus) {
+        $payload['status'] = in_array($record['status'] ?? 'active', ['active', 'inactive'], true) ? $record['status'] : 'active';
+    }
+
+    return $payload;
+}
+
+function memberPayloadMatchesRecord(array $record, array $data, bool $includeStatus = true): bool {
+    return memberRecordComparableArray($record, $includeStatus) === memberPayloadComparableArray($data, $includeStatus);
+}
+
 $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? '';
 $gender = $_GET['gender'] ?? 'men';
@@ -175,9 +242,17 @@ try {
                     exit;
                 }
 
+                $existingMember = $member->getByCode((string)$data['member_code']);
+                if ($existingMember && memberPayloadMatchesRecord($existingMember, $data, false)) {
+                    $member->syncActivityStatus((int)$existingMember['id']);
+                    $freshData = $member->getById((int)$existingMember['id']);
+                    echo json_encode(['success' => true, 'id' => (int)$existingMember['id'], 'message' => 'Member already saved', 'member_status' => $freshData['calculated_status'] ?? $freshData['status'] ?? ($existingMember['status'] ?? 'active'), 'replayed' => true]);
+                    break;
+                }
+
                 // Check for duplicate member_code or phone
                 if (memberCodeExistsAcrossGenders($db, (string)$data['member_code'])) {
-                    http_response_code(400);
+                    http_response_code(409);
                     echo json_encode(['success' => false, 'message' => 'Member code already exists']);
                     exit;
                 }
@@ -186,7 +261,7 @@ try {
                 $phoneCheck->bindValue(':phone', trim($data['phone']), PDO::PARAM_STR);
                 $phoneCheck->execute();
                 if ($phoneCheck->fetch()) {
-                    http_response_code(400);
+                    http_response_code(409);
                     echo json_encode(['success' => false, 'message' => 'Phone number already exists']);
                     exit;
                 }
@@ -200,7 +275,7 @@ try {
                     $stmt->bindValue(':rfid_uid', $rfidUid, PDO::PARAM_STR);
                     $stmt->execute();
                     if ($stmt->rowCount() > 0) {
-                        http_response_code(400);
+                        http_response_code(409);
                         echo json_encode(['success' => false, 'message' => 'RFID UID already assigned to another member']);
                         exit;
                     }
@@ -270,8 +345,29 @@ try {
                     }
                 }
 
+                $currentMember = $member->getById((int)$id);
+                if (!$currentMember) {
+                    http_response_code(404);
+                    echo json_encode(['success' => false, 'message' => 'Member not found']);
+                    exit;
+                }
+
+                $expectedUpdatedAt = trim((string)($data['expected_updated_at'] ?? ''));
+                if ($expectedUpdatedAt !== '' && isset($currentMember['updated_at']) && (string)$currentMember['updated_at'] !== $expectedUpdatedAt) {
+                    if (memberPayloadMatchesRecord($currentMember, $data)) {
+                        $member->syncActivityStatus((int)$id);
+                        $freshData = $member->getById((int)$id);
+                        echo json_encode(['success' => true, 'message' => 'Member already up to date', 'member_status' => $freshData['calculated_status'] ?? $freshData['status'] ?? ($currentMember['status'] ?? 'active'), 'replayed' => true]);
+                        break;
+                    }
+
+                    http_response_code(409);
+                    echo json_encode(['success' => false, 'message' => 'Member changed while you were offline. Reopen and merge before retrying.']);
+                    exit;
+                }
+
                 if (memberCodeExistsAcrossGenders($db, (string)$data['member_code'], $gender, (int)$id)) {
-                    http_response_code(400);
+                    http_response_code(409);
                     echo json_encode(['success' => false, 'message' => 'Member code already exists']);
                     exit;
                 }
@@ -281,7 +377,7 @@ try {
                 $phoneCheck->bindValue(':id', (int)$id, PDO::PARAM_INT);
                 $phoneCheck->execute();
                 if ($phoneCheck->fetch()) {
-                    http_response_code(400);
+                    http_response_code(409);
                     echo json_encode(['success' => false, 'message' => 'Phone number already exists']);
                     exit;
                 }
@@ -292,7 +388,7 @@ try {
                     $rfidCheck->bindValue(':id', (int)$id, PDO::PARAM_INT);
                     $rfidCheck->execute();
                     if ($rfidCheck->fetch()) {
-                        http_response_code(400);
+                        http_response_code(409);
                         echo json_encode(['success' => false, 'message' => 'RFID UID already assigned to another member']);
                         exit;
                     }
@@ -316,20 +412,31 @@ try {
                     'status' => $data['status'] ?? 'active'
                 ];
 
-                if ($member->update($id, $memberData)) {
-                    $member->syncActivityStatus((int)$id);
-                    $freshData = $member->getById((int)$id);
-                    $adminLogger->log('member_updated', 'member_' . $gender, $id, null, [
-                        'member_code' => $memberData['member_code'],
-                        'name' => $memberData['name'],
-                        'phone' => $memberData['phone'],
-                        'status' => $freshData['calculated_status'] ?? $freshData['status'] ?? $memberData['status']
-                    ]);
-                    echo json_encode(['success' => true, 'message' => 'Member updated successfully', 'member_status' => $freshData['calculated_status'] ?? $freshData['status'] ?? $memberData['status']]);
-                } else {
+                $updateResult = $member->update($id, $memberData);
+                if ($updateResult === false) {
                     http_response_code(500);
                     echo json_encode(['success' => false, 'message' => 'Failed to update member']);
+                    exit;
                 }
+
+                if ($updateResult === 0 && $expectedUpdatedAt !== '') {
+                    $postUpdateMember = $member->getById((int)$id);
+                    if (!$postUpdateMember || !memberPayloadMatchesRecord($postUpdateMember, $data)) {
+                        http_response_code(409);
+                        echo json_encode(['success' => false, 'message' => 'Member changed while you were offline. Reopen and merge before retrying.']);
+                        exit;
+                    }
+                }
+
+                $member->syncActivityStatus((int)$id);
+                $freshData = $member->getById((int)$id);
+                $adminLogger->log('member_updated', 'member_' . $gender, $id, null, [
+                    'member_code' => $memberData['member_code'],
+                    'name' => $memberData['name'],
+                    'phone' => $memberData['phone'],
+                    'status' => $freshData['calculated_status'] ?? $freshData['status'] ?? $memberData['status']
+                ]);
+                echo json_encode(['success' => true, 'message' => 'Member updated successfully', 'member_status' => $freshData['calculated_status'] ?? $freshData['status'] ?? $memberData['status']]);
             }
             break;
 

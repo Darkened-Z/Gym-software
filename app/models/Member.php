@@ -266,6 +266,11 @@ class Member {
         }
         $query = "UPDATE {$this->table} SET\n            " . implode(",\n            ", $setParts) . "\n            WHERE id = :id";
 
+        $expectedUpdatedAt = trim((string)($data['expected_updated_at'] ?? ''));
+        if ($expectedUpdatedAt !== '') {
+            $query .= ' AND updated_at = :expected_updated_at';
+        }
+
         $currentSelect = 'SELECT status';
         if ($this->hasStatusForceActive) {
             $currentSelect .= ', COALESCE(status_force_active, 0) AS status_force_active';
@@ -292,6 +297,9 @@ class Member {
 
         $stmt = $this->conn->prepare($query);
         $stmt->bindValue(':id', (int)$id, PDO::PARAM_INT);
+        if ($expectedUpdatedAt !== '') {
+            $stmt->bindValue(':expected_updated_at', $expectedUpdatedAt, PDO::PARAM_STR);
+        }
         $stmt->bindValue(':member_code', $this->limitString($data['member_code'] ?? '', 50), PDO::PARAM_STR);
         $stmt->bindValue(':name', $this->limitString($data['name'] ?? '', 200), PDO::PARAM_STR);
         $this->bindNullableString($stmt, ':email', $this->limitString($data['email'] ?? '', 255) ?: null);
@@ -311,7 +319,11 @@ class Member {
             $stmt->bindValue(':status_force_active', $statusForceActive, PDO::PARAM_INT);
         }
 
-        return $stmt->execute();
+        if (!$stmt->execute()) {
+            return false;
+        }
+
+        return $stmt->rowCount();
     }
 
     public function getByRfidUid($rfidUid) {

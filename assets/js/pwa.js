@@ -535,12 +535,317 @@
         return flushInFlight;
     }
 
+    const MEMBER_WRITE_OUTBOX_STORAGE_KEY = 'gym-member-write-outbox-v1';
+    let memberWriteFlushInFlight = null;
+    let memberWriteMemoryQueue = [];
+    let memberWriteStorageFallback = false;
+
+    function readMemberWriteQueue() {
+        if (memberWriteStorageFallback) {
+            return memberWriteMemoryQueue.slice();
+        }
+
+        try {
+            const raw = window.localStorage.getItem(MEMBER_WRITE_OUTBOX_STORAGE_KEY);
+            if (!raw) return [];
+            const parsed = JSON.parse(raw);
+            if (!Array.isArray(parsed)) return [];
+            return parsed.map(normalizeMemberWriteItem).filter(Boolean);
+        } catch (error) {
+            memberWriteStorageFallback = true;
+            return memberWriteMemoryQueue.slice();
+        }
+    }
+
+    function writeMemberWriteQueue(queue) {
+        const normalizedQueue = queue.map(normalizeMemberWriteItem).filter(Boolean);
+        memberWriteMemoryQueue = normalizedQueue.slice();
+
+        try {
+            window.localStorage.setItem(MEMBER_WRITE_OUTBOX_STORAGE_KEY, JSON.stringify(normalizedQueue));
+            memberWriteStorageFallback = false;
+        } catch (error) {
+            memberWriteStorageFallback = true;
+        }
+
+        window.dispatchEvent(new CustomEvent('member-write-outbox:changed', {
+            detail: getMemberWriteSummary()
+        }));
+    }
+
+    function normalizeMemberWriteItem(item) {
+        if (!item || typeof item !== 'object') return null;
+
+        const action = item.action === 'update' ? 'update' : item.action === 'create' ? 'create' : '';
+        if (!action) return null;
+
+        const payload = item.payload && typeof item.payload === 'object' ? safeClone(item.payload) || {} : {};
+        return {
+            id: typeof item.id === 'string' && item.id ? item.id : makeId(),
+            action,
+            payload,
+            createdAt: typeof item.createdAt === 'string' && item.createdAt ? item.createdAt : new Date().toISOString(),
+            attempts: Number.isFinite(item.attempts) ? item.attempts : 0,
+            lastError: typeof item.lastError === 'string' ? item.lastError : null,
+            dedupeKey: typeof item.dedupeKey === 'string' && item.dedupeKey ? item.dedupeKey : buildMemberWriteDedupeKey(action, payload),
+            source: typeof item.source === 'string' && item.source ? item.source : 'member-write-outbox'
+        };
+    }
+
+    function buildMemberWriteDedupeKey(action, payload) {
+        const gender = payload && payload.gender ? String(payload.gender) : 'men';
+        const memberId = payload && payload.id ? String(payload.id) : '';
+        const memberCode = payload && payload.member_code ? String(payload.member_code).trim().toLowerCase() : '';
+        return action === 'update'
+            ? [action, gender, memberId].join('|')
+            : [action, gender, memberCode].join('|');
+    }
+
+    function getMemberWriteQueue() {
+        return readMemberWriteQueue();
+    }
+
+    function getMemberWritePendingCount() {
+        return getMemberWriteQueue().length;
+    }
+
+    function getMemberWriteSummary() {
+        const queue = getMemberWriteQueue();
+        return {
+            pendingCount: queue.length,
+            items: queue,
+            persistenceMode: memberWriteStorageFallback ? 'session' : 'localStorage',
+            online: navigator.onLine !== false
+        };
+    }
+
+    function queueMemberWrite(action, payload, meta = {}) {
+        const normalizedPayload = safeClone(payload) || {};
+        const queue = getMemberWriteQueue();
+        const dedupeKey = buildMemberWriteDedupeKey(action, normalizedPayload);
+        const existing = queue.find(item => item.dedupeKey === dedupeKey);
+
+        if (existing) {
+            existing.payload = normalizedPayload;
+            existing.lastError = null;
+            existing.attempts = 0;
+            writeMemberWriteQueue(queue);
+            window.dispatchEvent(new CustomEvent('member-write-outbox:queued', {
+                detail: { item: existing, queued: false, count: queue.length }
+            }));
+            return { item: existing, queued: false, count: queue.length, deduped: true };
+        }
+
+        const item = normalizeMemberWriteItem({
+            id: makeId(),
+            action,
+            payload: normalizedPayload,
+            createdAt: new Date().toISOString(),
+            attempts: 0,
+            lastError: null,
+            dedupeKey,
+            source: typeof meta.source === 'string' && meta.source ? meta.source : 'member-write-outbox'
+        });
+
+        queue.push(item);
+        writeMemberWriteQueue(queue);
+        window.dispatchEvent(new CustomEvent('member-write-outbox:queued', {
+            detail: { item, queued: true, count: queue.length }
+        }));
+        return { item, queued: true, count: queue.length, deduped: false };
+    }
+
+    async function replayMemberWriteItem(item) {
+        const gender = item.payload && item.payload.gender ? item.payload.gender : 'men';
+        const endpoint = `api/members.php?action=${encodeURIComponent(item.action)}&gender=${encodeURIComponent(gender)}`;
+
+        try {
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(item.payload || {})
+            });
+
+            const data = await parseJsonResponse(response);
+            if (response.ok && data && data.success) {
+                noteOnlineSuccess('members', { action: item.action, source: 'flushMemberWritePending' });
+                return { completed: true, data };
+            }
+
+            if (!response.ok && response.status >= 500) {
+                return {
+                    transient: true,
+                    error: new Error((data && data.message) || `Server error (${response.status})`)
+                };
+            }
+
+            return {
+                dropItem: true,
+                error: new Error((data && data.message) || `Member replay failed (${response.status})`)
+            };
+        } catch (error) {
+            return {
+                transient: true,
+                error
+            };
+        }
+    }
+
+    async function flushMemberWritePending() {
+        if (memberWriteFlushInFlight) return memberWriteFlushInFlight;
+
+        memberWriteFlushInFlight = (async () => {
+            if (!navigator.onLine) {
+                window.dispatchEvent(new CustomEvent('member-write-outbox:flush-end', {
+                    detail: {
+                        replayed: 0,
+                        dropped: 0,
+                        remaining: getMemberWritePendingCount(),
+                        error: 'Still offline.'
+                    }
+                }));
+                return {
+                    success: false,
+                    replayed: 0,
+                    remaining: getMemberWritePendingCount(),
+                    message: 'Still offline.'
+                };
+            }
+
+            let replayed = 0;
+            let dropped = 0;
+            let lastError = null;
+
+            window.dispatchEvent(new CustomEvent('member-write-outbox:flush-start', {
+                detail: getMemberWriteSummary()
+            }));
+
+            while (true) {
+                const queue = getMemberWriteQueue();
+                if (!queue.length) break;
+
+                const item = queue[0];
+                const result = await replayMemberWriteItem(item);
+
+                if (result.completed) {
+                    queue.shift();
+                    replayed += 1;
+                    writeMemberWriteQueue(queue);
+                    window.dispatchEvent(new CustomEvent('member-write-outbox:item-replayed', {
+                        detail: { item, remaining: queue.length, replayed }
+                    }));
+                    continue;
+                }
+
+                if (result.dropItem) {
+                    queue.shift();
+                    dropped += 1;
+                    lastError = result.error || null;
+                    writeMemberWriteQueue(queue);
+                    window.dispatchEvent(new CustomEvent('member-write-outbox:item-dropped', {
+                        detail: { item, remaining: queue.length, error: lastError ? lastError.message : null }
+                    }));
+                    continue;
+                }
+
+                lastError = result.error || null;
+                break;
+            }
+
+            const summary = getMemberWriteSummary();
+            window.dispatchEvent(new CustomEvent('member-write-outbox:flush-end', {
+                detail: {
+                    replayed,
+                    dropped,
+                    remaining: summary.pendingCount,
+                    error: lastError ? lastError.message : null
+                }
+            }));
+
+            return {
+                success: summary.pendingCount === 0 && !lastError,
+                replayed,
+                dropped,
+                remaining: summary.pendingCount,
+                error: lastError
+            };
+        })().finally(() => {
+            memberWriteFlushInFlight = null;
+        });
+
+        return memberWriteFlushInFlight;
+    }
+
+    async function submitMemberMutation(action, payload, meta = {}) {
+        const requestPayload = safeClone(payload) || {};
+        const gender = requestPayload.gender || meta.gender || 'men';
+        const endpoint = `api/members.php?action=${encodeURIComponent(action)}&gender=${encodeURIComponent(gender)}`;
+
+        if (!navigator.onLine) {
+            const queued = queueMemberWrite(action, requestPayload, meta);
+            noteOfflineUse('members', { action, source: 'submitMemberMutation' });
+            return {
+                success: true,
+                queued: true,
+                queuedCount: queued.count,
+                deduped: queued.deduped,
+                message: 'Member save queued offline and will replay automatically.'
+            };
+        }
+
+        try {
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestPayload)
+            });
+
+            const data = await parseJsonResponse(response);
+            if (response.ok && data && data.success) {
+                noteOnlineSuccess('members', { action, source: 'submitMemberMutation' });
+                return {
+                    success: true,
+                    queued: false,
+                    data,
+                    message: data.message || 'Member saved successfully.'
+                };
+            }
+
+            return {
+                success: false,
+                queued: false,
+                status: response.status,
+                message: (data && data.message) || 'Failed to save member.'
+            };
+        } catch (error) {
+            if (isRetryableNetworkError(error)) {
+                const queued = queueMemberWrite(action, requestPayload, meta);
+                return {
+                    success: true,
+                    queued: true,
+                    queuedCount: queued.count,
+                    deduped: queued.deduped,
+                    message: 'Member save queued locally and will replay when the connection returns.'
+                };
+            }
+
+            throw error;
+        }
+    }
+
     function init() {
         updateStatusBar();
         refreshAttendanceOutboxPanels();
         window.addEventListener('online', () => {
             updateStatusBar();
             flushPending();
+            flushMemberWritePending();
         });
         window.addEventListener('offline', updateStatusBar);
         window.addEventListener('storage', event => {
@@ -548,14 +853,23 @@
                 refreshAttendanceOutboxPanels();
                 updateStatusBar();
             }
+            if (event.key === MEMBER_WRITE_OUTBOX_STORAGE_KEY && navigator.onLine) {
+                flushMemberWritePending();
+            }
         });
         window.addEventListener('attendance-outbox:changed', () => {
             refreshAttendanceOutboxPanels();
             updateStatusBar();
         });
+        window.addEventListener('member-write-outbox:changed', () => {
+            if (navigator.onLine) {
+                flushMemberWritePending();
+            }
+        });
         registerServiceWorker();
         if (navigator.onLine) {
             flushPending();
+            flushMemberWritePending();
         }
     }
 
@@ -577,6 +891,13 @@
         refreshPanels: refreshAttendanceOutboxPanels,
         getPendingCount: getPendingCount,
         getQueueSummary: getQueueSummary
+    };
+
+    window.MemberWriteOutbox = window.MemberWriteOutbox || {
+        submitMemberMutation: submitMemberMutation,
+        flushPending: flushMemberWritePending,
+        getPendingCount: getMemberWritePendingCount,
+        getQueueSummary: getMemberWriteSummary
     };
 
     if (document.readyState === 'loading') {
