@@ -22,6 +22,8 @@ document.addEventListener('DOMContentLoaded', function () {
     window.addEventListener('online', () => {
         if (currentSection === 'dashboard') {
             loadDashboard();
+        } else if (currentSection === 'members' && !document.querySelector('.modal')) {
+            loadMembers();
         }
         startSectionAutoRefresh();
         startAutoSync();
@@ -1064,7 +1066,99 @@ function normalizeMemberStatus(member = {}) {
     };
 }
 
+function setCurrentGender(gender) {
+    if (!['men', 'women'].includes(gender)) return;
+    currentGender = gender;
+    document.querySelectorAll('.gender-tab').forEach(t => t.classList.remove('active'));
+    document.querySelector(`.gender-tab[data-gender="${gender}"]`)?.classList.add('active');
+}
+
+function getCachedMemberProfileSnapshot(memberCode) {
+    const normalizedCode = String(memberCode || '').trim().toLowerCase();
+    if (!normalizedCode) return null;
+
+    const offlineState = window.OfflineState;
+    if (!offlineState || typeof offlineState.getSnapshot !== 'function') return null;
+
+    const menSnapshot = offlineState.getSnapshot('member-profile', `men:${normalizedCode}`);
+    if (menSnapshot) return menSnapshot.payload || menSnapshot;
+
+    const womenSnapshot = offlineState.getSnapshot('member-profile', `women:${normalizedCode}`);
+    if (womenSnapshot) return womenSnapshot.payload || womenSnapshot;
+
+    return null;
+}
+
+async function fetchMemberByCodeForGender(memberCode, gender) {
+    const res = await fetch(`api/members.php?action=getByCode&code=${encodeURIComponent(memberCode)}&gender=${gender}`);
+    const text = await res.text();
+
+    if (!text) {
+        return { success: false, message: 'Empty response from server' };
+    }
+
+    try {
+        return JSON.parse(text);
+    } catch (error) {
+        return { success: false, message: 'Invalid JSON response' };
+    }
+}
+
+async function lookupMemberByCodeAcrossGenders(memberCode) {
+    const normalizedCode = String(memberCode || '').trim();
+    if (!normalizedCode) {
+        return { success: false, message: 'Please enter member code.' };
+    }
+
+    if (!Utils.isOnline()) {
+        return {
+            success: false,
+            offline: true,
+            message: 'Reconnect to look up live member records safely. Offline member edits are not queued.'
+        };
+    }
+
+    for (const gender of ['men', 'women']) {
+        try {
+            const data = await fetchMemberByCodeForGender(normalizedCode, gender);
+            if (data && data.success && data.data) {
+                return { success: true, data: data.data, gender };
+            }
+        } catch (error) {
+            console.error(`Member lookup error for ${gender}:`, error);
+        }
+    }
+
+    return { success: false, message: 'Member not found.' };
+}
+
 function loadMembers() {
+    if (!Utils.isOnline()) {
+        const offlineNotice = window.OfflineState && typeof window.OfflineState.renderCapabilityNotice === 'function'
+            ? window.OfflineState.renderCapabilityNotice('members', {
+                title: 'Members section offline',
+                body: 'Member browsing, edit forms, and payment lookup stay live-only for now. Reconnect to refresh the roster safely.'
+            })
+            : '';
+
+        document.getElementById('contentBody').innerHTML = `
+            <div class="members-section">
+                ${renderSectionGuideCard({
+                    chip: 'Members Help',
+                    title: 'Add, search, or update a member',
+                    description: 'If someone is standing at the desk, first search by code, name, or phone. If not found, add them as a new member.',
+                    steps: [
+                        'Use the search box to find an existing member.',
+                        'Use Active only or Inactive only if the list looks too long.',
+                        'Click Take Fee if you want to update dues quickly.'
+                    ]
+                })}
+                ${offlineNotice}
+            </div>
+        `;
+        return;
+    }
+
     const html = `
         <div class="members-section">
             ${renderSectionGuideCard({
@@ -1125,6 +1219,11 @@ function loadMembers() {
         crossSearch.addEventListener('input', Utils.debounce(function (event) {
             const q = (event?.target?.value || '').trim();
             if (q.length < 2) { crossResults.style.display = 'none'; crossResults.innerHTML = ''; return; }
+            if (!Utils.isOnline()) {
+                crossResults.innerHTML = '<div style="padding:0.75rem 1rem;color:#b45309;">Reconnect to use cross-gender lookup safely.</div>';
+                crossResults.style.display = 'block';
+                return;
+            }
             fetch(`api/members.php?action=search_all&q=${encodeURIComponent(q)}`)
                 .then(r => r.json())
                 .then(res => {
@@ -1201,6 +1300,15 @@ function loadMembersAnalytics() {
     const container = document.getElementById('membersAnalyticsContainer');
     if (!container) return;
 
+    if (!Utils.isOnline()) {
+        Utils.renderOfflineNotice(
+            container,
+            'Members analytics offline',
+            'Reconnect to refresh the member charts safely.'
+        );
+        return;
+    }
+
     fetch('api/reports.php?action=members')
         .then(res => res.json())
         .then(result => {
@@ -1248,6 +1356,15 @@ function loadMembersTable(page = 1) {
     // Ensure page is a number
     page = parseInt(page) || 1;
 
+    if (!Utils.isOnline()) {
+        Utils.renderOfflineNotice(
+            '#membersTableContainer',
+            'Members list offline',
+            'The member roster, lookup, and edit actions need a live connection. Reconnect to load them safely.'
+        );
+        return;
+    }
+
     const search = document.getElementById('memberSearch')?.value || '';
     const limit = 20;
     const statusParam = memberStatusFilter ? `&status=${memberStatusFilter}` : '';
@@ -1256,6 +1373,9 @@ function loadMembersTable(page = 1) {
         .then(res => res.json())
         .then(data => {
             if (data.success) {
+                if (window.OfflineState && typeof window.OfflineState.recordOnlineSuccess === 'function') {
+                    window.OfflineState.recordOnlineSuccess('members', { source: 'loadMembersTable' });
+                }
                 const normalizedMembers = (data.data || []).map(normalizeMemberStatus);
                 renderMembersTable(normalizedMembers, data.pagination || { page: 1, pages: 1, limit });
             } else {
@@ -1479,6 +1599,11 @@ function saveMember() {
     const hasImage = profileImageInput && profileImageInput.files.length > 0;
     const memberCodeValue = document.getElementById('memberCode')?.value || '';
 
+    if (!Utils.isOnline()) {
+        Utils.showNotification('Reconnect before saving member details. Offline member edits are not queued.', 'warning');
+        return;
+    }
+
     // If there's an image, upload it first
     if (hasImage) {
         const imageFormData = new FormData();
@@ -1510,11 +1635,15 @@ function saveMember() {
 }
 
 function saveMemberData(profileImagePath) {
+    if (!Utils.isOnline()) {
+        Utils.showNotification('Reconnect before saving member details. Offline member edits are not queued.', 'warning');
+        return;
+    }
+
     const formData = {
         id: document.getElementById('memberId').value || null,
         member_code: document.getElementById('memberCode').value,
         name: document.getElementById('memberName').value,
-        phone: document.getElementById('phone').value,
         phone: document.getElementById('phone').value,
         rfid_uid: document.getElementById('rfidUid').value || null,
         email: document.getElementById('email').value || null,
@@ -1623,6 +1752,10 @@ function stopRFIDScan(message, type) {
 
 function editMember(id) {
     if (!requireAdminAccess('edit members')) return;
+    if (!Utils.isOnline()) {
+        Utils.showNotification('Reconnect before editing member details. Offline editing is read-only.', 'warning');
+        return;
+    }
 
     fetch(`api/members.php?action=get&id=${id}&gender=${currentGender}`)
         .then(res => res.json())
@@ -1661,7 +1794,13 @@ function editMember(id) {
 
                 // Update modal title
                 document.querySelector('#memberModal .modal-header h2').textContent = 'Edit Member Details';
+            } else {
+                Utils.showNotification(data.message || 'Could not load member details for editing.', 'error');
             }
+        })
+        .catch(err => {
+            console.error('Edit member error:', err);
+            Utils.showNotification('Could not load member details for editing.', 'error');
         });
 }
 
@@ -1788,113 +1927,102 @@ function loadAttendanceAnalytics() {
         });
 }
 
-function handleCheckIn() {
+async function handleCheckIn() {
     const memberCode = document.getElementById('attendanceMemberCode').value.trim();
     if (!memberCode) {
         Utils.showNotification('Please enter member code', 'error');
         return;
     }
 
-    // Search in both genders to find the member
-    // Try men first
-    fetch(`api/members.php?action=getByCode&code=${encodeURIComponent(memberCode)}&gender=men`)
-        .then(res => {
-            if (!res.ok) {
-                throw new Error('Network error');
-            }
-            return res.json();
-        })
-        .then(data => {
-            let memberId = null;
-            let memberGender = null;
+    try {
+        let memberId = null;
+        let memberGender = null;
+        let lookupMode = 'live';
 
-            if (data.success && data.data) {
-                memberId = data.data.id;
-                memberGender = 'men';
+        const lookupResult = await lookupMemberByCodeAcrossGenders(memberCode);
+        if (lookupResult.success && lookupResult.data) {
+            memberId = lookupResult.data.id;
+            memberGender = lookupResult.gender;
+            if (memberGender !== currentGender) {
+                setCurrentGender(memberGender);
+            }
+        } else if (lookupResult.offline) {
+            const cachedSnapshot = getCachedMemberProfileSnapshot(memberCode);
+            const cachedProfile = cachedSnapshot?.profile || cachedSnapshot?.data || null;
+            if (cachedProfile && cachedProfile.id) {
+                memberId = cachedProfile.id;
+                memberGender = cachedSnapshot.gender === 'women' ? 'women' : 'men';
+                lookupMode = 'cached';
+                if (memberGender !== currentGender) {
+                    setCurrentGender(memberGender);
+                }
             } else {
-                // Try women
-                return fetch(`api/members.php?action=getByCode&code=${encodeURIComponent(memberCode)}&gender=women`)
-                    .then(res => {
-                        if (!res.ok) {
-                            throw new Error('Network error');
-                        }
-                        return res.json();
-                    })
-                    .then(womenData => {
-                        if (womenData.success && womenData.data) {
-                            memberId = womenData.data.id;
-                            memberGender = 'women';
-                        }
-                        return { memberId, memberGender };
-                    });
-            }
-
-            return { memberId, memberGender };
-        })
-        .then(({ memberId, memberGender }) => {
-            if (!memberId || !memberGender) {
-                Utils.showNotification('Member not found. Please check the member code.', 'error');
+                Utils.showNotification('Offline check-in only works for recently cached members that were already opened on this device.', 'warning');
                 return;
             }
+        } else {
+            Utils.showNotification(lookupResult.message || 'Member not found. Please check the member code.', 'error');
+            return;
+        }
 
-            // Update gender tab if needed
-            if (memberGender !== currentGender) {
-                currentGender = memberGender;
-                document.querySelectorAll('.gender-tab').forEach(t => t.classList.remove('active'));
-                document.querySelector(`.gender-tab[data-gender="${memberGender}"]`)?.classList.add('active');
+        if (!memberId || !memberGender) {
+            Utils.showNotification('Member not found. Please check the member code.', 'error');
+            return;
+        }
+
+        const attendancePayload = {
+            member_id: memberId,
+            gender: memberGender
+        };
+
+        if (lookupMode === 'cached' && !Utils.isOnline() && !(window.AttendanceOutbox && typeof window.AttendanceOutbox.submitCheckIn === 'function')) {
+            Utils.showNotification('Offline check-in needs the attendance outbox module to be available on this device.', 'warning');
+            return;
+        }
+
+        const submitCheckIn = window.AttendanceOutbox && typeof window.AttendanceOutbox.submitCheckIn === 'function'
+            ? window.AttendanceOutbox.submitCheckIn(attendancePayload)
+            : fetch('api/attendance-checkin.php?action=checkin', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(attendancePayload)
+            }).then(async res => {
+                const text = await res.text();
+                if (!res.ok) {
+                    try {
+                        return JSON.parse(text);
+                    } catch {
+                        throw new Error('Network error: ' + text.substring(0, 100));
+                    }
+                }
+                return text ? JSON.parse(text) : { success: false, message: 'Empty response' };
+            });
+
+        const result = await submitCheckIn;
+
+        if (result.queued) {
+            const queuedMessage = lookupMode === 'cached'
+                ? 'Check-in saved offline from a cached profile. It will replay automatically when the connection returns.'
+                : 'Check-in saved offline. It will replay automatically when the connection returns.';
+            Utils.showNotification(queuedMessage, 'warning');
+            document.getElementById('attendanceMemberCode').value = '';
+            if (window.AttendanceOutbox) {
+                window.AttendanceOutbox.refreshPanels();
             }
+            return;
+        }
 
-            const attendancePayload = {
-                member_id: memberId,
-                gender: memberGender
-            };
-
-            const submitCheckIn = window.AttendanceOutbox && typeof window.AttendanceOutbox.submitCheckIn === 'function'
-                ? window.AttendanceOutbox.submitCheckIn(attendancePayload)
-                : fetch('api/attendance-checkin.php?action=checkin', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(attendancePayload)
-                }).then(async res => {
-                    const text = await res.text();
-                    if (!res.ok) {
-                        try {
-                            return JSON.parse(text);
-                        } catch {
-                            throw new Error('Network error: ' + text.substring(0, 100));
-                        }
-                    }
-                    return text ? JSON.parse(text) : { success: false, message: 'Empty response' };
-                });
-
-            submitCheckIn
-                .then(result => {
-                    if (result.queued) {
-                        Utils.showNotification('Check-in saved offline. It will replay automatically when the connection returns.', 'warning');
-                        document.getElementById('attendanceMemberCode').value = '';
-                        if (window.AttendanceOutbox) {
-                            window.AttendanceOutbox.refreshPanels();
-                        }
-                        return;
-                    }
-
-                    if (result.success) {
-                        Utils.showNotification('Member checked in successfully.', 'success');
-                        document.getElementById('attendanceMemberCode').value = '';
-                        loadAttendanceTable();
-                    } else {
-                        Utils.showNotification(result.message || 'Failed to record check-in', 'error');
-                    }
-                })
-                .catch(error => {
-                    console.error('Check-in error:', error);
-                    Utils.showNotification('Failed to record check-in: ' + error.message, 'error');
-                });
-        })
-        .catch(error => {
-            console.error('Member lookup error:', error);
-            Utils.showNotification('Failed to lookup member. Please try again.', 'error');
-        });
+        if (result.success) {
+            Utils.showNotification('Member checked in successfully.', 'success');
+            document.getElementById('attendanceMemberCode').value = '';
+            loadAttendanceTable();
+        } else {
+            Utils.showNotification(result.message || 'Failed to record check-in', 'error');
+        }
+    } catch (error) {
+        console.error('Check-in error:', error);
+        Utils.showNotification('Failed to record check-in: ' + error.message, 'error');
+    }
 }
 
 function loadAttendanceTable(page = 1) {
@@ -2300,49 +2428,59 @@ function closePaymentModal() {
     if (modal) modal.remove();
 }
 
-function savePayment() {
+async function savePayment() {
     const memberCode = document.getElementById('paymentMemberCode').value.trim();
 
-    // Get member ID
-    fetch(`api/members.php?action=getByCode&code=${encodeURIComponent(memberCode)}&gender=${currentGender}`)
-        .then(res => res.json())
-        .then(memberData => {
-            if (!memberData.success) {
-                Utils.showNotification('Member not found', 'error');
-                return;
-            }
+    if (!memberCode) {
+        Utils.showNotification('Please enter member code', 'error');
+        return;
+    }
 
-            const paymentData = {
-                member_id: memberData.data.id,
-                amount: parseFloat(document.getElementById('paymentAmount').value),
-                payment_date: document.getElementById('paymentDate').value,
-                due_date: document.getElementById('dueDate').value || null,
-                invoice_number: document.getElementById('invoiceNumber').value || null,
-                status: document.getElementById('paymentStatus').value,
-                received_by: document.getElementById('paymentReceivedBy').value,
-                payment_method: document.getElementById('paymentMethod').value
-            };
+    if (!Utils.isOnline()) {
+        Utils.showNotification('Reconnect before recording a payment. Offline payment saves are not queued.', 'warning');
+        return;
+    }
 
-            fetch(`api/payments.php?action=create&gender=${currentGender}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(paymentData)
-            })
-                .then(res => res.json())
-                .then(data => {
-                    if (data.success) {
-                        Utils.showNotification('Payment recorded successfully', 'success');
-                        closePaymentModal();
-                        loadPaymentsTable();
-                    } else {
-                        Utils.showNotification(data.message || 'Failed to record payment', 'error');
-                    }
-                })
-                .catch(err => {
-                    console.error('Payment error:', err);
-                    Utils.showNotification('Error recording payment', 'error');
-                });
+    try {
+        const memberData = await lookupMemberByCodeAcrossGenders(memberCode);
+        if (!memberData.success || !memberData.data) {
+            Utils.showNotification(memberData.message || 'Member not found', 'error');
+            return;
+        }
+
+        if (memberData.gender && memberData.gender !== currentGender) {
+            setCurrentGender(memberData.gender);
+        }
+
+        const paymentData = {
+            member_id: memberData.data.id,
+            amount: parseFloat(document.getElementById('paymentAmount').value),
+            payment_date: document.getElementById('paymentDate').value,
+            due_date: document.getElementById('dueDate').value || null,
+            invoice_number: document.getElementById('invoiceNumber').value || null,
+            status: document.getElementById('paymentStatus').value,
+            received_by: document.getElementById('paymentReceivedBy').value,
+            payment_method: document.getElementById('paymentMethod').value
+        };
+
+        const res = await fetch(`api/payments.php?action=create&gender=${currentGender}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(paymentData)
         });
+        const data = await res.json();
+
+        if (data.success) {
+            Utils.showNotification('Payment recorded successfully', 'success');
+            closePaymentModal();
+            loadPaymentsTable();
+        } else {
+            Utils.showNotification(data.message || 'Failed to record payment', 'error');
+        }
+    } catch (err) {
+        console.error('Payment error:', err);
+        Utils.showNotification('Error recording payment', 'error');
+    }
 }
 
 function loadPaymentsTable(page = 1) {
