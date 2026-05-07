@@ -52,6 +52,16 @@ const MEMBER_PROFILE_SNAPSHOT_STORAGE_KEY = 'gym-member-profile-snapshots-v1';
 const MEMBER_PROFILE_SNAPSHOT_LIMIT = 10;
 const MEMBER_PROFILE_SNAPSHOT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const MEMBER_PROFILE_SNAPSHOT_STALE_MS = 24 * 60 * 60 * 1000;
+const MEMBER_PROFILE_SNAPSHOT_MODULE = 'member-profile';
+
+function getOfflineStateApi() {
+    return window.OfflineState && typeof window.OfflineState.getCapabilityStatus === 'function' ? window.OfflineState : null;
+}
+
+function getRenewalStatus() {
+    const offlineState = getOfflineStateApi();
+    return offlineState ? offlineState.getRenewalStatus() : null;
+}
 
 function getLookupInput() {
     return document.getElementById('memberCodeInput');
@@ -76,6 +86,11 @@ function focusLookupInput(options = {}) {
 }
 
 function parseMemberProfileSnapshotStore() {
+    const offlineState = getOfflineStateApi();
+    if (offlineState && typeof offlineState.listSnapshots === 'function') {
+        return offlineState.listSnapshots(MEMBER_PROFILE_SNAPSHOT_MODULE).map(entry => entry.payload || entry.snapshot || entry).filter(Boolean);
+    }
+
     try {
         const raw = window.localStorage.getItem(MEMBER_PROFILE_SNAPSHOT_STORAGE_KEY);
         if (!raw) return [];
@@ -87,6 +102,27 @@ function parseMemberProfileSnapshotStore() {
 }
 
 function writeMemberProfileSnapshotStore(entries) {
+    const offlineState = getOfflineStateApi();
+    if (offlineState && typeof offlineState.clearSnapshots === 'function' && typeof offlineState.storeSnapshot === 'function') {
+        offlineState.clearSnapshots(MEMBER_PROFILE_SNAPSHOT_MODULE);
+        entries.forEach(entry => {
+            const normalized = normalizeMemberProfileSnapshot(entry);
+            if (!normalized) return;
+            const snapshotKey = `${normalized.gender}:${normalized.member_code.toLowerCase()}`;
+            offlineState.storeSnapshot(MEMBER_PROFILE_SNAPSHOT_MODULE, snapshotKey, normalized, {
+                ttlMs: MEMBER_PROFILE_SNAPSHOT_TTL_MS,
+                limit: MEMBER_PROFILE_SNAPSHOT_LIMIT,
+                source: normalized.source || 'live'
+            });
+        });
+        try {
+            window.localStorage.removeItem(MEMBER_PROFILE_SNAPSHOT_STORAGE_KEY);
+        } catch (error) {
+            // Ignore legacy cleanup failures.
+        }
+        return;
+    }
+
     try {
         window.localStorage.setItem(MEMBER_PROFILE_SNAPSHOT_STORAGE_KEY, JSON.stringify(entries));
     } catch (error) {
@@ -95,6 +131,17 @@ function writeMemberProfileSnapshotStore(entries) {
 }
 
 function clearMemberProfileSnapshotStore() {
+    const offlineState = getOfflineStateApi();
+    if (offlineState && typeof offlineState.clearSnapshots === 'function') {
+        offlineState.clearSnapshots(MEMBER_PROFILE_SNAPSHOT_MODULE);
+        try {
+            window.localStorage.removeItem(MEMBER_PROFILE_SNAPSHOT_STORAGE_KEY);
+        } catch (error) {
+            // Ignore legacy cleanup failures.
+        }
+        return;
+    }
+
     try {
         window.localStorage.removeItem(MEMBER_PROFILE_SNAPSHOT_STORAGE_KEY);
     } catch (error) {
@@ -180,15 +227,32 @@ function persistMemberProfileSnapshot(data, source = 'live') {
 
     if (!snapshot) return null;
 
-    const snapshots = getMemberProfileSnapshots().filter(entry => `${entry.gender}:${entry.member_code.toLowerCase()}` !== `${snapshot.gender}:${snapshot.member_code.toLowerCase()}`);
-    snapshots.unshift(snapshot);
-    writeMemberProfileSnapshotStore(pruneMemberProfileSnapshots(snapshots));
+    const offlineState = getOfflineStateApi();
+    if (offlineState && typeof offlineState.storeSnapshot === 'function') {
+        offlineState.storeSnapshot(MEMBER_PROFILE_SNAPSHOT_MODULE, `${snapshot.gender}:${snapshot.member_code.toLowerCase()}`, snapshot, {
+            ttlMs: MEMBER_PROFILE_SNAPSHOT_TTL_MS,
+            limit: MEMBER_PROFILE_SNAPSHOT_LIMIT,
+            source
+        });
+    } else {
+        const snapshots = getMemberProfileSnapshots().filter(entry => `${entry.gender}:${entry.member_code.toLowerCase()}` !== `${snapshot.gender}:${snapshot.member_code.toLowerCase()}`);
+        snapshots.unshift(snapshot);
+        writeMemberProfileSnapshotStore(pruneMemberProfileSnapshots(snapshots));
+    }
     return snapshot;
 }
 
 function getCachedMemberProfile(memberCode) {
     const normalizedCode = String(memberCode || '').trim().toLowerCase();
     if (!normalizedCode) return null;
+
+    const offlineState = getOfflineStateApi();
+    if (offlineState && typeof offlineState.getSnapshot === 'function') {
+        const menSnapshot = offlineState.getSnapshot(MEMBER_PROFILE_SNAPSHOT_MODULE, `men:${normalizedCode}`);
+        if (menSnapshot) return menSnapshot.payload || menSnapshot;
+        const womenSnapshot = offlineState.getSnapshot(MEMBER_PROFILE_SNAPSHOT_MODULE, `women:${normalizedCode}`);
+        if (womenSnapshot) return womenSnapshot.payload || womenSnapshot;
+    }
 
     const snapshots = getMemberProfileSnapshots();
     return snapshots.find(entry => entry.member_code.toLowerCase() === normalizedCode) || null;
@@ -383,10 +447,11 @@ async function loadMemberProfile(searchTerm) {
             }
         }
 
+        const renewalStatus = getRenewalStatus();
         Utils.renderOfflineNotice(
             contentDiv,
             'Member profile offline',
-            'Offline lookup only works for recently used members that were already cached on this device.'
+            `Offline lookup only works for recently used members that were already cached on this device.${renewalStatus && renewalStatus.status !== 'fresh' ? ' ' + renewalStatus.message : ''}`
         );
         focusLookupInput({ select: true });
         return null;
@@ -396,6 +461,10 @@ async function loadMemberProfile(searchTerm) {
     try {
         const data = await fetchMemberProfile(memberCode);
         if (data && data.success) {
+            const offlineState = getOfflineStateApi();
+            if (offlineState && typeof offlineState.recordOnlineSuccess === 'function') {
+                offlineState.recordOnlineSuccess('member-profile', { source: 'loadMemberProfile' });
+            }
             persistMemberProfileSnapshot(data, 'live');
             renderMemberProfile(data);
             focusLookupInputAfterRender(true);
@@ -538,6 +607,16 @@ function renderMemberProfile(data) {
     const snapshotStale = Boolean(data.snapshot_stale);
     const isDefaulter = data.is_defaulter || false;
     const defaultDate = data.default_date || member.next_fee_due_date || null;
+    const renewalStatus = getRenewalStatus();
+    const renewalNoticeBlock = !isSnapshot && renewalStatus && renewalStatus.status !== 'fresh' && window.OfflineState && typeof window.OfflineState.renderCapabilityNotice === 'function'
+        ? window.OfflineState.renderCapabilityNotice('member-profile', {
+            title: 'Offline renewal status',
+            body: renewalStatus.message
+        })
+        : '';
+    const renewalNote = renewalStatus && renewalStatus.status !== 'fresh'
+        ? `<div class="snapshot-banner__body snapshot-banner__body--small" style="margin-top:0.5rem;color:${renewalStatus.status === 'expired' ? '#7f1d1d' : '#78350f'};">${renewalStatus.message}</div>`
+        : '';
 
     // Store member data for attendance check-in
     currentMemberData = {
@@ -572,6 +651,7 @@ function renderMemberProfile(data) {
             <div class="snapshot-banner__body snapshot-banner__body--small">
                 This cached view keeps only the minimal identity and attendance fields needed at the desk.
             </div>
+            ${renewalNote}
         </div>
     ` : '';
     const paymentHistoryHtml = isSnapshot
@@ -607,6 +687,7 @@ function renderMemberProfile(data) {
 
     const html = `
         <div class="member-profile">
+            ${renewalNoticeBlock}
             ${snapshotBanner}
             <div class="profile-layout" style="display: grid; grid-template-columns: 450px 1fr; gap: 2rem; align-items: start;">
                 <!-- Left Side: Profile Info -->

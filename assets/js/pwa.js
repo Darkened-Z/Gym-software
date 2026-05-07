@@ -15,6 +15,27 @@
         }
     }
 
+    function getOfflineState() {
+        return window.OfflineState && typeof window.OfflineState.getCapabilityStatus === 'function' ? window.OfflineState : null;
+    }
+
+    function noteOnlineSuccess(moduleName, detail = {}) {
+        const offlineState = getOfflineState();
+        if (!offlineState || typeof offlineState.recordOnlineSuccess !== 'function') return;
+        offlineState.recordOnlineSuccess(moduleName, detail);
+    }
+
+    function noteOfflineUse(moduleName, detail = {}) {
+        const offlineState = getOfflineState();
+        if (!offlineState || typeof offlineState.recordOfflineUse !== 'function') return;
+        offlineState.recordOfflineUse(moduleName, detail);
+    }
+
+    function getRenewalStatus() {
+        const offlineState = getOfflineState();
+        return offlineState ? offlineState.getRenewalStatus() : null;
+    }
+
     function makeId() {
         if (window.crypto && typeof window.crypto.randomUUID === 'function') {
             return window.crypto.randomUUID();
@@ -124,9 +145,13 @@
 
     function buildPanelHtml(summary) {
         const hasPending = summary.pendingCount > 0;
+        const renewal = getRenewalStatus();
         const queueNote = summary.persistenceMode === 'session'
             ? 'This browser can only hold the queue for this session.'
             : 'Queued on this device until it can replay.';
+        const renewalNote = renewal && renewal.status !== 'fresh'
+            ? `<p style="margin:0.4rem 0 0;color:${renewal.status === 'expired' ? '#7f1d1d' : '#78350f'};">${renewal.message}</p>`
+            : '';
         const replayLabel = summary.online ? 'Replay now' : 'Replay when online';
         const replayDisabled = summary.online ? '' : 'disabled';
         const replayStyle = summary.online
@@ -163,6 +188,7 @@
                         <h3 style="margin:0.35rem 0 0;">${summary.pendingCount} queued attendance action${summary.pendingCount === 1 ? '' : 's'}</h3>
                         <p style="margin:0.5rem 0 0;color:#92400e;">Queued attendance writes stay local and replay automatically when the connection returns.</p>
                         <p style="margin:0.4rem 0 0;color:#7c2d12;">${queueNote}</p>
+                        ${renewalNote}
                     </div>
                     <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.5rem;">
                         <span style="padding:0.35rem 0.7rem;border-radius:999px;background:#fef3c7;color:#92400e;font-weight:700;">${summary.pendingCount} pending</span>
@@ -226,16 +252,18 @@
 
     function getStatusConfig() {
         const online = navigator.onLine !== false;
+        const renewal = getRenewalStatus();
+        const renewalDetail = renewal && renewal.status !== 'fresh' ? ` ${renewal.message}` : '';
         return online
             ? {
                 className: 'is-online',
                 title: 'Online',
-                detail: 'Live data and sign-in are available.'
+                detail: `Live data and sign-in are available.${renewalDetail}`
             }
             : {
                 className: 'is-offline',
                 title: 'Offline',
-                detail: 'Shell is available. Live data and sign-in need a connection.'
+                detail: `Shell is available. Live data and sign-in need a connection.${renewalDetail}`
             };
     }
 
@@ -335,6 +363,7 @@
 
         if (!navigator.onLine) {
             const queued = queueAttendanceAction(action, requestPayload);
+            noteOfflineUse('attendance', { action, source: 'submitAttendance' });
             return {
                 success: true,
                 queued: true,
@@ -355,6 +384,7 @@
 
             const data = await parseJsonResponse(response);
             if (response.ok && data && data.success) {
+                noteOnlineSuccess('attendance', { action, source: 'submitAttendance' });
                 return {
                     success: true,
                     queued: false,
@@ -400,6 +430,7 @@
 
             const data = await parseJsonResponse(response);
             if (response.ok && data && data.success) {
+                noteOnlineSuccess('attendance', { action: item.action, source: 'flushPending' });
                 return { completed: true, data };
             }
 
@@ -429,6 +460,7 @@
             if (!navigator.onLine) {
                 refreshAttendanceOutboxPanels();
                 updateStatusBar();
+                noteOfflineUse('attendance', { source: 'flushPending' });
                 return {
                     success: false,
                     replayed: 0,

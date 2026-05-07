@@ -53,6 +53,9 @@ function handleAdminLogin() {
     Utils.apiPost('api/auth.php?action=login', { username, password })
         .then(data => {
             if (data.success) {
+                if (window.OfflineState && typeof window.OfflineState.recordOnlineSuccess === 'function') {
+                    window.OfflineState.recordOnlineSuccess('auth', { source: 'handleAdminLogin' });
+                }
                 sessionStorage.setItem('gym_last_role', data.role || 'staff');
                 sessionStorage.setItem('gym_last_username', data.username || username);
                 Utils.showNotification('Login successful. Opening dashboard...', 'success');
@@ -104,6 +107,9 @@ function handleMemberLogin() {
     Utils.apiPost('api/auth.php?action=login', { member_code: memberCode })
         .then(data => {
             if (data.success) {
+                if (window.OfflineState && typeof window.OfflineState.recordOnlineSuccess === 'function') {
+                    window.OfflineState.recordOnlineSuccess('auth', { source: 'handleMemberLogin' });
+                }
                 sessionStorage.setItem('gym_last_role', 'member');
                 sessionStorage.setItem('gym_last_member_code', memberCode);
                 sessionStorage.setItem('gym_last_gender', data.gender || 'men');
@@ -147,4 +153,3 @@ async function handleLogout() {
         window.location.href = 'index.html';
     }
 }
-

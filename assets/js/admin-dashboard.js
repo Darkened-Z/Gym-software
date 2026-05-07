@@ -509,6 +509,9 @@ function loadDashboard() {
             }
 
             if (data && data.success) {
+                if (window.OfflineState && typeof window.OfflineState.recordOnlineSuccess === 'function') {
+                    window.OfflineState.recordOnlineSuccess('dashboard', { source: 'loadDashboard' });
+                }
                 renderDashboard(data.data);
             } else {
                 contentBody.innerHTML =
@@ -1692,18 +1695,25 @@ function openMemberProfile(memberCode, gender) {
 }
 
 function loadAttendance() {
+    const offlineNotice = window.OfflineState && typeof window.OfflineState.renderCapabilityNotice === 'function'
+        ? window.OfflineState.renderCapabilityNotice('attendance', {
+            title: 'Front-desk offline readiness',
+            body: 'Keyboard entry stays the primary flow. Attendance can queue locally, but the full CRM still needs an online renewal at least once every 7 days.'
+        })
+        : '';
     const html = `
         <div class="attendance-section">
             ${renderSectionGuideCard({
                 chip: 'Attendance Help',
                 title: 'Check members in or out',
-                description: 'Type the member code and press the button. The system will find the member in either men or women automatically.',
+                description: 'Keep the cursor in the code box, type the next member code, and press Enter or the check-in button. The system will find the member in either men or women automatically.',
                 steps: [
-                    'Type member code exactly as written on the card or account slip.',
-                    'Press Check In Member or hit Enter.',
+                    'Type the next member code exactly as written on the card or account slip.',
+                    'Press Enter to keep the desk flowing without leaving the keyboard.',
                     'Use the Check Out button in the list when the member leaves.'
                 ]
             })}
+            ${offlineNotice}
             <div class="section-header">
                 <div class="gender-tabs">
                     <button class="gender-tab ${currentGender === 'men' ? 'active' : ''}" data-gender="men">Men</button>
@@ -1915,6 +1925,9 @@ function loadAttendanceTable(page = 1) {
             if (abortController.signal.aborted) return;
             if (!data) return;
             if (data.success) {
+                if (window.OfflineState && typeof window.OfflineState.recordOnlineSuccess === 'function') {
+                    window.OfflineState.recordOnlineSuccess('attendance', { source: 'loadAttendanceTable' });
+                }
                 const pagination = data.pagination || { page: 1, limit: 20 };
                 const currentPage = parseInt(pagination.page) || 1;
                 const limit = parseInt(pagination.limit) || 20;
