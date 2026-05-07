@@ -31,6 +31,18 @@ document.addEventListener('DOMContentLoaded', function () {
         stopSectionAutoRefresh();
     });
 
+    window.addEventListener('attendance-outbox:flush-end', event => {
+        const detail = event?.detail || {};
+        if ((detail.replayed || 0) <= 0 && (detail.dropped || 0) <= 0) {
+            return;
+        }
+        if (currentSection === 'attendance') {
+            loadAttendanceTable();
+        } else if (currentSection === 'dashboard') {
+            loadDashboard();
+        }
+    });
+
     document.addEventListener('visibilitychange', () => {
         if (!document.hidden) {
             startSectionAutoRefresh();
@@ -1702,11 +1714,15 @@ function loadAttendance() {
                     <button class="btn btn-primary" id="checkInBtn">Check In Member</button>
                 </div>
             </div>
+            <div data-attendance-outbox-panel aria-live="polite"></div>
             <div id="attendanceAnalyticsContainer" style="margin-bottom:1.5rem;"></div>
             <div id="attendanceTableContainer"></div>
         </div>
     `;
     document.getElementById('contentBody').innerHTML = html;
+    if (window.AttendanceOutbox && typeof window.AttendanceOutbox.refreshPanels === 'function') {
+        window.AttendanceOutbox.refreshPanels();
+    }
 
     document.querySelectorAll('.gender-tab').forEach(tab => {
         tab.addEventListener('click', function () {
@@ -1818,28 +1834,40 @@ function handleCheckIn() {
                 document.querySelector(`.gender-tab[data-gender="${memberGender}"]`)?.classList.add('active');
             }
 
-            // Check in
-            fetch('api/attendance-checkin.php?action=checkin', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    member_id: memberId,
-                    gender: memberGender
-                })
-            })
-                .then(res => {
+            const attendancePayload = {
+                member_id: memberId,
+                gender: memberGender
+            };
+
+            const submitCheckIn = window.AttendanceOutbox && typeof window.AttendanceOutbox.submitCheckIn === 'function'
+                ? window.AttendanceOutbox.submitCheckIn(attendancePayload)
+                : fetch('api/attendance-checkin.php?action=checkin', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(attendancePayload)
+                }).then(async res => {
+                    const text = await res.text();
                     if (!res.ok) {
-                        return res.text().then(text => {
-                            try {
-                                return JSON.parse(text);
-                            } catch {
-                                throw new Error('Network error: ' + text.substring(0, 100));
-                            }
-                        });
+                        try {
+                            return JSON.parse(text);
+                        } catch {
+                            throw new Error('Network error: ' + text.substring(0, 100));
+                        }
                     }
-                    return res.json();
-                })
+                    return text ? JSON.parse(text) : { success: false, message: 'Empty response' };
+                });
+
+            submitCheckIn
                 .then(result => {
+                    if (result.queued) {
+                        Utils.showNotification('Check-in saved offline. It will replay automatically when the connection returns.', 'warning');
+                        document.getElementById('attendanceMemberCode').value = '';
+                        if (window.AttendanceOutbox) {
+                            window.AttendanceOutbox.refreshPanels();
+                        }
+                        return;
+                    }
+
                     if (result.success) {
                         Utils.showNotification('Member checked in successfully.', 'success');
                         document.getElementById('attendanceMemberCode').value = '';
@@ -1935,27 +1963,39 @@ function loadAttendanceTable(page = 1) {
 }
 
 function checkOut(attendanceId) {
-    fetch('api/attendance-checkin.php?action=checkout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            attendance_id: attendanceId,
-            gender: currentGender
-        })
-    })
-        .then(res => {
+    const attendancePayload = {
+        attendance_id: attendanceId,
+        gender: currentGender
+    };
+
+    const submitCheckOut = window.AttendanceOutbox && typeof window.AttendanceOutbox.submitCheckOut === 'function'
+        ? window.AttendanceOutbox.submitCheckOut(attendancePayload)
+        : fetch('api/attendance-checkin.php?action=checkout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(attendancePayload)
+        }).then(async res => {
+            const text = await res.text();
             if (!res.ok) {
-                return res.text().then(text => {
-                    try {
-                        return JSON.parse(text);
-                    } catch {
-                        throw new Error('Network error: ' + text.substring(0, 100));
-                    }
-                });
+                try {
+                    return JSON.parse(text);
+                } catch {
+                    throw new Error('Network error: ' + text.substring(0, 100));
+                }
             }
-            return res.json();
-        })
+            return text ? JSON.parse(text) : { success: false, message: 'Empty response' };
+        });
+
+    submitCheckOut
         .then(data => {
+            if (data.queued) {
+                Utils.showNotification('Check-out saved offline. It will replay automatically when the connection returns.', 'warning');
+                if (window.AttendanceOutbox) {
+                    window.AttendanceOutbox.refreshPanels();
+                }
+                return;
+            }
+
             if (data.success) {
                 Utils.showNotification('Member checked out successfully.', 'success');
                 loadAttendanceTable();

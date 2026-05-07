@@ -18,6 +18,16 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    window.addEventListener('attendance-outbox:flush-end', event => {
+        const detail = event?.detail || {};
+        if ((detail.replayed || 0) <= 0 && (detail.dropped || 0) <= 0) {
+            return;
+        }
+        if (currentMemberData && currentMemberData.code) {
+            loadMemberProfile(currentMemberData.code);
+        }
+    });
+
     // If a member code is provided in the URL, auto-load that profile (view-only, no auto check-in)
     try {
         const params = new URLSearchParams(window.location.search);
@@ -396,8 +406,8 @@ function renderMemberProfile(data) {
                     <div class="attendance-calendar" id="attendanceCalendar">
                         ${renderAttendanceCalendar(year, month, attendanceCalendar, defaultDate)}
                     </div>
-                    <div style="margin-top: 1rem; padding: 1rem; background: rgba(67, 105, 255, 0.08); border-radius: 8px; border: 1px solid rgba(67, 105, 255, 0.4); display: flex; align-items: center; justify-content: space-between;">
-                        <div>
+                    <div style="margin-top: 1rem; padding: 1rem; background: rgba(67, 105, 255, 0.08); border-radius: 8px; border: 1px solid rgba(67, 105, 255, 0.4); display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
+                        <div style="flex: 1 1 280px;">
                             <p style="margin: 0 0 0.5rem 0; color: #8b5cf6; font-weight: bold;">Attendance</p>
                             <p style="margin: 0; color: var(--text-secondary);">
                                 Attendance is usually marked automatically when you open this profile.
@@ -405,12 +415,16 @@ function renderMemberProfile(data) {
                         </div>
                         <button onclick="checkInAttendance()" style="padding: 0.75rem 2rem; background: #4f46e5; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; transition: all 0.3s; white-space: nowrap;">Mark Check-In</button>
                     </div>
+                    <div data-attendance-outbox-panel aria-live="polite"></div>
                 </div>
             </div>
         </div>
     `;
 
     document.getElementById('memberContent').innerHTML = html;
+    if (window.AttendanceOutbox && typeof window.AttendanceOutbox.refreshPanels === 'function') {
+        window.AttendanceOutbox.refreshPanels();
+    }
 }
 
 function renderAttendanceCalendar(year, month, attendanceData, defaultDate = null) {
@@ -519,29 +533,41 @@ function checkInAttendance() {
     playBeepSound();
 
     // Make API call to check in (same as admin check-in)
-    fetch('api/attendance-checkin.php?action=checkin', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            member_id: currentMemberData.id,
-            gender: currentMemberData.gender
-        })
-    })
-        .then(res => {
+    const attendancePayload = {
+        member_id: currentMemberData.id,
+        gender: currentMemberData.gender
+    };
+
+    const submitCheckIn = window.AttendanceOutbox && typeof window.AttendanceOutbox.submitCheckIn === 'function'
+        ? window.AttendanceOutbox.submitCheckIn(attendancePayload)
+        : fetch('api/attendance-checkin.php?action=checkin', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(attendancePayload)
+        }).then(async res => {
+            const text = await res.text();
             if (!res.ok) {
-                return res.text().then(text => {
-                    try {
-                        return JSON.parse(text);
-                    } catch {
-                        throw new Error('Network error: ' + text.substring(0, 100));
-                    }
-                });
+                try {
+                    return JSON.parse(text);
+                } catch {
+                    throw new Error('Network error: ' + text.substring(0, 100));
+                }
             }
-            return res.json();
-        })
+            return text ? JSON.parse(text) : { success: false, message: 'Empty response' };
+        });
+
+    submitCheckIn
         .then(data => {
+            if (data.queued) {
+                Utils.showNotification('Check-in saved offline. It will replay automatically when the connection returns.', 'warning');
+                if (window.AttendanceOutbox) {
+                    window.AttendanceOutbox.refreshPanels();
+                }
+                return;
+            }
+
             if (data.success) {
                 Utils.showNotification('Member checked in successfully.', 'success');
 

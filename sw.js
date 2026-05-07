@@ -1,4 +1,4 @@
-const SHELL_CACHE = 'gym-shell-v1';
+const SHELL_CACHE = 'gym-shell-v2';
 const DATA_CACHE = 'gym-data-v1';
 const SHELL_ASSETS = [
     '/',
