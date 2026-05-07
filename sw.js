@@ -59,7 +59,7 @@ self.addEventListener('fetch', event => {
     }
 
     if (url.pathname === '/api/member-profile.php') {
-        event.respondWith(fetch(request));
+        event.respondWith(handleMemberProfileRequest(request));
         return;
     }
 
@@ -109,6 +109,23 @@ async function cacheFirst(request) {
         cache.put(request, response.clone());
     }
     return response;
+}
+
+async function handleMemberProfileRequest(request) {
+    try {
+        return await fetch(request);
+    } catch (error) {
+        return new Response(JSON.stringify({
+            success: false,
+            message: 'Member profile lookup is temporarily unavailable. Please check the connection and try again.'
+        }), {
+            status: 503,
+            headers: {
+                'Content-Type': 'application/json; charset=utf-8',
+                'Cache-Control': 'no-store'
+            }
+        });
+    }
 }
 
 async function handleDashboardRequest(request) {

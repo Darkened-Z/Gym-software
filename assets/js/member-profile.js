@@ -43,6 +43,14 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 });
 
+function getMemberProfileErrorMessage(error, fallbackPrefix) {
+    const message = String(error?.message || error || '');
+    if (/Failed to fetch|NetworkError|network error/i.test(message)) {
+        return 'Member profile lookup is unavailable right now. Please check the connection and try again.';
+    }
+    return fallbackPrefix ? `${fallbackPrefix}: ${message}` : message;
+}
+
 function handleLookup() {
     const memberCode = document.getElementById('memberCodeInput').value.trim();
 
@@ -135,7 +143,7 @@ function handleLookup() {
         })
         .catch(error => {
             console.error('Member lookup error:', error);
-            Utils.showNotification('Could not find the member: ' + error.message, 'error');
+            Utils.showNotification(getMemberProfileErrorMessage(error, 'Could not find the member'), 'error');
         });
 }
 
@@ -179,8 +187,9 @@ function loadMemberProfile(searchTerm) {
         })
         .catch(err => {
             console.error('Profile error:', err);
-            contentDiv.innerHTML = `<div class="error">Could not open member profile: ${err.message}</div>`;
-            Utils.showNotification('Could not open member profile.', 'error');
+            const message = getMemberProfileErrorMessage(err, 'Could not open member profile');
+            contentDiv.innerHTML = `<div class="error">${message}</div>`;
+            Utils.showNotification(message, 'error');
         });
 }
 
