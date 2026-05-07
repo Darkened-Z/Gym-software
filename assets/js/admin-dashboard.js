@@ -1508,7 +1508,9 @@ function showAddMemberForm() {
                     <input type="hidden" id="memberId" name="id">
                     <input type="hidden" id="memberUpdatedAt" name="expected_updated_at">
                     <input type="hidden" id="existingProfileImage" name="existing_profile_image">
+                    <input type="hidden" id="memberResolutionItemId" name="resolution_outbox_item_id">
                     <div class="simple-note"><strong>Tip:</strong> Start with code, name, phone, join date, and monthly fee. Other fields can be filled later.</div>
+                    <div id="memberConflictResolutionNote" style="display:none;margin:0.75rem 0;padding:0.75rem 0.9rem;border-left:4px solid #f59e0b;background:#fffbeb;color:#7c2d12;border-radius:6px;"></div>
                     ${offlineDraftNote}
                     <div class="form-group">
                         <label>Member Code / Account No. *</label>
@@ -1713,6 +1715,10 @@ function saveMemberData(profileImagePath) {
             }
 
             if (data.success) {
+                const resolutionItemId = document.getElementById('memberResolutionItemId')?.value || '';
+                if (resolutionItemId && window.MemberWriteOutbox && typeof window.MemberWriteOutbox.removeQueuedItem === 'function') {
+                    window.MemberWriteOutbox.removeQueuedItem(resolutionItemId);
+                }
                 Utils.showNotification(data.message || 'Member saved successfully', 'success');
                 closeMemberModal();
                 loadMembersTable();
@@ -2401,7 +2407,9 @@ function showAddPaymentForm() {
                     <button class="modal-close" onclick="closePaymentModal()">&times;</button>
                 </div>
                 <form id="paymentForm" class="modal-body">
+                    <input type="hidden" id="paymentResolutionItemId" name="resolution_outbox_item_id">
                     <div class="simple-note"><strong>Tip:</strong> Type member code first, then enter how much money you received.</div>
+                    <div id="paymentConflictResolutionNote" style="display:none;margin:0.75rem 0;padding:0.75rem 0.9rem;border-left:4px solid #f59e0b;background:#fffbeb;color:#7c2d12;border-radius:6px;"></div>
                     <div class="form-group">
                         <label>Member Code / Account No. *</label>
                         <input type="text" id="paymentMemberCode" name="member_code" placeholder="Example: M001" required>
@@ -2581,6 +2589,10 @@ async function savePayment() {
         }
 
         if (result.success) {
+            const resolutionItemId = document.getElementById('paymentResolutionItemId')?.value || '';
+            if (resolutionItemId && window.PaymentOutbox && typeof window.PaymentOutbox.removeQueuedItem === 'function') {
+                window.PaymentOutbox.removeQueuedItem(resolutionItemId);
+            }
             Utils.showNotification(result.message || 'Payment recorded successfully', 'success');
             closePaymentModal();
             loadPaymentsTable();
@@ -6139,6 +6151,132 @@ async function loadOutboxConflictReview(moduleKey, itemId) {
     }
 
     container.innerHTML = renderOutboxReviewTable(review.title, sourceLabel, review.rows, review.note);
+    if (['members', 'payments'].includes(moduleKey)) {
+        container.insertAdjacentHTML('beforeend', `<div style="margin-top:0.65rem;display:flex;gap:0.5rem;flex-wrap:wrap;"><button type="button" class="btn btn-primary" onclick="openOutboxConflictResolution('${moduleKey}', '${item.id}')">Resolve in form</button></div>`);
+    }
+}
+
+function getOutboxConflictItem(moduleKey, itemId) {
+    const moduleState = getOfflineOutboxModuleState(moduleKey);
+    const summary = moduleState.summary || {};
+    const items = Array.isArray(summary.items) ? summary.items : [];
+    return items.find(entry => String(entry.id) === String(itemId)) || null;
+}
+
+function setConflictResolutionNote(elementId, message) {
+    const note = document.getElementById(elementId);
+    if (!note) return;
+    if (!message) {
+        note.style.display = 'none';
+        note.textContent = '';
+        return;
+    }
+
+    note.style.display = 'block';
+    note.textContent = message;
+}
+
+function seedMemberResolutionForm(item, liveRecord) {
+    const payload = item?.payload || {};
+    const isUpdate = item?.action === 'update';
+    const resolvedGender = payload.gender || liveRecord?.gender || currentGender;
+    setCurrentGender(resolvedGender);
+
+    closeMemberModal();
+    showAddMemberForm();
+
+    document.querySelector('#memberModal .modal-header h2').textContent = 'Resolve Member Conflict';
+    document.getElementById('memberResolutionItemId').value = String(item.id || '');
+    document.getElementById('memberId').value = isUpdate ? (payload.id || liveRecord?.id || '') : '';
+    document.getElementById('memberCode').value = payload.member_code || liveRecord?.member_code || '';
+    document.getElementById('memberName').value = payload.name || liveRecord?.name || '';
+    document.getElementById('phone').value = payload.phone || liveRecord?.phone || '';
+    document.getElementById('rfidUid').value = payload.rfid_uid || liveRecord?.rfid_uid || '';
+    document.getElementById('email').value = payload.email || liveRecord?.email || '';
+    document.getElementById('address').value = payload.address || liveRecord?.address || '';
+    document.getElementById('joinDate').value = payload.join_date || liveRecord?.join_date || '';
+    document.getElementById('membershipType').value = payload.membership_type || liveRecord?.membership_type || 'Basic';
+    document.getElementById('admissionFee').value = payload.admission_fee ?? liveRecord?.admission_fee ?? 0;
+    document.getElementById('monthlyFee').value = payload.monthly_fee ?? liveRecord?.monthly_fee ?? 0;
+    document.getElementById('lockerFee').value = payload.locker_fee ?? liveRecord?.locker_fee ?? 0;
+    document.getElementById('nextFeeDueDate').value = payload.next_fee_due_date || liveRecord?.next_fee_due_date || '';
+    document.getElementById('status').value = payload.status || liveRecord?.status || 'active';
+    document.getElementById('memberUpdatedAt').value = isUpdate ? (liveRecord?.updated_at || payload.expected_updated_at || '') : '';
+    document.getElementById('existingProfileImage').value = payload.profile_image || liveRecord?.profile_image || '';
+
+    if (payload.profile_image || liveRecord?.profile_image) {
+        const preview = document.getElementById('profileImagePreview');
+        const previewImg = document.getElementById('previewImg');
+        previewImg.src = payload.profile_image || liveRecord.profile_image;
+        preview.style.display = 'block';
+    }
+
+    const liveSummary = liveRecord
+        ? `Current live member: ${liveRecord.member_code || 'unknown'} • updated ${liveRecord.updated_at || 'unknown'}`
+        : 'No live record snapshot was loaded.';
+    const modeLabel = isUpdate ? 'update' : 'create';
+    setConflictResolutionNote('memberConflictResolutionNote', `Queued member ${modeLabel} values are loaded. Review the compare panel before saving. ${liveSummary}`);
+}
+
+function seedPaymentResolutionForm(item, liveRecord) {
+    const payload = item?.payload || {};
+    const resolvedGender = payload.gender || liveRecord?.gender || currentGender;
+    setCurrentGender(resolvedGender);
+
+    closePaymentModal();
+    showAddPaymentForm();
+
+    document.querySelector('#paymentModal .modal-header h2').textContent = 'Resolve Payment Conflict';
+    document.getElementById('paymentResolutionItemId').value = String(item.id || '');
+    document.getElementById('paymentMemberCode').value = payload.member_code || liveRecord?.member_code || '';
+    document.getElementById('paymentAmount').value = payload.amount ?? '';
+    document.getElementById('paymentDate').value = payload.payment_date || '';
+    document.getElementById('dueDate').value = payload.due_date || '';
+    document.getElementById('invoiceNumber').value = payload.invoice_number || '';
+    document.getElementById('paymentStatus').value = payload.status || 'completed';
+    document.getElementById('paymentReceivedBy').value = payload.received_by || document.getElementById('paymentReceivedBy').value;
+    document.getElementById('paymentMethod').value = payload.payment_method || 'Cash';
+
+    const liveSummary = liveRecord
+        ? `Current live balance: ${liveRecord.total_due_amount ?? 'unknown'} • updated ${liveRecord.updated_at || 'unknown'}`
+        : 'No live member snapshot was loaded.';
+    setConflictResolutionNote('paymentConflictResolutionNote', `Queued payment values are loaded. Recheck the member compare panel before saving. ${liveSummary}`);
+}
+
+async function openOutboxConflictResolution(moduleKey, itemId) {
+    if (!['members', 'payments'].includes(moduleKey)) return;
+    if (!Utils.isOnline()) {
+        Utils.showNotification('Reconnect to resolve this conflict safely.', 'warning');
+        return;
+    }
+
+    const item = getOutboxConflictItem(moduleKey, itemId);
+    if (!item) {
+        Utils.showNotification('Queued item not found.', 'error');
+        return;
+    }
+
+    const payload = item.payload || {};
+    const memberCode = String(payload.member_code || '').trim();
+    if (!memberCode) {
+        Utils.showNotification('This queued item is missing a member code and cannot be resolved safely.', 'error');
+        return;
+    }
+
+    const lookup = await lookupMemberByCodeAcrossGenders(memberCode);
+    if (!lookup.success || !lookup.data) {
+        Utils.showNotification(lookup.message || 'Could not load the current member record.', 'error');
+        return;
+    }
+
+    const liveRecord = { ...lookup.data, gender: lookup.gender };
+
+    if (moduleKey === 'members') {
+        seedMemberResolutionForm(item, liveRecord);
+        return;
+    }
+
+    seedPaymentResolutionForm(item, liveRecord);
 }
 
 function getOfflineOutboxModuleState(moduleKey) {
@@ -6227,7 +6365,7 @@ function renderOfflineOutboxModuleCard(moduleKey) {
         const hasConflict = item.lastErrorKind === 'conflict';
         const itemError = item.lastError ? `<div style="margin-top:0.35rem;color:${hasConflict ? '#991b1b' : '#b91c1c'};">${escapeSyncHtml(item.lastError)}${item.lastErrorStatus ? ` <span style="font-size:0.82rem;">(HTTP ${Number(item.lastErrorStatus)})</span>` : ''}</div>` : '';
         const reviewButton = hasConflict && (moduleKey === 'members' || moduleKey === 'payments')
-            ? `<button type="button" class="btn btn-secondary" style="margin-top:0.5rem;" onclick="loadOutboxConflictReview('${moduleKey}', '${item.id}')">Review compare</button>`
+            ? `<button type="button" class="btn btn-secondary" style="margin-top:0.5rem;" onclick="loadOutboxConflictReview('${moduleKey}', '${item.id}')">Review compare</button><button type="button" class="btn btn-primary" style="margin-top:0.5rem;margin-left:0.5rem;" onclick="openOutboxConflictResolution('${moduleKey}', '${item.id}')">Resolve in form</button>`
             : '';
         const reviewPanel = hasConflict && (moduleKey === 'members' || moduleKey === 'payments')
             ? `<div id="outbox-conflict-review-${moduleKey}-${item.id}" style="display:none;"></div>`
@@ -6256,7 +6394,7 @@ function renderOfflineOutboxModuleCard(moduleKey) {
                 <span style="font-size:0.85rem;color:#7c2d12;">${item.lastErrorStatus ? `HTTP ${Number(item.lastErrorStatus)}` : 'Conflict'}</span>
             </div>
             <div style="margin-top:0.25rem;color:#7c2d12;font-size:0.9rem;">${escapeSyncHtml(item.lastError || 'Conflict needs review')}</div>
-            ${(moduleKey === 'members' || moduleKey === 'payments') ? `<button type="button" class="btn btn-secondary" style="margin-top:0.5rem;" onclick="loadOutboxConflictReview('${moduleKey}', '${item.id}')">Review compare</button><div id="outbox-conflict-review-${moduleKey}-${item.id}" style="display:none;"></div>` : ''}
+            ${(moduleKey === 'members' || moduleKey === 'payments') ? `<button type="button" class="btn btn-secondary" style="margin-top:0.5rem;" onclick="loadOutboxConflictReview('${moduleKey}', '${item.id}')">Review compare</button><button type="button" class="btn btn-primary" style="margin-top:0.5rem;margin-left:0.5rem;" onclick="openOutboxConflictResolution('${moduleKey}', '${item.id}')">Resolve in form</button><div id="outbox-conflict-review-${moduleKey}-${item.id}" style="display:none;"></div>` : ''}
         </div>
     `).join('');
 
@@ -6266,7 +6404,7 @@ function renderOfflineOutboxModuleCard(moduleKey) {
                 <div>
                     <div style="font-size:0.82rem;text-transform:uppercase;letter-spacing:0.08em;color:#166534;font-weight:700;">${escapeSyncHtml(moduleState.label)}</div>
                     <h4 style="margin:0.35rem 0 0;">${pendingCount} pending${failedCount ? `, ${failedCount} with errors` : ''}${conflictCount ? `, ${conflictCount} need review` : ''}</h4>
-                    <p style="margin:0.45rem 0 0;color:#475569;">${summary.persistenceMode === 'session' ? 'Session-only queue.' : 'Stored locally until replay.'}${conflictCount ? ' Conflicting edits stay queued until you review them.' : ''}</p>
+                    <p style="margin:0.45rem 0 0;color:#475569;">${summary.persistenceMode === 'session' ? 'Session-only queue.' : 'Stored locally until replay.'}${conflictCount ? ' Conflicting edits stay queued until you review or resolve them.' : ''}</p>
                     ${latestIssue ? `<p style="margin:0.35rem 0 0;color:${latestIssueColor};">Last issue: ${escapeSyncHtml(latestIssue.message || 'Unknown error')}</p>` : ''}
                 </div>
                 <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.5rem;">
@@ -6299,7 +6437,7 @@ function loadOfflineOutbox() {
             <div style="display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;align-items:center;">
                 <div>
                     <h3 style="margin:0;">Offline outbox</h3>
-                    <p style="margin:0.35rem 0 0;color:#475569;">Queued attendance, member, and payment writes live here. Conflicting member/payment edits stay queued for read-only review. Nothing is auto-resolved.</p>
+                    <p style="margin:0.35rem 0 0;color:#475569;">Queued attendance, member, and payment writes live here. Conflicting member/payment edits stay queued until you resolve them manually. Nothing is auto-merged.</p>
                 </div>
                 <button type="button" class="btn btn-secondary" ${retryAllDisabled ? 'disabled' : ''} onclick="retryAllOfflineOutbox()">Retry all</button>
             </div>

@@ -644,6 +644,18 @@
         return readMemberWriteQueue();
     }
 
+    function removeMemberWriteQueueItem(itemId) {
+        const queue = getMemberWriteQueue();
+        const nextQueue = queue.filter(item => String(item.id) !== String(itemId));
+        if (nextQueue.length === queue.length) return false;
+
+        writeMemberWriteQueue(nextQueue);
+        if (!nextQueue.some(entry => entry.lastError)) {
+            clearOutboxIssue('members');
+        }
+        return true;
+    }
+
     function getMemberWritePendingCount() {
         return getMemberWriteQueue().length;
     }
@@ -1008,6 +1020,18 @@
 
     function getPaymentQueue() {
         return readPaymentQueue();
+    }
+
+    function removePaymentQueueItem(itemId) {
+        const queue = getPaymentQueue();
+        const nextQueue = queue.filter(item => String(item.id) !== String(itemId));
+        if (nextQueue.length === queue.length) return false;
+
+        writePaymentQueue(nextQueue);
+        if (!nextQueue.some(entry => entry.lastError)) {
+            clearOutboxIssue('payments');
+        }
+        return true;
     }
 
     function getPaymentPendingCount() {
@@ -1397,14 +1421,16 @@
         submitMemberMutation: submitMemberMutation,
         flushPending: flushMemberWritePending,
         getPendingCount: getMemberWritePendingCount,
-        getQueueSummary: getMemberWriteSummary
+        getQueueSummary: getMemberWriteSummary,
+        removeQueuedItem: removeMemberWriteQueueItem
     };
 
     window.PaymentOutbox = window.PaymentOutbox || {
         submitPayment: submitPayment,
         flushPending: flushPaymentPending,
         getPendingCount: getPaymentPendingCount,
-        getQueueSummary: getPaymentQueueSummary
+        getQueueSummary: getPaymentQueueSummary,
+        removeQueuedItem: removePaymentQueueItem
     };
 
     if (document.readyState === 'loading') {
