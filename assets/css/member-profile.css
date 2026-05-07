@@ -309,6 +309,55 @@ body {
     font-weight: 600;
 }
 
+.snapshot-banner {
+    margin: 1rem 2rem 0;
+    padding: 1rem 1.25rem;
+    border-radius: 12px;
+    border: 1px solid rgba(245, 158, 11, 0.35);
+    background: #fffbeb;
+    color: #92400e;
+}
+
+.snapshot-banner--stale {
+    border-color: rgba(220, 38, 38, 0.35);
+    background: #fef2f2;
+    color: #991b1b;
+}
+
+.snapshot-banner__title {
+    font-weight: 700;
+    margin-bottom: 0.35rem;
+}
+
+.snapshot-banner__body {
+    font-size: 0.95rem;
+    line-height: 1.45;
+}
+
+.snapshot-banner__body--small {
+    margin-top: 0.35rem;
+    font-size: 0.85rem;
+    opacity: 0.9;
+}
+
+.snapshot-notice {
+    padding: 1rem;
+    border-radius: 10px;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    background: #f8fafc;
+    color: var(--text-primary);
+}
+
+.snapshot-notice strong {
+    display: block;
+    margin-bottom: 0.35rem;
+}
+
+.snapshot-notice p {
+    margin: 0;
+    color: var(--text-secondary);
+}
+
 /* Right Side: Calendar */
 .profile-main {
     display: flex;
