@@ -839,6 +839,337 @@
         }
     }
 
+    const PAYMENT_OUTBOX_STORAGE_KEY = 'gym-payment-outbox-v1';
+    let paymentFlushInFlight = null;
+    let paymentMemoryQueue = [];
+    let paymentStorageFallback = false;
+
+    function readPaymentQueue() {
+        if (paymentStorageFallback) {
+            return paymentMemoryQueue.slice();
+        }
+
+        try {
+            const raw = window.localStorage.getItem(PAYMENT_OUTBOX_STORAGE_KEY);
+            if (!raw) return [];
+            const parsed = JSON.parse(raw);
+            if (!Array.isArray(parsed)) return [];
+            return parsed.map(normalizePaymentItem).filter(Boolean);
+        } catch (error) {
+            paymentStorageFallback = true;
+            return paymentMemoryQueue.slice();
+        }
+    }
+
+    function writePaymentQueue(queue) {
+        const normalizedQueue = queue.map(normalizePaymentItem).filter(Boolean);
+        paymentMemoryQueue = normalizedQueue.slice();
+
+        try {
+            window.localStorage.setItem(PAYMENT_OUTBOX_STORAGE_KEY, JSON.stringify(normalizedQueue));
+            paymentStorageFallback = false;
+        } catch (error) {
+            paymentStorageFallback = true;
+        }
+
+        window.dispatchEvent(new CustomEvent('payment-outbox:changed', {
+            detail: getPaymentQueueSummary()
+        }));
+    }
+
+    function normalizePaymentItem(item) {
+        if (!item || typeof item !== 'object') return null;
+        if (item.action !== 'create') return null;
+
+        const payload = item.payload && typeof item.payload === 'object' ? safeClone(item.payload) || {} : {};
+        return {
+            id: typeof item.id === 'string' && item.id ? item.id : makeId(),
+            action: 'create',
+            payload,
+            createdAt: typeof item.createdAt === 'string' && item.createdAt ? item.createdAt : new Date().toISOString(),
+            attempts: Number.isFinite(item.attempts) ? item.attempts : 0,
+            lastError: typeof item.lastError === 'string' ? item.lastError : null,
+            dedupeKey: typeof item.dedupeKey === 'string' && item.dedupeKey ? item.dedupeKey : buildPaymentDedupeKey(payload),
+            source: typeof item.source === 'string' && item.source ? item.source : 'payment-outbox'
+        };
+    }
+
+    function buildPaymentDedupeKey(payload) {
+        const gender = payload && payload.gender ? String(payload.gender) : 'men';
+        const memberId = payload && payload.member_id ? String(payload.member_id) : '';
+        const paymentDate = payload && payload.payment_date ? String(payload.payment_date) : '';
+        const amount = Number.isFinite(Number(payload && payload.amount)) ? Number(payload.amount).toFixed(2) : '0.00';
+        const expectedUpdatedAt = payload && payload.expected_updated_at ? String(payload.expected_updated_at) : '';
+        const expectedDue = payload && payload.expected_total_due_amount !== undefined && payload.expected_total_due_amount !== null && payload.expected_total_due_amount !== ''
+            ? Number(payload.expected_total_due_amount).toFixed(2)
+            : '';
+        return ['create', gender, memberId, paymentDate, amount, expectedUpdatedAt, expectedDue].join('|');
+    }
+
+    function getPaymentQueue() {
+        return readPaymentQueue();
+    }
+
+    function getPaymentPendingCount() {
+        return getPaymentQueue().length;
+    }
+
+    function getPaymentQueueSummary() {
+        const queue = getPaymentQueue();
+        return {
+            pendingCount: queue.length,
+            items: queue,
+            persistenceMode: paymentStorageFallback ? 'session' : 'localStorage',
+            online: navigator.onLine !== false
+        };
+    }
+
+    function queuePayment(payload, meta = {}) {
+        const normalizedPayload = safeClone(payload) || {};
+        const queue = getPaymentQueue();
+        const dedupeKey = buildPaymentDedupeKey(normalizedPayload);
+        const existing = queue.find(item => item.dedupeKey === dedupeKey);
+
+        if (existing) {
+            existing.payload = normalizedPayload;
+            existing.lastError = null;
+            existing.attempts = 0;
+            writePaymentQueue(queue);
+            window.dispatchEvent(new CustomEvent('payment-outbox:queued', {
+                detail: { item: existing, queued: false, count: queue.length }
+            }));
+            return { item: existing, queued: false, count: queue.length, deduped: true };
+        }
+
+        const item = normalizePaymentItem({
+            id: makeId(),
+            action: 'create',
+            payload: normalizedPayload,
+            createdAt: new Date().toISOString(),
+            attempts: 0,
+            lastError: null,
+            dedupeKey,
+            source: typeof meta.source === 'string' && meta.source ? meta.source : 'payment-outbox'
+        });
+
+        queue.push(item);
+        writePaymentQueue(queue);
+        window.dispatchEvent(new CustomEvent('payment-outbox:queued', {
+            detail: { item, queued: true, count: queue.length }
+        }));
+        return { item, queued: true, count: queue.length, deduped: false };
+    }
+
+    async function replayPaymentItem(item) {
+        const gender = item.payload && item.payload.gender ? item.payload.gender : 'men';
+        const endpoint = `api/payments.php?action=create&gender=${encodeURIComponent(gender)}`;
+
+        try {
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(item.payload || {})
+            });
+
+            const data = await parseJsonResponse(response);
+            if (response.ok && data && data.success) {
+                noteOnlineSuccess('payments', { action: 'create', source: 'flushPending' });
+                return { completed: true, data };
+            }
+
+            if (!response.ok && response.status >= 500) {
+                return {
+                    transient: true,
+                    error: new Error((data && data.message) || `Server error (${response.status})`)
+                };
+            }
+
+            return {
+                dropItem: true,
+                error: new Error((data && data.message) || `Payment replay failed (${response.status})`)
+            };
+        } catch (error) {
+            return {
+                transient: true,
+                error
+            };
+        }
+    }
+
+    async function flushPaymentPending() {
+        if (paymentFlushInFlight) return paymentFlushInFlight;
+
+        paymentFlushInFlight = (async () => {
+            if (!navigator.onLine) {
+                window.dispatchEvent(new CustomEvent('payment-outbox:flush-end', {
+                    detail: {
+                        replayed: 0,
+                        dropped: 0,
+                        remaining: getPaymentPendingCount(),
+                        error: 'Still offline.'
+                    }
+                }));
+                return {
+                    success: false,
+                    replayed: 0,
+                    remaining: getPaymentPendingCount(),
+                    message: 'Still offline.'
+                };
+            }
+
+            let replayed = 0;
+            let dropped = 0;
+            let lastError = null;
+
+            window.dispatchEvent(new CustomEvent('payment-outbox:flush-start', {
+                detail: getPaymentQueueSummary()
+            }));
+
+            while (true) {
+                const queue = getPaymentQueue();
+                if (!queue.length) break;
+
+                const item = queue[0];
+                const result = await replayPaymentItem(item);
+
+                if (result.completed) {
+                    queue.shift();
+                    replayed += 1;
+                    writePaymentQueue(queue);
+                    window.dispatchEvent(new CustomEvent('payment-outbox:item-replayed', {
+                        detail: { item, remaining: queue.length, replayed }
+                    }));
+                    continue;
+                }
+
+                if (result.dropItem) {
+                    queue.shift();
+                    dropped += 1;
+                    lastError = result.error || null;
+                    writePaymentQueue(queue);
+                    window.dispatchEvent(new CustomEvent('payment-outbox:item-dropped', {
+                        detail: { item, remaining: queue.length, error: lastError ? lastError.message : null }
+                    }));
+                    continue;
+                }
+
+                lastError = result.error || null;
+                break;
+            }
+
+            const summary = getPaymentQueueSummary();
+            window.dispatchEvent(new CustomEvent('payment-outbox:flush-end', {
+                detail: {
+                    replayed,
+                    dropped,
+                    remaining: summary.pendingCount,
+                    error: lastError ? lastError.message : null
+                }
+            }));
+
+            return {
+                success: summary.pendingCount === 0 && !lastError,
+                replayed,
+                dropped,
+                remaining: summary.pendingCount,
+                error: lastError
+            };
+        })().finally(() => {
+            paymentFlushInFlight = null;
+        });
+
+        return paymentFlushInFlight;
+    }
+
+    async function submitPayment(payload, meta = {}) {
+        const requestPayload = safeClone(payload) || {};
+        const gender = requestPayload.gender || meta.gender || 'men';
+        const endpoint = `api/payments.php?action=create&gender=${encodeURIComponent(gender)}`;
+        const hasConflictToken = Boolean(
+            (typeof requestPayload.expected_updated_at === 'string' && requestPayload.expected_updated_at.trim()) ||
+            (requestPayload.expected_total_due_amount !== undefined && requestPayload.expected_total_due_amount !== null && requestPayload.expected_total_due_amount !== '')
+        );
+
+        if (!requestPayload.member_id || !requestPayload.amount || !requestPayload.payment_date) {
+            return {
+                success: false,
+                queued: false,
+                message: 'Payment payload is incomplete.'
+            };
+        }
+
+        if (!navigator.onLine) {
+            if (!hasConflictToken) {
+                return {
+                    success: false,
+                    queued: false,
+                    message: 'A fresh member snapshot is required before queuing a payment offline.'
+                };
+            }
+            const queued = queuePayment(requestPayload, meta);
+            noteOfflineUse('payments', { action: 'create', source: 'submitPayment' });
+            return {
+                success: true,
+                queued: true,
+                queuedCount: queued.count,
+                deduped: queued.deduped,
+                message: 'Payment saved offline and will replay automatically.'
+            };
+        }
+
+        try {
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestPayload)
+            });
+
+            const data = await parseJsonResponse(response);
+            if (response.ok && data && data.success) {
+                noteOnlineSuccess('payments', { action: 'create', source: 'submitPayment' });
+                return {
+                    success: true,
+                    queued: false,
+                    data,
+                    message: data.message || 'Payment recorded successfully.'
+                };
+            }
+
+            return {
+                success: false,
+                queued: false,
+                status: response.status,
+                message: (data && data.message) || 'Failed to record payment.'
+            };
+        } catch (error) {
+            if (isRetryableNetworkError(error)) {
+                if (!hasConflictToken) {
+                    return {
+                        success: false,
+                        queued: false,
+                        message: 'A fresh member snapshot is required before queuing a payment.'
+                    };
+                }
+                const queued = queuePayment(requestPayload, meta);
+                return {
+                    success: true,
+                    queued: true,
+                    queuedCount: queued.count,
+                    deduped: queued.deduped,
+                    message: 'Payment saved locally and will replay when the connection returns.'
+                };
+            }
+
+            throw error;
+        }
+    }
+
     function init() {
         updateStatusBar();
         refreshAttendanceOutboxPanels();
@@ -846,6 +1177,7 @@
             updateStatusBar();
             flushPending();
             flushMemberWritePending();
+            flushPaymentPending();
         });
         window.addEventListener('offline', updateStatusBar);
         window.addEventListener('storage', event => {
@@ -855,6 +1187,9 @@
             }
             if (event.key === MEMBER_WRITE_OUTBOX_STORAGE_KEY && navigator.onLine) {
                 flushMemberWritePending();
+            }
+            if (event.key === PAYMENT_OUTBOX_STORAGE_KEY && navigator.onLine) {
+                flushPaymentPending();
             }
         });
         window.addEventListener('attendance-outbox:changed', () => {
@@ -866,10 +1201,16 @@
                 flushMemberWritePending();
             }
         });
+        window.addEventListener('payment-outbox:changed', () => {
+            if (navigator.onLine) {
+                flushPaymentPending();
+            }
+        });
         registerServiceWorker();
         if (navigator.onLine) {
             flushPending();
             flushMemberWritePending();
+            flushPaymentPending();
         }
     }
 
@@ -898,6 +1239,13 @@
         flushPending: flushMemberWritePending,
         getPendingCount: getMemberWritePendingCount,
         getQueueSummary: getMemberWriteSummary
+    };
+
+    window.PaymentOutbox = window.PaymentOutbox || {
+        submitPayment: submitPayment,
+        flushPending: flushPaymentPending,
+        getPendingCount: getPaymentPendingCount,
+        getQueueSummary: getPaymentQueueSummary
     };
 
     if (document.readyState === 'loading') {

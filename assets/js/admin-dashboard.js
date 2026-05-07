@@ -58,6 +58,23 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 
+    window.addEventListener('payment-outbox:flush-end', event => {
+        const detail = event?.detail || {};
+        if ((detail.replayed || 0) <= 0 && (detail.dropped || 0) <= 0) {
+            return;
+        }
+        if (currentSection === 'payments' && !document.querySelector('.modal')) {
+            loadPaymentsTable();
+        } else if (currentSection === 'members' && !document.querySelector('.modal')) {
+            const currentPage = parseInt(document.getElementById('membersPageInput')?.value || '1', 10) || 1;
+            loadMembersTable(currentPage);
+        } else if (currentSection === 'due-fees' && !document.querySelector('.modal')) {
+            loadDueFeesTable();
+        } else if (currentSection === 'dashboard') {
+            loadDashboard();
+        }
+    });
+
     document.addEventListener('visibilitychange', () => {
         if (!document.hidden) {
             startSectionAutoRefresh();
@@ -2456,52 +2473,127 @@ function closePaymentModal() {
 
 async function savePayment() {
     const memberCode = document.getElementById('paymentMemberCode').value.trim();
+    const paymentAmount = parseFloat(document.getElementById('paymentAmount').value);
+    const paymentDate = document.getElementById('paymentDate').value;
+    const dueDate = document.getElementById('dueDate').value || null;
+    const invoiceNumber = document.getElementById('invoiceNumber').value || null;
+    const paymentStatus = document.getElementById('paymentStatus').value;
+    const receivedBy = document.getElementById('paymentReceivedBy').value;
+    const paymentMethod = document.getElementById('paymentMethod').value;
 
     if (!memberCode) {
         Utils.showNotification('Please enter member code', 'error');
         return;
     }
 
-    if (!Utils.isOnline()) {
-        Utils.showNotification('Reconnect before recording a payment. Offline payment saves are not queued.', 'warning');
+    if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
+        Utils.showNotification('Please enter a valid payment amount', 'error');
         return;
     }
 
+    if (!paymentDate) {
+        Utils.showNotification('Please select a payment date', 'error');
+        return;
+    }
+
+    const offlineState = window.OfflineState;
+    const offlineCapability = offlineState && typeof offlineState.getCapabilityStatus === 'function'
+        ? offlineState.getCapabilityStatus('member-profile')
+        : null;
+
     try {
-        const memberData = await lookupMemberByCodeAcrossGenders(memberCode);
-        if (!memberData.success || !memberData.data) {
-            Utils.showNotification(memberData.message || 'Member not found', 'error');
+        let memberContext = null;
+        let targetGender = currentGender;
+
+        if (Utils.isOnline()) {
+            const memberData = await lookupMemberByCodeAcrossGenders(memberCode);
+            if (!memberData.success || !memberData.data) {
+                Utils.showNotification(memberData.message || 'Member not found', 'error');
+                return;
+            }
+
+            if (memberData.gender && memberData.gender !== currentGender) {
+                setCurrentGender(memberData.gender);
+            }
+
+            targetGender = memberData.gender || currentGender;
+            memberContext = memberData.data;
+        } else {
+            if (offlineCapability && offlineCapability.canUseFullOffline === false) {
+                Utils.showNotification(offlineCapability.message || 'Reconnect online to renew offline access before recording payments.', 'error');
+                return;
+            }
+
+            const cachedSnapshot = getCachedMemberProfileSnapshot(memberCode);
+            if (!cachedSnapshot || !cachedSnapshot.profile || !cachedSnapshot.profile.id) {
+                Utils.showNotification('Reconnect once to cache this member before recording a payment offline.', 'error');
+                return;
+            }
+
+            if (cachedSnapshot.gender && cachedSnapshot.gender !== currentGender) {
+                setCurrentGender(cachedSnapshot.gender);
+            }
+
+            targetGender = cachedSnapshot.gender || currentGender;
+            memberContext = cachedSnapshot.profile;
+        }
+
+        const expectedUpdatedAt = memberContext.updated_at || (() => {
+            if (!memberContext.cached_at) return null;
+            const stamp = new Date(memberContext.cached_at);
+            return Number.isFinite(stamp.getTime()) ? stamp.toISOString().slice(0, 19).replace('T', ' ') : null;
+        })();
+
+        const paymentData = {
+            member_id: memberContext.id,
+            member_code: memberContext.member_code || memberCode,
+            gender: targetGender,
+            amount: paymentAmount,
+            payment_date: paymentDate,
+            due_date: dueDate,
+            invoice_number: invoiceNumber,
+            status: paymentStatus,
+            received_by: receivedBy,
+            payment_method: paymentMethod,
+            expected_updated_at: expectedUpdatedAt,
+            expected_total_due_amount: memberContext.total_due_amount ?? null
+        };
+
+        const paymentService = window.PaymentOutbox && typeof window.PaymentOutbox.submitPayment === 'function'
+            ? window.PaymentOutbox.submitPayment
+            : async function (payload) {
+                const res = await fetch(`api/payments.php?action=create&gender=${encodeURIComponent(payload.gender || targetGender)}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                return res.ok ? data : { success: false, message: data.message || 'Failed to record payment' };
+            };
+
+        const result = await paymentService(paymentData, { source: 'admin-dashboard', gender: targetGender });
+
+        if (result.queued) {
+            Utils.showNotification(result.message || 'Payment saved offline. It will replay automatically when the connection returns.', 'warning');
+            closePaymentModal();
             return;
         }
 
-        if (memberData.gender && memberData.gender !== currentGender) {
-            setCurrentGender(memberData.gender);
-        }
-
-        const paymentData = {
-            member_id: memberData.data.id,
-            amount: parseFloat(document.getElementById('paymentAmount').value),
-            payment_date: document.getElementById('paymentDate').value,
-            due_date: document.getElementById('dueDate').value || null,
-            invoice_number: document.getElementById('invoiceNumber').value || null,
-            status: document.getElementById('paymentStatus').value,
-            received_by: document.getElementById('paymentReceivedBy').value,
-            payment_method: document.getElementById('paymentMethod').value
-        };
-
-        const res = await fetch(`api/payments.php?action=create&gender=${currentGender}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(paymentData)
-        });
-        const data = await res.json();
-
-        if (data.success) {
-            Utils.showNotification('Payment recorded successfully', 'success');
+        if (result.success) {
+            Utils.showNotification(result.message || 'Payment recorded successfully', 'success');
             closePaymentModal();
             loadPaymentsTable();
+            if (currentSection === 'members' && !document.querySelector('.modal')) {
+                loadMembersTable();
+            }
+            if (currentSection === 'due-fees') {
+                loadDueFeesTable();
+            }
+            if (currentSection === 'dashboard') {
+                loadDashboard();
+            }
         } else {
-            Utils.showNotification(data.message || 'Failed to record payment', 'error');
+            Utils.showNotification(result.message || 'Failed to record payment', 'error');
         }
     } catch (err) {
         console.error('Payment error:', err);

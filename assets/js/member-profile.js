@@ -63,6 +63,7 @@ const MEMBER_PROFILE_PUBLIC_FIELDS = [
     'calculated_status',
     'next_fee_due_date',
     'total_due_amount',
+    'updated_at',
     'is_checked_in'
 ];
 

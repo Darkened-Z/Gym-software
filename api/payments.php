@@ -9,6 +9,7 @@ require_once __DIR__ . '/../app/models/Payment.php';
 require_once __DIR__ . '/../app/models/MessageTemplate.php';
 require_once __DIR__ . '/../app/models/MessageQueue.php';
 require_once __DIR__ . '/../app/models/MemberConsent.php';
+require_once __DIR__ . '/../app/helpers/SyncHelper.php';
 require_once __DIR__ . '/../app/helpers/AdminLogger.php';
 require_once __DIR__ . '/../app/helpers/AuthHelper.php';
 require_once __DIR__ . '/../app/models/Member.php';
@@ -199,6 +200,10 @@ try {
                 $totalDueAmount = isset($data['total_due_amount']) && $data['total_due_amount'] !== '' && $data['total_due_amount'] !== null
                     ? max(0, round((float)$data['total_due_amount'], 2))
                     : null;
+                $expectedUpdatedAt = trim((string)($data['expected_updated_at'] ?? ''));
+                $expectedTotalDueAmount = isset($data['expected_total_due_amount']) && is_numeric($data['expected_total_due_amount'])
+                    ? max(0, round((float)$data['expected_total_due_amount'], 2))
+                    : null;
                 $paymentDate = trim((string)($data['payment_date'] ?? ''));
                 $parsedPaymentDate = DateTime::createFromFormat('Y-m-d', $paymentDate);
 
@@ -220,18 +225,6 @@ try {
                     exit;
                 }
 
-                $memberTable = 'members_' . $gender;
-                $memberStmt = $db->prepare("SELECT id, name, phone, monthly_fee, total_due_amount, status FROM {$memberTable} WHERE id = :id LIMIT 1");
-                $memberStmt->bindValue(':id', $memberId, PDO::PARAM_INT);
-                $memberStmt->execute();
-                $memberRow = $memberStmt->fetch(PDO::FETCH_ASSOC);
-
-                if (!$memberRow) {
-                    http_response_code(404);
-                    echo json_encode(['success' => false, 'message' => 'Member not found']);
-                    exit;
-                }
-                
                 $payment = new Payment($db, $gender);
                 
                 $paymentData = [
@@ -249,25 +242,56 @@ try {
                     $paymentData['remaining_amount'] = $remainingAmount;
                 }
 
+                $memberTable = 'members_' . $gender;
+                $db->beginTransaction();
+
+                $memberStmt = $db->prepare("SELECT id, name, phone, monthly_fee, total_due_amount, status, updated_at FROM {$memberTable} WHERE id = :id LIMIT 1 FOR UPDATE");
+                $memberStmt->bindValue(':id', $memberId, PDO::PARAM_INT);
+                $memberStmt->execute();
+                $memberRow = $memberStmt->fetch(PDO::FETCH_ASSOC);
+
+                if (!$memberRow) {
+                    $db->rollBack();
+                    http_response_code(404);
+                    echo json_encode(['success' => false, 'message' => 'Member not found']);
+                    exit;
+                }
+
+                if ($expectedUpdatedAt !== '' && isset($memberRow['updated_at']) && (string)$memberRow['updated_at'] !== $expectedUpdatedAt) {
+                    $db->rollBack();
+                    http_response_code(409);
+                    echo json_encode(['success' => false, 'message' => 'Member changed while you were offline. Reopen the member profile and retry.']);
+                    exit;
+                }
+
+                $currentDue = round((float)($memberRow['total_due_amount'] ?? 0), 2);
+                if ($expectedTotalDueAmount !== null && abs($currentDue - $expectedTotalDueAmount) > 0.01) {
+                    $db->rollBack();
+                    http_response_code(409);
+                    echo json_encode(['success' => false, 'message' => 'Member balance changed while you were offline. Reopen the member profile and retry.']);
+                    exit;
+                }
+
+                $monthlyFee = round((float)($memberRow['monthly_fee'] ?? 0), 2);
+                $paymentStatus = $paymentData['status'] ?? 'completed';
+                if ($hasRemainingAmount) {
+                    $newDue = $remainingAmount;
+                } elseif ($paymentStatus === 'completed') {
+                    $newDue = max(0, round(($currentDue + $monthlyFee) - $amount, 2));
+                } else {
+                    $newDue = max(0, round($currentDue, 2));
+                }
+
                 $id = $payment->create($paymentData);
                 if ($id) {
-                    $currentDue = round((float)($memberRow['total_due_amount'] ?? 0), 2);
-                    $monthlyFee = round((float)($memberRow['monthly_fee'] ?? 0), 2);
-                    $paymentStatus = $paymentData['status'] ?? 'completed';
-                    if ($hasRemainingAmount) {
-                        $newDue = $remainingAmount;
-                    } elseif ($paymentStatus === 'completed') {
-                        $newDue = max(0, round(($currentDue + $monthlyFee) - $amount, 2));
-                    } else {
-                        $newDue = max(0, round($currentDue, 2));
-                    }
-
                     $updateDueStmt = $db->prepare("UPDATE {$memberTable} SET total_due_amount = :due WHERE id = :id");
                     $updateDueStmt->bindValue(':due', $newDue, PDO::PARAM_STR);
                     $updateDueStmt->bindValue(':id', $memberId, PDO::PARAM_INT);
                     $updateDueStmt->execute();
 
                     $memberModel->syncActivityStatus((int)$memberId);
+                    SyncHelper::markRecordForSync($db, $memberTable, (int)$memberId);
+                    SyncHelper::markRecordForSync($db, "payments_{$gender}", (int)$id);
 
                     $consentModel = new MemberConsent($db);
                     $templateModel = new MessageTemplate($db);
@@ -293,15 +317,22 @@ try {
                         ]);
                     }
 
-                    $adminLogger->log('payment_recorded', 'payment_' . $gender, $id, null, [
-                        'member_id' => $memberId,
-                        'member_name' => $memberRow['name'] ?? null,
-                        'amount' => $amount,
-                        'payment_date' => $paymentDate,
-                        'payment_method' => $paymentData['payment_method']
-                    ]);
+                    $db->commit();
+
+                    try {
+                        $adminLogger->log('payment_recorded', 'payment_' . $gender, $id, null, [
+                            'member_id' => $memberId,
+                            'member_name' => $memberRow['name'] ?? null,
+                            'amount' => $amount,
+                            'payment_date' => $paymentDate,
+                            'payment_method' => $paymentData['payment_method']
+                        ]);
+                    } catch (Throwable $logError) {
+                        error_log('Payment audit log skipped: ' . $logError->getMessage());
+                    }
                     echo json_encode(['success' => true, 'id' => $id, 'message' => 'Payment recorded successfully']);
                 } else {
+                    $db->rollBack();
                     http_response_code(500);
                     echo json_encode(['success' => false, 'message' => 'Failed to record payment']);
                 }
@@ -313,6 +344,9 @@ try {
             echo json_encode(['success' => false, 'message' => 'Invalid action']);
     }
 } catch (Throwable $e) {
+    if (isset($db) && $db instanceof PDO && $db->inTransaction()) {
+        $db->rollBack();
+    }
     error_log('Payments API error: ' . $e->getMessage());
     http_response_code(500);
     echo json_encode([
