@@ -23,6 +23,10 @@
     }
 
     function readStoredQueue() {
+        if (storageFallback) {
+            return memoryQueue.slice();
+        }
+
         try {
             const raw = window.localStorage.getItem(ATTENDANCE_OUTBOX_STORAGE_KEY);
             if (!raw) return [];
