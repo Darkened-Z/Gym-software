@@ -6006,7 +6006,31 @@ function formatOutboxReviewValue(value, type = 'text') {
     return escapeSyncHtml(value);
 }
 
+function normalizeOutboxReviewValue(value, type = 'text') {
+    if (value === null || value === undefined || value === '') {
+        return '—';
+    }
+
+    if (type === 'money') {
+        const amount = Number(value);
+        return Number.isFinite(amount) ? amount.toFixed(2) : String(value).trim();
+    }
+
+    return String(value).trim();
+}
+
+function getOutboxConflictChangedFields(rows) {
+    return rows
+        .filter(row => row && row.compare !== false)
+        .filter(row => normalizeOutboxReviewValue(row.queued, row.type) !== normalizeOutboxReviewValue(row.current, row.type))
+        .map(row => row.label);
+}
+
 function renderOutboxReviewTable(title, sourceLabel, rows, note = '') {
+    const changedFields = getOutboxConflictChangedFields(rows);
+    const changedLabel = changedFields.length
+        ? `${changedFields.length} changed field${changedFields.length === 1 ? '' : 's'}`
+        : 'No field changes detected';
     const rowHtml = rows.map(row => {
         const queuedValue = formatOutboxReviewValue(row.queued, row.type);
         const currentValue = formatOutboxReviewValue(row.current, row.type);
@@ -6030,7 +6054,7 @@ function renderOutboxReviewTable(title, sourceLabel, rows, note = '') {
                     <strong style="color:#0f172a;">${escapeSyncHtml(title)}</strong>
                     <div style="margin-top:0.2rem;color:#475569;font-size:0.9rem;">${escapeSyncHtml(sourceLabel)}</div>
                 </div>
-                <span style="padding:0.28rem 0.6rem;border-radius:999px;background:#ecfdf3;color:#166534;font-size:0.8rem;font-weight:700;">Read only</span>
+                <span style="padding:0.28rem 0.6rem;border-radius:999px;background:#ecfdf3;color:#166534;font-size:0.8rem;font-weight:700;">Read only • ${escapeSyncHtml(changedLabel)}</span>
             </div>
             ${note ? `<div style="margin-top:0.45rem;color:#7c2d12;font-size:0.9rem;">${escapeSyncHtml(note)}</div>` : ''}
             <div style="overflow:auto;margin-top:0.75rem;">
@@ -6149,10 +6173,21 @@ async function loadOutboxConflictReview(moduleKey, itemId) {
     if (moduleKey === 'payments' && !liveRecord) {
         review.note = `${review.note} Live member data was not available, so only the queued payment is shown.`;
     }
+    const changedFields = getOutboxConflictChangedFields(review.rows);
+    if (changedFields.length) {
+        sourceLabel = `${sourceLabel} • ${changedFields.length} changed field${changedFields.length === 1 ? '' : 's'}`;
+        review.note = `${review.note} Changed fields: ${changedFields.slice(0, 4).join(', ')}${changedFields.length > 4 ? `, +${changedFields.length - 4} more` : ''}.`;
+    }
 
     container.innerHTML = renderOutboxReviewTable(review.title, sourceLabel, review.rows, review.note);
-    if (['members', 'payments'].includes(moduleKey)) {
-        container.insertAdjacentHTML('beforeend', `<div style="margin-top:0.65rem;display:flex;gap:0.5rem;flex-wrap:wrap;"><button type="button" class="btn btn-primary" onclick="openOutboxConflictResolution('${moduleKey}', '${item.id}')">Resolve in form</button></div>`);
+    if (moduleKey === 'members') {
+        const queuedButton = `<button type="button" class="btn btn-primary" onclick="openOutboxConflictResolution('${moduleKey}', '${item.id}', 'queued')">Start from queued edit</button>`;
+        const currentButton = item.action === 'update' && liveRecord
+            ? `<button type="button" class="btn btn-secondary" onclick="openOutboxConflictResolution('${moduleKey}', '${item.id}', 'current')">Start from current record</button>`
+            : '';
+        container.insertAdjacentHTML('beforeend', `<div style="margin-top:0.65rem;display:flex;gap:0.5rem;flex-wrap:wrap;">${queuedButton}${currentButton}</div>`);
+    } else if (moduleKey === 'payments') {
+        container.insertAdjacentHTML('beforeend', `<div style="margin-top:0.65rem;display:flex;gap:0.5rem;flex-wrap:wrap;"><button type="button" class="btn btn-primary" onclick="openOutboxConflictResolution('${moduleKey}', '${item.id}', 'queued')">Open payment form</button></div>`);
     }
 }
 
@@ -6176,7 +6211,7 @@ function setConflictResolutionNote(elementId, message) {
     note.textContent = message;
 }
 
-function seedMemberResolutionForm(item, liveRecord) {
+function seedMemberResolutionForm(item, liveRecord, base = 'queued') {
     const payload = item?.payload || {};
     const isUpdate = item?.action === 'update';
     const resolvedGender = payload.gender || liveRecord?.gender || currentGender;
@@ -6185,29 +6220,32 @@ function seedMemberResolutionForm(item, liveRecord) {
     closeMemberModal();
     showAddMemberForm();
 
-    document.querySelector('#memberModal .modal-header h2').textContent = 'Resolve Member Conflict';
+    document.querySelector('#memberModal .modal-header h2').textContent = base === 'current' ? 'Review Member Merge' : 'Resolve Member Conflict';
     document.getElementById('memberResolutionItemId').value = String(item.id || '');
-    document.getElementById('memberId').value = isUpdate ? (payload.id || liveRecord?.id || '') : '';
-    document.getElementById('memberCode').value = payload.member_code || liveRecord?.member_code || '';
-    document.getElementById('memberName').value = payload.name || liveRecord?.name || '';
-    document.getElementById('phone').value = payload.phone || liveRecord?.phone || '';
-    document.getElementById('rfidUid').value = payload.rfid_uid || liveRecord?.rfid_uid || '';
-    document.getElementById('email').value = payload.email || liveRecord?.email || '';
-    document.getElementById('address').value = payload.address || liveRecord?.address || '';
-    document.getElementById('joinDate').value = payload.join_date || liveRecord?.join_date || '';
-    document.getElementById('membershipType').value = payload.membership_type || liveRecord?.membership_type || 'Basic';
-    document.getElementById('admissionFee').value = payload.admission_fee ?? liveRecord?.admission_fee ?? 0;
-    document.getElementById('monthlyFee').value = payload.monthly_fee ?? liveRecord?.monthly_fee ?? 0;
-    document.getElementById('lockerFee').value = payload.locker_fee ?? liveRecord?.locker_fee ?? 0;
-    document.getElementById('nextFeeDueDate').value = payload.next_fee_due_date || liveRecord?.next_fee_due_date || '';
-    document.getElementById('status').value = payload.status || liveRecord?.status || 'active';
-    document.getElementById('memberUpdatedAt').value = isUpdate ? (liveRecord?.updated_at || payload.expected_updated_at || '') : '';
-    document.getElementById('existingProfileImage').value = payload.profile_image || liveRecord?.profile_image || '';
+    const baseRecord = base === 'current' && isUpdate && liveRecord ? liveRecord : payload;
+    const overlayRecord = base === 'current' ? payload : liveRecord;
 
-    if (payload.profile_image || liveRecord?.profile_image) {
+    document.getElementById('memberId').value = base === 'current' && isUpdate ? (liveRecord?.id || payload.id || '') : (isUpdate ? (payload.id || liveRecord?.id || '') : '');
+    document.getElementById('memberCode').value = baseRecord.member_code || overlayRecord?.member_code || '';
+    document.getElementById('memberName').value = baseRecord.name || overlayRecord?.name || '';
+    document.getElementById('phone').value = baseRecord.phone || overlayRecord?.phone || '';
+    document.getElementById('rfidUid').value = baseRecord.rfid_uid || overlayRecord?.rfid_uid || '';
+    document.getElementById('email').value = baseRecord.email || overlayRecord?.email || '';
+    document.getElementById('address').value = baseRecord.address || overlayRecord?.address || '';
+    document.getElementById('joinDate').value = baseRecord.join_date || overlayRecord?.join_date || '';
+    document.getElementById('membershipType').value = baseRecord.membership_type || overlayRecord?.membership_type || 'Basic';
+    document.getElementById('admissionFee').value = baseRecord.admission_fee ?? overlayRecord?.admission_fee ?? 0;
+    document.getElementById('monthlyFee').value = baseRecord.monthly_fee ?? overlayRecord?.monthly_fee ?? 0;
+    document.getElementById('lockerFee').value = baseRecord.locker_fee ?? overlayRecord?.locker_fee ?? 0;
+    document.getElementById('nextFeeDueDate').value = baseRecord.next_fee_due_date || overlayRecord?.next_fee_due_date || '';
+    document.getElementById('status').value = baseRecord.status || overlayRecord?.status || 'active';
+    document.getElementById('memberUpdatedAt').value = base === 'current' && isUpdate ? (liveRecord?.updated_at || payload.expected_updated_at || '') : (isUpdate ? (liveRecord?.updated_at || payload.expected_updated_at || '') : '');
+    document.getElementById('existingProfileImage').value = baseRecord.profile_image || overlayRecord?.profile_image || '';
+
+    if (baseRecord.profile_image || overlayRecord?.profile_image) {
         const preview = document.getElementById('profileImagePreview');
         const previewImg = document.getElementById('previewImg');
-        previewImg.src = payload.profile_image || liveRecord.profile_image;
+        previewImg.src = baseRecord.profile_image || overlayRecord?.profile_image || '';
         preview.style.display = 'block';
     }
 
@@ -6215,7 +6253,8 @@ function seedMemberResolutionForm(item, liveRecord) {
         ? `Current live member: ${liveRecord.member_code || 'unknown'} • updated ${liveRecord.updated_at || 'unknown'}`
         : 'No live record snapshot was loaded.';
     const modeLabel = isUpdate ? 'update' : 'create';
-    setConflictResolutionNote('memberConflictResolutionNote', `Queued member ${modeLabel} values are loaded. Review the compare panel before saving. ${liveSummary}`);
+    const baseLabel = base === 'current' ? 'Current record values are loaded as the starting point.' : `Queued member ${modeLabel} values are loaded.`;
+    setConflictResolutionNote('memberConflictResolutionNote', `${baseLabel} Review the compare panel before saving. ${liveSummary}`);
 }
 
 function seedPaymentResolutionForm(item, liveRecord) {
@@ -6243,7 +6282,7 @@ function seedPaymentResolutionForm(item, liveRecord) {
     setConflictResolutionNote('paymentConflictResolutionNote', `Queued payment values are loaded. Recheck the member compare panel before saving. ${liveSummary}`);
 }
 
-async function openOutboxConflictResolution(moduleKey, itemId) {
+async function openOutboxConflictResolution(moduleKey, itemId, resolutionBase = 'queued') {
     if (!['members', 'payments'].includes(moduleKey)) return;
     if (!Utils.isOnline()) {
         Utils.showNotification('Reconnect to resolve this conflict safely.', 'warning');
@@ -6272,7 +6311,7 @@ async function openOutboxConflictResolution(moduleKey, itemId) {
     const liveRecord = { ...lookup.data, gender: lookup.gender };
 
     if (moduleKey === 'members') {
-        seedMemberResolutionForm(item, liveRecord);
+        seedMemberResolutionForm(item, liveRecord, resolutionBase);
         return;
     }
 

@@ -1,0 +1,5 @@
+- Inspected attendance, member-write, and payment outbox/replay/status handling.
+- Added shared outbox issue metadata to offline state and persisted transient queue failures back onto queued items.
+- Added a unified offline outbox panel to the sync screen with per-module retry controls and latest issue summaries.
+- Strengthened member conflict review with changed-field summaries and a safe current-record base option for manual merge.
+- Verification: `node --check assets/js/offline-state.js`, `node --check assets/js/pwa.js`, `node --check assets/js/admin-dashboard.js`, and `git diff --check` all passed.
