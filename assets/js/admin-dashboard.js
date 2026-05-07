@@ -18,6 +18,7 @@ document.addEventListener('DOMContentLoaded', function () {
     loadDashboard();
     startSectionAutoRefresh();
     startAutoSync(); // Start auto-sync timer
+    bindOfflineOutboxRefresh();
 
     window.addEventListener('online', () => {
         if (currentSection === 'dashboard') {
@@ -5962,6 +5963,200 @@ function downloadPayments() {
     window.location.href = `api/download.php?type=payments&gender=${gender}&start_date=${startDate}&end_date=${endDate}&format=${format}`;
 }
 
+let offlineOutboxRefreshBound = false;
+
+function formatOfflineOutboxAge(createdAt) {
+    const timestamp = new Date(createdAt).getTime();
+    if (!Number.isFinite(timestamp)) return 'just now';
+
+    const minutes = Math.max(0, Math.floor((Date.now() - timestamp) / 60000));
+    if (minutes <= 0) return 'just now';
+    if (minutes === 1) return '1 min ago';
+    if (minutes < 60) return `${minutes} mins ago`;
+
+    const hours = Math.floor(minutes / 60);
+    if (hours === 1) return '1 hour ago';
+    return `${hours} hours ago`;
+}
+
+function getOfflineOutboxModuleState(moduleKey) {
+    const offlineState = window.OfflineState && typeof window.OfflineState.getModuleState === 'function'
+        ? window.OfflineState.getModuleState(moduleKey)
+        : {};
+
+    if (moduleKey === 'attendance' && window.AttendanceOutbox && typeof window.AttendanceOutbox.getQueueSummary === 'function') {
+        return {
+            label: 'Attendance',
+            summary: window.AttendanceOutbox.getQueueSummary(),
+            retry: () => window.AttendanceOutbox.flushPending(),
+            issue: offlineState.lastOutboxIssueMessage ? {
+                at: offlineState.lastOutboxIssueAt || null,
+                kind: offlineState.lastOutboxIssueKind || 'unknown',
+                message: offlineState.lastOutboxIssueMessage,
+                action: offlineState.lastOutboxIssueAction || null,
+                source: offlineState.lastOutboxIssueSource || null
+            } : null
+        };
+    }
+
+    if (moduleKey === 'members' && window.MemberWriteOutbox && typeof window.MemberWriteOutbox.getQueueSummary === 'function') {
+        return {
+            label: 'Member writes',
+            summary: window.MemberWriteOutbox.getQueueSummary(),
+            retry: () => window.MemberWriteOutbox.flushPending(),
+            issue: offlineState.lastOutboxIssueMessage ? {
+                at: offlineState.lastOutboxIssueAt || null,
+                kind: offlineState.lastOutboxIssueKind || 'unknown',
+                message: offlineState.lastOutboxIssueMessage,
+                action: offlineState.lastOutboxIssueAction || null,
+                source: offlineState.lastOutboxIssueSource || null
+            } : null
+        };
+    }
+
+    if (moduleKey === 'payments' && window.PaymentOutbox && typeof window.PaymentOutbox.getQueueSummary === 'function') {
+        return {
+            label: 'Payments',
+            summary: window.PaymentOutbox.getQueueSummary(),
+            retry: () => window.PaymentOutbox.flushPending(),
+            issue: offlineState.lastOutboxIssueMessage ? {
+                at: offlineState.lastOutboxIssueAt || null,
+                kind: offlineState.lastOutboxIssueKind || 'unknown',
+                message: offlineState.lastOutboxIssueMessage,
+                action: offlineState.lastOutboxIssueAction || null,
+                source: offlineState.lastOutboxIssueSource || null
+            } : null
+        };
+    }
+
+    return {
+        label: moduleKey,
+        summary: { pendingCount: 0, failedCount: 0, items: [], online: Utils.isOnline(), persistenceMode: 'unknown' },
+        retry: null,
+        issue: offlineState.lastOutboxIssueMessage ? {
+            at: offlineState.lastOutboxIssueAt || null,
+            kind: offlineState.lastOutboxIssueKind || 'unknown',
+            message: offlineState.lastOutboxIssueMessage,
+            action: offlineState.lastOutboxIssueAction || null,
+            source: offlineState.lastOutboxIssueSource || null
+        } : null
+    };
+}
+
+function renderOfflineOutboxModuleCard(moduleKey) {
+    const moduleState = getOfflineOutboxModuleState(moduleKey);
+    const summary = moduleState.summary || {};
+    const items = Array.isArray(summary.items) ? summary.items : [];
+    const pendingCount = Number(summary.pendingCount || 0);
+    const failedCount = Number(summary.failedCount || items.filter(item => item.lastError).length || 0);
+    const online = summary.online !== false && Utils.isOnline();
+    const retryDisabled = !online || !moduleState.retry;
+    const retryButton = `<button type="button" class="btn btn-primary" ${retryDisabled ? 'disabled' : ''} onclick="retryOfflineOutboxModule('${moduleKey}')">Retry now</button>`;
+    const latestIssue = moduleState.issue;
+    const itemRows = items.slice(0, 3).map(item => {
+        const itemError = item.lastError ? `<div style="margin-top:0.35rem;color:#b91c1c;">${escapeSyncHtml(item.lastError)}</div>` : '';
+        return `
+            <div style="padding:0.75rem 0;border-top:1px solid rgba(148,163,184,0.18);">
+                <div style="display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;align-items:center;">
+                    <strong>${escapeSyncHtml(item.action || 'item')} • ${escapeSyncHtml(formatOfflineOutboxAge(item.createdAt))}</strong>
+                    <span style="font-size:0.85rem;color:#64748b;">Attempts: ${Number(item.attempts || 0)}</span>
+                </div>
+                <div style="margin-top:0.25rem;color:#64748b;font-size:0.9rem;">Source: ${escapeSyncHtml(item.source || 'outbox')}</div>
+                ${itemError}
+            </div>
+        `;
+    }).join('');
+
+    return `
+        <div style="padding:1rem 1.15rem;border:1px solid ${pendingCount > 0 ? '#f59e0b' : '#bbf7d0'};border-radius:12px;background:${pendingCount > 0 ? '#fffbeb' : '#f8fafc'};">
+            <div style="display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;align-items:flex-start;">
+                <div>
+                    <div style="font-size:0.82rem;text-transform:uppercase;letter-spacing:0.08em;color:#166534;font-weight:700;">${escapeSyncHtml(moduleState.label)}</div>
+                    <h4 style="margin:0.35rem 0 0;">${pendingCount} pending${failedCount ? `, ${failedCount} with errors` : ''}</h4>
+                    <p style="margin:0.45rem 0 0;color:#475569;">${summary.persistenceMode === 'session' ? 'Session-only queue.' : 'Stored locally until replay.'}</p>
+                    ${latestIssue ? `<p style="margin:0.35rem 0 0;color:${latestIssue.kind === 'dropped' ? '#991b1b' : '#b45309'};">Last issue: ${escapeSyncHtml(latestIssue.message || 'Unknown error')}</p>` : ''}
+                </div>
+                <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.5rem;">
+                    <span style="padding:0.35rem 0.7rem;border-radius:999px;background:${pendingCount > 0 ? '#fef3c7' : '#dcfce7'};color:${pendingCount > 0 ? '#92400e' : '#166534'};font-weight:700;">${pendingCount} pending</span>
+                    ${retryButton}
+                </div>
+            </div>
+            <div style="margin-top:0.9rem;">
+                ${items.length ? itemRows : '<div style="color:#64748b;">No queued items right now.</div>'}
+            </div>
+        </div>
+    `;
+}
+
+function loadOfflineOutbox() {
+    const container = document.getElementById('offlineOutboxSummary');
+    if (!container) return;
+
+    const sections = ['attendance', 'members', 'payments'].map(renderOfflineOutboxModuleCard).join('');
+    const retryAllDisabled = !Utils.isOnline();
+    container.innerHTML = `
+        <div class="section-card" style="margin-top:1rem;">
+            <div style="display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;align-items:center;">
+                <div>
+                    <h3 style="margin:0;">Offline outbox</h3>
+                    <p style="margin:0.35rem 0 0;color:#475569;">Queued attendance, member, and payment writes live here. Nothing is auto-resolved.</p>
+                </div>
+                <button type="button" class="btn btn-secondary" ${retryAllDisabled ? 'disabled' : ''} onclick="retryAllOfflineOutbox()">Retry all</button>
+            </div>
+            <div style="display:grid;gap:0.85rem;margin-top:1rem;">${sections}</div>
+        </div>
+    `;
+}
+
+function refreshOfflineOutboxIfVisible() {
+    if (currentSection !== 'sync') return;
+    loadOfflineOutbox();
+}
+
+function bindOfflineOutboxRefresh() {
+    if (offlineOutboxRefreshBound) return;
+    offlineOutboxRefreshBound = true;
+
+    const refresh = () => refreshOfflineOutboxIfVisible();
+    window.addEventListener('attendance-outbox:changed', refresh);
+    window.addEventListener('attendance-outbox:flush-end', refresh);
+    window.addEventListener('member-write-outbox:changed', refresh);
+    window.addEventListener('member-write-outbox:flush-end', refresh);
+    window.addEventListener('payment-outbox:changed', refresh);
+    window.addEventListener('payment-outbox:flush-end', refresh);
+    window.addEventListener('online', refresh);
+    window.addEventListener('offline', refresh);
+}
+
+function retryOfflineOutboxModule(moduleKey) {
+    if (!Utils.isOnline()) return;
+
+    if (moduleKey === 'attendance' && window.AttendanceOutbox && typeof window.AttendanceOutbox.flushPending === 'function') {
+        window.AttendanceOutbox.flushPending().then(refreshOfflineOutboxIfVisible).catch(err => console.error('Attendance retry failed:', err));
+        return;
+    }
+
+    if (moduleKey === 'members' && window.MemberWriteOutbox && typeof window.MemberWriteOutbox.flushPending === 'function') {
+        window.MemberWriteOutbox.flushPending().then(refreshOfflineOutboxIfVisible).catch(err => console.error('Member retry failed:', err));
+        return;
+    }
+
+    if (moduleKey === 'payments' && window.PaymentOutbox && typeof window.PaymentOutbox.flushPending === 'function') {
+        window.PaymentOutbox.flushPending().then(refreshOfflineOutboxIfVisible).catch(err => console.error('Payment retry failed:', err));
+    }
+}
+
+function retryAllOfflineOutbox() {
+    if (!Utils.isOnline()) return;
+
+    const sequence = Promise.resolve()
+        .then(() => window.AttendanceOutbox && typeof window.AttendanceOutbox.flushPending === 'function' ? window.AttendanceOutbox.flushPending() : null)
+        .then(() => window.MemberWriteOutbox && typeof window.MemberWriteOutbox.flushPending === 'function' ? window.MemberWriteOutbox.flushPending() : null)
+        .then(() => window.PaymentOutbox && typeof window.PaymentOutbox.flushPending === 'function' ? window.PaymentOutbox.flushPending() : null);
+
+    sequence.then(refreshOfflineOutboxIfVisible).catch(err => console.error('Retry all outbox failed:', err));
+}
+
 function loadSync() {
     const isOnline = !window.location.hostname.includes('localhost') && !window.location.hostname.includes('127.0.0.1');
 
@@ -5993,6 +6188,7 @@ function loadSync() {
             : 'Click "Send to Online" to upload local data to the online server. Use Retry Failed Only if some records already failed.'}</p>
                 </div>
             </div>
+            <div id="offlineOutboxSummary"></div>
             <div style="display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));">
                 <div style="background: #ffffff; color: #14291c; padding: 1.5rem; border-radius: 10px; box-shadow: var(--shadow); border: 1px solid var(--border-color);">
                     <h3 style="color: #166534;">Recent Activity</h3>
@@ -6021,6 +6217,7 @@ function loadSync() {
     const retryBtn = document.getElementById('retryFailedSyncBtn');
     if (retryBtn) retryBtn.addEventListener('click', () => performSync(true));
 
+    loadOfflineOutbox();
     loadSyncHistory();
     loadFailedSyncRecords();
 }

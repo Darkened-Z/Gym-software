@@ -66,7 +66,12 @@
                 lastOnlineSuccess: typeof state.lastOnlineSuccess === 'string' && state.lastOnlineSuccess ? state.lastOnlineSuccess : null,
                 lastOfflineUse: typeof state.lastOfflineUse === 'string' && state.lastOfflineUse ? state.lastOfflineUse : null,
                 lastStatusMessage: typeof state.lastStatusMessage === 'string' && state.lastStatusMessage ? state.lastStatusMessage : null,
-                lastDetail: state.lastDetail && typeof state.lastDetail === 'object' ? safeClone(state.lastDetail) : null
+                lastDetail: state.lastDetail && typeof state.lastDetail === 'object' ? safeClone(state.lastDetail) : null,
+                lastOutboxIssueAt: typeof state.lastOutboxIssueAt === 'string' && state.lastOutboxIssueAt ? state.lastOutboxIssueAt : null,
+                lastOutboxIssueKind: typeof state.lastOutboxIssueKind === 'string' && state.lastOutboxIssueKind ? state.lastOutboxIssueKind : null,
+                lastOutboxIssueMessage: typeof state.lastOutboxIssueMessage === 'string' && state.lastOutboxIssueMessage ? state.lastOutboxIssueMessage : null,
+                lastOutboxIssueAction: typeof state.lastOutboxIssueAction === 'string' && state.lastOutboxIssueAction ? state.lastOutboxIssueAction : null,
+                lastOutboxIssueSource: typeof state.lastOutboxIssueSource === 'string' && state.lastOutboxIssueSource ? state.lastOutboxIssueSource : null
             };
         });
 
@@ -367,9 +372,18 @@
                 : 'Online and fully connected.'
             : renewal.status === 'expired'
                 ? `Offline fallback is limited until this browser reconnects. ${renewal.message}`
-                : hasSnapshotSupport
-                    ? `Cached data is available for this module. ${renewal.message}`
+            : hasSnapshotSupport
+                ? `Cached data is available for this module. ${renewal.message}`
                     : `This module still needs the server. ${renewal.message}`;
+        const lastOutboxIssue = moduleState.lastOutboxIssueMessage
+            ? {
+                at: moduleState.lastOutboxIssueAt || null,
+                kind: moduleState.lastOutboxIssueKind || 'unknown',
+                message: moduleState.lastOutboxIssueMessage,
+                action: moduleState.lastOutboxIssueAction || null,
+                source: moduleState.lastOutboxIssueSource || null
+            }
+            : null;
 
         return {
             module: moduleName,
@@ -379,7 +393,9 @@
             canUseCachedSnapshots: hasSnapshotSupport,
             renewal,
             lastOnlineSuccess: moduleState.lastOnlineSuccess || readMeta().lastOnlineSuccess,
-            message
+            message,
+            moduleState: safeClone(moduleState) || {},
+            lastOutboxIssue
         };
     }
 
@@ -581,6 +597,44 @@
         return writeMeta(meta);
     }
 
+    function recordOutboxIssue(moduleName = 'global', detail = {}) {
+        const meta = readMeta();
+        const stamp = nowIso();
+        meta.modules[moduleName] = {
+            ...(meta.modules[moduleName] || {}),
+            lastOutboxIssueAt: stamp,
+            lastOutboxIssueKind: typeof detail.kind === 'string' && detail.kind ? detail.kind : 'unknown',
+            lastOutboxIssueMessage: typeof detail.message === 'string' && detail.message ? detail.message : null,
+            lastOutboxIssueAction: typeof detail.action === 'string' && detail.action ? detail.action : null,
+            lastOutboxIssueSource: typeof detail.source === 'string' && detail.source ? detail.source : null,
+            lastDetail: detail && typeof detail === 'object' ? safeClone(detail) : null
+        };
+        return writeMeta(meta);
+    }
+
+    function clearOutboxIssue(moduleName = 'global') {
+        const meta = readMeta();
+        const current = meta.modules && typeof meta.modules[moduleName] === 'object' ? meta.modules[moduleName] : null;
+        if (!current) return writeMeta(meta);
+
+        meta.modules[moduleName] = {
+            ...current,
+            lastOutboxIssueAt: null,
+            lastOutboxIssueKind: null,
+            lastOutboxIssueMessage: null,
+            lastOutboxIssueAction: null,
+            lastOutboxIssueSource: null,
+            lastDetail: null
+        };
+        return writeMeta(meta);
+    }
+
+    function getModuleState(moduleName = 'global') {
+        const meta = readMeta();
+        const state = meta.modules && typeof meta.modules[moduleName] === 'object' ? meta.modules[moduleName] : {};
+        return safeClone(state) || {};
+    }
+
     function importLegacyMemberProfileSnapshots() {
         if (legacyImported) return;
         legacyImported = true;
@@ -632,6 +686,9 @@
         setMeta: writeMeta,
         recordOnlineSuccess,
         recordOfflineUse,
+        recordOutboxIssue,
+        clearOutboxIssue,
+        getModuleState,
         getRenewalStatus,
         getCapabilityStatus,
         renderCapabilityNotice,

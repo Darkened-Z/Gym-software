@@ -31,6 +31,18 @@
         offlineState.recordOfflineUse(moduleName, detail);
     }
 
+    function noteOutboxIssue(moduleName, detail = {}) {
+        const offlineState = getOfflineState();
+        if (!offlineState || typeof offlineState.recordOutboxIssue !== 'function') return;
+        offlineState.recordOutboxIssue(moduleName, detail);
+    }
+
+    function clearOutboxIssue(moduleName) {
+        const offlineState = getOfflineState();
+        if (!offlineState || typeof offlineState.clearOutboxIssue !== 'function') return;
+        offlineState.clearOutboxIssue(moduleName);
+    }
+
     function getRenewalStatus() {
         const offlineState = getOfflineState();
         return offlineState ? offlineState.getRenewalStatus() : null;
@@ -107,10 +119,13 @@
         const queue = getQueue();
         const checkins = queue.filter(item => item.action === 'checkin');
         const checkouts = queue.filter(item => item.action === 'checkout');
+        const failedCount = queue.filter(item => Boolean(item.lastError)).length;
         return {
             pendingCount: queue.length,
             pendingCheckins: checkins.length,
             pendingCheckouts: checkouts.length,
+            failedCount,
+            latestError: queue.find(item => item.lastError)?.lastError || null,
             items: queue,
             persistenceMode: storageFallback ? 'session' : 'localStorage',
             online: navigator.onLine !== false
@@ -487,6 +502,9 @@
                     queue.shift();
                     replayed += 1;
                     writeStoredQueue(queue);
+                    if (!queue.some(entry => entry.lastError)) {
+                        clearOutboxIssue('attendance');
+                    }
                     window.dispatchEvent(new CustomEvent('attendance-outbox:item-replayed', {
                         detail: { item, remaining: queue.length, replayed }
                     }));
@@ -498,6 +516,12 @@
                     dropped += 1;
                     lastError = result.error || null;
                     writeStoredQueue(queue);
+                    noteOutboxIssue('attendance', {
+                        kind: 'dropped',
+                        action: item.action,
+                        source: 'flushPending',
+                        message: lastError ? lastError.message : null
+                    });
                     window.dispatchEvent(new CustomEvent('attendance-outbox:item-dropped', {
                         detail: { item, remaining: queue.length, error: lastError ? lastError.message : null }
                     }));
@@ -505,6 +529,15 @@
                 }
 
                 lastError = result.error || null;
+                item.attempts = Number.isFinite(item.attempts) ? item.attempts + 1 : 1;
+                item.lastError = lastError ? lastError.message : 'Unknown replay error';
+                writeStoredQueue(queue);
+                noteOutboxIssue('attendance', {
+                    kind: 'transient',
+                    action: item.action,
+                    source: 'flushPending',
+                    message: item.lastError
+                });
                 break;
             }
 
@@ -611,8 +644,11 @@
 
     function getMemberWriteSummary() {
         const queue = getMemberWriteQueue();
+        const failedCount = queue.filter(item => Boolean(item.lastError)).length;
         return {
             pendingCount: queue.length,
+            failedCount,
+            latestError: queue.find(item => item.lastError)?.lastError || null,
             items: queue,
             persistenceMode: memberWriteStorageFallback ? 'session' : 'localStorage',
             online: navigator.onLine !== false
@@ -734,6 +770,9 @@
                     queue.shift();
                     replayed += 1;
                     writeMemberWriteQueue(queue);
+                    if (!queue.some(entry => entry.lastError)) {
+                        clearOutboxIssue('members');
+                    }
                     window.dispatchEvent(new CustomEvent('member-write-outbox:item-replayed', {
                         detail: { item, remaining: queue.length, replayed }
                     }));
@@ -745,6 +784,12 @@
                     dropped += 1;
                     lastError = result.error || null;
                     writeMemberWriteQueue(queue);
+                    noteOutboxIssue('members', {
+                        kind: 'dropped',
+                        action: item.action,
+                        source: 'flushMemberWritePending',
+                        message: lastError ? lastError.message : null
+                    });
                     window.dispatchEvent(new CustomEvent('member-write-outbox:item-dropped', {
                         detail: { item, remaining: queue.length, error: lastError ? lastError.message : null }
                     }));
@@ -752,6 +797,15 @@
                 }
 
                 lastError = result.error || null;
+                item.attempts = Number.isFinite(item.attempts) ? item.attempts + 1 : 1;
+                item.lastError = lastError ? lastError.message : 'Unknown replay error';
+                writeMemberWriteQueue(queue);
+                noteOutboxIssue('members', {
+                    kind: 'transient',
+                    action: item.action,
+                    source: 'flushMemberWritePending',
+                    message: item.lastError
+                });
                 break;
             }
 
@@ -916,8 +970,11 @@
 
     function getPaymentQueueSummary() {
         const queue = getPaymentQueue();
+        const failedCount = queue.filter(item => Boolean(item.lastError)).length;
         return {
             pendingCount: queue.length,
+            failedCount,
+            latestError: queue.find(item => item.lastError)?.lastError || null,
             items: queue,
             persistenceMode: paymentStorageFallback ? 'session' : 'localStorage',
             online: navigator.onLine !== false
@@ -1039,6 +1096,9 @@
                     queue.shift();
                     replayed += 1;
                     writePaymentQueue(queue);
+                    if (!queue.some(entry => entry.lastError)) {
+                        clearOutboxIssue('payments');
+                    }
                     window.dispatchEvent(new CustomEvent('payment-outbox:item-replayed', {
                         detail: { item, remaining: queue.length, replayed }
                     }));
@@ -1050,6 +1110,12 @@
                     dropped += 1;
                     lastError = result.error || null;
                     writePaymentQueue(queue);
+                    noteOutboxIssue('payments', {
+                        kind: 'dropped',
+                        action: item.action,
+                        source: 'flushPaymentPending',
+                        message: lastError ? lastError.message : null
+                    });
                     window.dispatchEvent(new CustomEvent('payment-outbox:item-dropped', {
                         detail: { item, remaining: queue.length, error: lastError ? lastError.message : null }
                     }));
@@ -1057,6 +1123,15 @@
                 }
 
                 lastError = result.error || null;
+                item.attempts = Number.isFinite(item.attempts) ? item.attempts + 1 : 1;
+                item.lastError = lastError ? lastError.message : 'Unknown replay error';
+                writePaymentQueue(queue);
+                noteOutboxIssue('payments', {
+                    kind: 'transient',
+                    action: item.action,
+                    source: 'flushPaymentPending',
+                    message: item.lastError
+                });
                 break;
             }
 
