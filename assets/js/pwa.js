@@ -336,6 +336,10 @@
         }
     }
 
+    function isConflictResponse(response) {
+        return Boolean(response && (response.status === 409 || response.status === 412));
+    }
+
     function queueAttendanceAction(action, payload, meta = {}) {
         const normalizedPayload = safeClone(payload) || {};
         const queue = getQueue();
@@ -620,6 +624,8 @@
             createdAt: typeof item.createdAt === 'string' && item.createdAt ? item.createdAt : new Date().toISOString(),
             attempts: Number.isFinite(item.attempts) ? item.attempts : 0,
             lastError: typeof item.lastError === 'string' ? item.lastError : null,
+            lastErrorKind: typeof item.lastErrorKind === 'string' ? item.lastErrorKind : null,
+            lastErrorStatus: Number.isFinite(item.lastErrorStatus) ? item.lastErrorStatus : null,
             dedupeKey: typeof item.dedupeKey === 'string' && item.dedupeKey ? item.dedupeKey : buildMemberWriteDedupeKey(action, payload),
             source: typeof item.source === 'string' && item.source ? item.source : 'member-write-outbox'
         };
@@ -648,6 +654,7 @@
         return {
             pendingCount: queue.length,
             failedCount,
+            conflictCount: queue.filter(item => item.lastErrorKind === 'conflict').length,
             latestError: queue.find(item => item.lastError)?.lastError || null,
             items: queue,
             persistenceMode: memberWriteStorageFallback ? 'session' : 'localStorage',
@@ -664,6 +671,8 @@
         if (existing) {
             existing.payload = normalizedPayload;
             existing.lastError = null;
+            existing.lastErrorKind = null;
+            existing.lastErrorStatus = null;
             existing.attempts = 0;
             writeMemberWriteQueue(queue);
             window.dispatchEvent(new CustomEvent('member-write-outbox:queued', {
@@ -679,6 +688,8 @@
             createdAt: new Date().toISOString(),
             attempts: 0,
             lastError: null,
+            lastErrorKind: null,
+            lastErrorStatus: null,
             dedupeKey,
             source: typeof meta.source === 'string' && meta.source ? meta.source : 'member-write-outbox'
         });
@@ -709,6 +720,14 @@
             if (response.ok && data && data.success) {
                 noteOnlineSuccess('members', { action: item.action, source: 'flushMemberWritePending' });
                 return { completed: true, data };
+            }
+
+            if (isConflictResponse(response)) {
+                return {
+                    conflict: true,
+                    status: response.status,
+                    error: new Error((data && data.message) || `Member conflict (${response.status})`)
+                };
             }
 
             if (!response.ok && response.status >= 500) {
@@ -753,6 +772,7 @@
 
             let replayed = 0;
             let dropped = 0;
+            let conflicts = 0;
             let lastError = null;
 
             window.dispatchEvent(new CustomEvent('member-write-outbox:flush-start', {
@@ -779,6 +799,26 @@
                     continue;
                 }
 
+                if (result.conflict) {
+                    lastError = result.error || null;
+                    conflicts += 1;
+                    item.attempts = Number.isFinite(item.attempts) ? item.attempts + 1 : 1;
+                    item.lastError = lastError ? lastError.message : 'Conflict detected';
+                    item.lastErrorKind = 'conflict';
+                    item.lastErrorStatus = Number.isFinite(result.status) ? result.status : null;
+                    writeMemberWriteQueue(queue);
+                    noteOutboxIssue('members', {
+                        kind: 'conflict',
+                        action: item.action,
+                        source: 'flushMemberWritePending',
+                        message: item.lastError
+                    });
+                    window.dispatchEvent(new CustomEvent('member-write-outbox:item-conflict', {
+                        detail: { item, remaining: queue.length, error: item.lastError, status: item.lastErrorStatus }
+                    }));
+                    break;
+                }
+
                 if (result.dropItem) {
                     queue.shift();
                     dropped += 1;
@@ -799,6 +839,8 @@
                 lastError = result.error || null;
                 item.attempts = Number.isFinite(item.attempts) ? item.attempts + 1 : 1;
                 item.lastError = lastError ? lastError.message : 'Unknown replay error';
+                item.lastErrorKind = 'transient';
+                item.lastErrorStatus = Number.isFinite(result.status) ? result.status : null;
                 writeMemberWriteQueue(queue);
                 noteOutboxIssue('members', {
                     kind: 'transient',
@@ -814,6 +856,7 @@
                 detail: {
                     replayed,
                     dropped,
+                    conflicts,
                     remaining: summary.pendingCount,
                     error: lastError ? lastError.message : null
                 }
@@ -823,6 +866,7 @@
                 success: summary.pendingCount === 0 && !lastError,
                 replayed,
                 dropped,
+                conflicts,
                 remaining: summary.pendingCount,
                 error: lastError
             };
@@ -943,6 +987,8 @@
             createdAt: typeof item.createdAt === 'string' && item.createdAt ? item.createdAt : new Date().toISOString(),
             attempts: Number.isFinite(item.attempts) ? item.attempts : 0,
             lastError: typeof item.lastError === 'string' ? item.lastError : null,
+            lastErrorKind: typeof item.lastErrorKind === 'string' ? item.lastErrorKind : null,
+            lastErrorStatus: Number.isFinite(item.lastErrorStatus) ? item.lastErrorStatus : null,
             dedupeKey: typeof item.dedupeKey === 'string' && item.dedupeKey ? item.dedupeKey : buildPaymentDedupeKey(payload),
             source: typeof item.source === 'string' && item.source ? item.source : 'payment-outbox'
         };
@@ -974,6 +1020,7 @@
         return {
             pendingCount: queue.length,
             failedCount,
+            conflictCount: queue.filter(item => item.lastErrorKind === 'conflict').length,
             latestError: queue.find(item => item.lastError)?.lastError || null,
             items: queue,
             persistenceMode: paymentStorageFallback ? 'session' : 'localStorage',
@@ -990,6 +1037,8 @@
         if (existing) {
             existing.payload = normalizedPayload;
             existing.lastError = null;
+            existing.lastErrorKind = null;
+            existing.lastErrorStatus = null;
             existing.attempts = 0;
             writePaymentQueue(queue);
             window.dispatchEvent(new CustomEvent('payment-outbox:queued', {
@@ -1005,6 +1054,8 @@
             createdAt: new Date().toISOString(),
             attempts: 0,
             lastError: null,
+            lastErrorKind: null,
+            lastErrorStatus: null,
             dedupeKey,
             source: typeof meta.source === 'string' && meta.source ? meta.source : 'payment-outbox'
         });
@@ -1035,6 +1086,14 @@
             if (response.ok && data && data.success) {
                 noteOnlineSuccess('payments', { action: 'create', source: 'flushPending' });
                 return { completed: true, data };
+            }
+
+            if (isConflictResponse(response)) {
+                return {
+                    conflict: true,
+                    status: response.status,
+                    error: new Error((data && data.message) || `Payment conflict (${response.status})`)
+                };
             }
 
             if (!response.ok && response.status >= 500) {
@@ -1079,6 +1138,7 @@
 
             let replayed = 0;
             let dropped = 0;
+            let conflicts = 0;
             let lastError = null;
 
             window.dispatchEvent(new CustomEvent('payment-outbox:flush-start', {
@@ -1105,6 +1165,26 @@
                     continue;
                 }
 
+                if (result.conflict) {
+                    lastError = result.error || null;
+                    conflicts += 1;
+                    item.attempts = Number.isFinite(item.attempts) ? item.attempts + 1 : 1;
+                    item.lastError = lastError ? lastError.message : 'Conflict detected';
+                    item.lastErrorKind = 'conflict';
+                    item.lastErrorStatus = Number.isFinite(result.status) ? result.status : null;
+                    writePaymentQueue(queue);
+                    noteOutboxIssue('payments', {
+                        kind: 'conflict',
+                        action: 'create',
+                        source: 'flushPaymentPending',
+                        message: item.lastError
+                    });
+                    window.dispatchEvent(new CustomEvent('payment-outbox:item-conflict', {
+                        detail: { item, remaining: queue.length, error: item.lastError, status: item.lastErrorStatus }
+                    }));
+                    break;
+                }
+
                 if (result.dropItem) {
                     queue.shift();
                     dropped += 1;
@@ -1125,10 +1205,12 @@
                 lastError = result.error || null;
                 item.attempts = Number.isFinite(item.attempts) ? item.attempts + 1 : 1;
                 item.lastError = lastError ? lastError.message : 'Unknown replay error';
+                item.lastErrorKind = 'transient';
+                item.lastErrorStatus = Number.isFinite(result.status) ? result.status : null;
                 writePaymentQueue(queue);
                 noteOutboxIssue('payments', {
                     kind: 'transient',
-                    action: item.action,
+                    action: 'create',
                     source: 'flushPaymentPending',
                     message: item.lastError
                 });
@@ -1140,6 +1222,7 @@
                 detail: {
                     replayed,
                     dropped,
+                    conflicts,
                     remaining: summary.pendingCount,
                     error: lastError ? lastError.message : null
                 }
@@ -1149,6 +1232,7 @@
                 success: summary.pendingCount === 0 && !lastError,
                 replayed,
                 dropped,
+                conflicts,
                 remaining: summary.pendingCount,
                 error: lastError
             };

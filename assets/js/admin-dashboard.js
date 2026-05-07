@@ -5979,6 +5979,168 @@ function formatOfflineOutboxAge(createdAt) {
     return `${hours} hours ago`;
 }
 
+function formatOutboxReviewValue(value, type = 'text') {
+    if (value === null || value === undefined || value === '') {
+        return '—';
+    }
+
+    if (type === 'money') {
+        const amount = Number(value);
+        if (Number.isFinite(amount)) {
+            return escapeSyncHtml(typeof Utils !== 'undefined' && Utils.formatCurrency ? Utils.formatCurrency(amount) : amount.toFixed(2));
+        }
+    }
+
+    return escapeSyncHtml(value);
+}
+
+function renderOutboxReviewTable(title, sourceLabel, rows, note = '') {
+    const rowHtml = rows.map(row => {
+        const queuedValue = formatOutboxReviewValue(row.queued, row.type);
+        const currentValue = formatOutboxReviewValue(row.current, row.type);
+        const differs = row.compare !== false && queuedValue !== currentValue;
+        const queuedStyle = differs ? 'color:#92400e;font-weight:700;' : 'color:#14291c;';
+        const currentStyle = differs ? 'color:#7f1d1d;font-weight:700;' : 'color:#14291c;';
+
+        return `
+            <tr>
+                <td style="padding:0.5rem 0.6rem;border-top:1px solid rgba(148,163,184,0.15);font-weight:700;color:#334155;vertical-align:top;">${escapeSyncHtml(row.label)}</td>
+                <td style="padding:0.5rem 0.6rem;border-top:1px solid rgba(148,163,184,0.15);${queuedStyle}vertical-align:top;">${queuedValue}</td>
+                <td style="padding:0.5rem 0.6rem;border-top:1px solid rgba(148,163,184,0.15);${currentStyle}vertical-align:top;">${currentValue}</td>
+            </tr>
+        `;
+    }).join('');
+
+    return `
+        <div style="margin-top:0.75rem;padding:0.9rem;border-radius:10px;background:#f8fafc;border:1px solid #cbd5e1;">
+            <div style="display:flex;justify-content:space-between;gap:0.75rem;flex-wrap:wrap;align-items:center;">
+                <div>
+                    <strong style="color:#0f172a;">${escapeSyncHtml(title)}</strong>
+                    <div style="margin-top:0.2rem;color:#475569;font-size:0.9rem;">${escapeSyncHtml(sourceLabel)}</div>
+                </div>
+                <span style="padding:0.28rem 0.6rem;border-radius:999px;background:#ecfdf3;color:#166534;font-size:0.8rem;font-weight:700;">Read only</span>
+            </div>
+            ${note ? `<div style="margin-top:0.45rem;color:#7c2d12;font-size:0.9rem;">${escapeSyncHtml(note)}</div>` : ''}
+            <div style="overflow:auto;margin-top:0.75rem;">
+                <table style="width:100%;border-collapse:collapse;font-size:0.92rem;">
+                    <thead>
+                        <tr>
+                            <th style="text-align:left;padding:0.5rem 0.6rem;color:#334155;">Field</th>
+                            <th style="text-align:left;padding:0.5rem 0.6rem;color:#334155;">Queued edit</th>
+                            <th style="text-align:left;padding:0.5rem 0.6rem;color:#334155;">Current record</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rowHtml}</tbody>
+                </table>
+            </div>
+            <div style="margin-top:0.6rem;color:#7c2d12;font-size:0.88rem;">No auto-merge or delete action is available from this view.</div>
+        </div>
+    `;
+}
+
+function buildOutboxConflictRows(moduleKey, item, liveRecord = null) {
+    const payload = item?.payload || {};
+    const current = liveRecord && typeof liveRecord === 'object' ? liveRecord : {};
+
+    if (moduleKey === 'members') {
+        return {
+            title: `Member edit • ${payload.member_code || item.action || 'unknown'}`,
+            note: 'Compare the queued member mutation with the current member record before retrying.',
+            rows: [
+                { label: 'Record ID', queued: payload.id || item.id, current: current.id || '—', compare: false },
+                { label: 'Member code', queued: payload.member_code, current: current.member_code },
+                { label: 'Name', queued: payload.name, current: current.name },
+                { label: 'Phone', queued: payload.phone, current: current.phone },
+                { label: 'Join date', queued: payload.join_date, current: current.join_date || current.admission_date },
+                { label: 'Membership type', queued: payload.membership_type, current: current.membership_type },
+                { label: 'Status', queued: payload.status, current: current.status || current.calculated_status },
+                { label: 'Expected updated at', queued: payload.expected_updated_at, current: current.updated_at },
+                { label: 'Total due amount', queued: payload.total_due_amount, current: current.total_due_amount, type: 'money' }
+            ]
+        };
+    }
+
+    if (moduleKey === 'payments') {
+        return {
+            title: `Payment record • ${payload.member_code || payload.member_id || item.action || 'unknown'}`,
+            note: 'Compare the queued payment with the current member balance and timestamp before retrying.',
+            rows: [
+                { label: 'Payment ID', queued: payload.id || item.id, current: current.id || '—', compare: false },
+                { label: 'Member code', queued: payload.member_code, current: current.member_code },
+                { label: 'Member name', queued: payload.member_name, current: current.name },
+                { label: 'Amount', queued: payload.amount, current: null, type: 'money', compare: false },
+                { label: 'Payment date', queued: payload.payment_date, current: null, compare: false },
+                { label: 'Payment method', queued: payload.payment_method, current: null, compare: false },
+                { label: 'Invoice number', queued: payload.invoice_number, current: null, compare: false },
+                { label: 'Status', queued: payload.status, current: null, compare: false },
+                { label: 'Expected updated at', queued: payload.expected_updated_at, current: current.updated_at },
+                { label: 'Expected due amount', queued: payload.expected_total_due_amount, current: current.total_due_amount, type: 'money' }
+            ]
+        };
+    }
+
+    return {
+        title: 'Conflict review',
+        note: 'No compare data is available for this item.',
+        rows: []
+    };
+}
+
+async function loadOutboxConflictReview(moduleKey, itemId) {
+    const container = document.getElementById(`outbox-conflict-review-${moduleKey}-${itemId}`);
+    if (!container) return;
+
+    const moduleState = getOfflineOutboxModuleState(moduleKey);
+    const summary = moduleState.summary || {};
+    const items = Array.isArray(summary.items) ? summary.items : [];
+    const item = items.find(entry => String(entry.id) === String(itemId));
+    if (!item) {
+        container.style.display = 'block';
+        container.innerHTML = '<div style="color:#b91c1c;">Queued item not found.</div>';
+        return;
+    }
+
+    const payload = item.payload || {};
+    const memberCode = String(payload.member_code || '').trim();
+    container.style.display = 'block';
+    container.innerHTML = '<div class="loading">Loading read-only compare…</div>';
+
+    let liveRecord = null;
+    let sourceLabel = 'Current live record';
+
+    if (memberCode) {
+        if (Utils.isOnline() && typeof lookupMemberByCodeAcrossGenders === 'function') {
+            try {
+                const lookup = await lookupMemberByCodeAcrossGenders(memberCode);
+                if (lookup && lookup.success && lookup.data) {
+                    liveRecord = lookup.data;
+                    sourceLabel = `Live record (${lookup.gender || 'current'})`;
+                }
+            } catch (error) {
+                console.error('Conflict compare lookup failed:', error);
+            }
+        }
+
+        if (!liveRecord && typeof getCachedMemberProfileSnapshot === 'function') {
+            const cachedSnapshot = getCachedMemberProfileSnapshot(memberCode);
+            if (cachedSnapshot && cachedSnapshot.profile) {
+                liveRecord = cachedSnapshot.profile;
+                sourceLabel = `Cached snapshot (${cachedSnapshot.gender || 'member'})`;
+            }
+        }
+    }
+
+    const review = buildOutboxConflictRows(moduleKey, item, liveRecord);
+    if (!liveRecord) {
+        sourceLabel = 'No live record available; showing queued payload only.';
+    }
+    if (moduleKey === 'payments' && !liveRecord) {
+        review.note = `${review.note} Live member data was not available, so only the queued payment is shown.`;
+    }
+
+    container.innerHTML = renderOutboxReviewTable(review.title, sourceLabel, review.rows, review.note);
+}
+
 function getOfflineOutboxModuleState(moduleKey) {
     const offlineState = window.OfflineState && typeof window.OfflineState.getModuleState === 'function'
         ? window.OfflineState.getModuleState(moduleKey)
@@ -6049,12 +6211,27 @@ function renderOfflineOutboxModuleCard(moduleKey) {
     const items = Array.isArray(summary.items) ? summary.items : [];
     const pendingCount = Number(summary.pendingCount || 0);
     const failedCount = Number(summary.failedCount || items.filter(item => item.lastError).length || 0);
+    const conflictItems = items.filter(item => item.lastErrorKind === 'conflict');
+    const conflictCount = Number(summary.conflictCount || conflictItems.length || 0);
     const online = summary.online !== false && Utils.isOnline();
     const retryDisabled = !online || !moduleState.retry;
     const retryButton = `<button type="button" class="btn btn-primary" ${retryDisabled ? 'disabled' : ''} onclick="retryOfflineOutboxModule('${moduleKey}')">Retry now</button>`;
     const latestIssue = moduleState.issue;
+    const latestIssueColor = latestIssue
+        ? latestIssue.kind === 'conflict' || latestIssue.kind === 'dropped'
+            ? '#991b1b'
+            : '#b45309'
+        : '#b45309';
+    const visibleItemIds = new Set(items.slice(0, 3).map(item => String(item.id)));
     const itemRows = items.slice(0, 3).map(item => {
-        const itemError = item.lastError ? `<div style="margin-top:0.35rem;color:#b91c1c;">${escapeSyncHtml(item.lastError)}</div>` : '';
+        const hasConflict = item.lastErrorKind === 'conflict';
+        const itemError = item.lastError ? `<div style="margin-top:0.35rem;color:${hasConflict ? '#991b1b' : '#b91c1c'};">${escapeSyncHtml(item.lastError)}${item.lastErrorStatus ? ` <span style="font-size:0.82rem;">(HTTP ${Number(item.lastErrorStatus)})</span>` : ''}</div>` : '';
+        const reviewButton = hasConflict && (moduleKey === 'members' || moduleKey === 'payments')
+            ? `<button type="button" class="btn btn-secondary" style="margin-top:0.5rem;" onclick="loadOutboxConflictReview('${moduleKey}', '${item.id}')">Review compare</button>`
+            : '';
+        const reviewPanel = hasConflict && (moduleKey === 'members' || moduleKey === 'payments')
+            ? `<div id="outbox-conflict-review-${moduleKey}-${item.id}" style="display:none;"></div>`
+            : '';
         return `
             <div style="padding:0.75rem 0;border-top:1px solid rgba(148,163,184,0.18);">
                 <div style="display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;align-items:center;">
@@ -6063,27 +6240,50 @@ function renderOfflineOutboxModuleCard(moduleKey) {
                 </div>
                 <div style="margin-top:0.25rem;color:#64748b;font-size:0.9rem;">Source: ${escapeSyncHtml(item.source || 'outbox')}</div>
                 ${itemError}
+                ${hasConflict ? '<div style="margin-top:0.35rem;color:#7c2d12;font-size:0.9rem;font-weight:700;">Conflict retained for manual review.</div>' : ''}
+                ${reviewButton}
+                ${reviewPanel}
             </div>
         `;
     }).join('');
+    const conflictReviewRows = conflictItems
+        .filter(item => !visibleItemIds.has(String(item.id)))
+        .slice(0, 5)
+        .map(item => `
+        <div style="padding:0.8rem 0;border-top:1px solid rgba(148,163,184,0.18);">
+            <div style="display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;align-items:center;">
+                <strong style="color:#7c2d12;">${escapeSyncHtml(item.action || 'item')} • ${escapeSyncHtml(formatOfflineOutboxAge(item.createdAt))}</strong>
+                <span style="font-size:0.85rem;color:#7c2d12;">${item.lastErrorStatus ? `HTTP ${Number(item.lastErrorStatus)}` : 'Conflict'}</span>
+            </div>
+            <div style="margin-top:0.25rem;color:#7c2d12;font-size:0.9rem;">${escapeSyncHtml(item.lastError || 'Conflict needs review')}</div>
+            ${(moduleKey === 'members' || moduleKey === 'payments') ? `<button type="button" class="btn btn-secondary" style="margin-top:0.5rem;" onclick="loadOutboxConflictReview('${moduleKey}', '${item.id}')">Review compare</button><div id="outbox-conflict-review-${moduleKey}-${item.id}" style="display:none;"></div>` : ''}
+        </div>
+    `).join('');
 
     return `
         <div style="padding:1rem 1.15rem;border:1px solid ${pendingCount > 0 ? '#f59e0b' : '#bbf7d0'};border-radius:12px;background:${pendingCount > 0 ? '#fffbeb' : '#f8fafc'};">
             <div style="display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;align-items:flex-start;">
                 <div>
                     <div style="font-size:0.82rem;text-transform:uppercase;letter-spacing:0.08em;color:#166534;font-weight:700;">${escapeSyncHtml(moduleState.label)}</div>
-                    <h4 style="margin:0.35rem 0 0;">${pendingCount} pending${failedCount ? `, ${failedCount} with errors` : ''}</h4>
-                    <p style="margin:0.45rem 0 0;color:#475569;">${summary.persistenceMode === 'session' ? 'Session-only queue.' : 'Stored locally until replay.'}</p>
-                    ${latestIssue ? `<p style="margin:0.35rem 0 0;color:${latestIssue.kind === 'dropped' ? '#991b1b' : '#b45309'};">Last issue: ${escapeSyncHtml(latestIssue.message || 'Unknown error')}</p>` : ''}
+                    <h4 style="margin:0.35rem 0 0;">${pendingCount} pending${failedCount ? `, ${failedCount} with errors` : ''}${conflictCount ? `, ${conflictCount} need review` : ''}</h4>
+                    <p style="margin:0.45rem 0 0;color:#475569;">${summary.persistenceMode === 'session' ? 'Session-only queue.' : 'Stored locally until replay.'}${conflictCount ? ' Conflicting edits stay queued until you review them.' : ''}</p>
+                    ${latestIssue ? `<p style="margin:0.35rem 0 0;color:${latestIssueColor};">Last issue: ${escapeSyncHtml(latestIssue.message || 'Unknown error')}</p>` : ''}
                 </div>
                 <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.5rem;">
-                    <span style="padding:0.35rem 0.7rem;border-radius:999px;background:${pendingCount > 0 ? '#fef3c7' : '#dcfce7'};color:${pendingCount > 0 ? '#92400e' : '#166534'};font-weight:700;">${pendingCount} pending</span>
+                    <span style="padding:0.35rem 0.7rem;border-radius:999px;background:${pendingCount > 0 ? '#fef3c7' : '#dcfce7'};color:${pendingCount > 0 ? '#92400e' : '#166534'};font-weight:700;">${pendingCount} pending${conflictCount ? ` • ${conflictCount} review` : ''}</span>
                     ${retryButton}
                 </div>
             </div>
             <div style="margin-top:0.9rem;">
                 ${items.length ? itemRows : '<div style="color:#64748b;">No queued items right now.</div>'}
             </div>
+            ${conflictCount ? `
+            <div style="margin-top:1rem;padding-top:0.75rem;border-top:1px solid rgba(148,163,184,0.18);">
+                <strong style="color:#7c2d12;">Conflict review queue</strong>
+                <p style="margin:0.35rem 0 0;color:#7c2d12;font-size:0.9rem;">These queued edits need a human compare step before retrying.</p>
+                ${conflictReviewRows || '<div style="margin-top:0.5rem;color:#64748b;">Conflict items are already shown above.</div>'}
+                ${conflictItems.length > 5 ? `<div style="margin-top:0.5rem;color:#7c2d12;font-size:0.88rem;">... and ${conflictItems.length - 5} more conflict${conflictItems.length - 5 === 1 ? '' : 's'} pending review.</div>` : ''}
+            </div>` : ''}
         </div>
     `;
 }
@@ -6099,7 +6299,7 @@ function loadOfflineOutbox() {
             <div style="display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;align-items:center;">
                 <div>
                     <h3 style="margin:0;">Offline outbox</h3>
-                    <p style="margin:0.35rem 0 0;color:#475569;">Queued attendance, member, and payment writes live here. Nothing is auto-resolved.</p>
+                    <p style="margin:0.35rem 0 0;color:#475569;">Queued attendance, member, and payment writes live here. Conflicting member/payment edits stay queued for read-only review. Nothing is auto-resolved.</p>
                 </div>
                 <button type="button" class="btn btn-secondary" ${retryAllDisabled ? 'disabled' : ''} onclick="retryAllOfflineOutbox()">Retry all</button>
             </div>
