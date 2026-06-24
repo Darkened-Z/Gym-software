@@ -1,0 +1,8 @@
+# Force LF line endings on files that must run on Linux servers.
+# Without this, Windows checkouts pick up CRLF and shell scripts
+# fail with "bad interpreter" errors on the VPS.
+*.sh           text eol=lf
+*.conf         text eol=lf
+*.template     text eol=lf
+*.php          text eol=lf
+*.sql          text eol=lf
