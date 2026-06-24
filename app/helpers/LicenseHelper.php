@@ -26,7 +26,61 @@ class LicenseHelper {
             return false;
         }
     }
-    
+
+    /**
+     * Make sure the subscription column exists (self-heal on installs that
+     * predate the monthly-billing feature). MySQL has no ADD COLUMN IF NOT
+     * EXISTS, so check information_schema first.
+     */
+    public function ensureExpiryColumn() {
+        try {
+            $stmt = $this->conn->query("SHOW COLUMNS FROM system_license LIKE 'expires_at'");
+            if ($stmt && $stmt->rowCount() === 0) {
+                $this->conn->exec("ALTER TABLE system_license ADD COLUMN expires_at DATETIME NULL");
+            }
+        } catch (Exception $e) {
+            error_log('LicenseHelper::ensureExpiryColumn: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Subscription status for the active license.
+     * Returns: activated(bool), expires_at(?string), expired(bool),
+     * days_left(?int), valid(bool = activated && not expired).
+     * expires_at = NULL means "no expiry set" (grandfathered / unlimited).
+     * Fails OPEN (valid) on errors so a transient DB hiccup never locks a gym.
+     */
+    public function getStatus() {
+        $this->ensureExpiryColumn();
+        try {
+            $stmt = $this->conn->query("SELECT is_active, expires_at FROM system_license WHERE is_active = 1 ORDER BY id DESC LIMIT 1");
+            $row = $stmt ? $stmt->fetch() : null;
+            if (!$row) {
+                return ['activated' => false, 'expires_at' => null, 'expired' => false, 'days_left' => null, 'valid' => false];
+            }
+            $expires = $row['expires_at'] ?? null;
+            $expired = ($expires !== null && $expires !== '') && strtotime($expires) < time();
+            $daysLeft = ($expires !== null && $expires !== '') ? (int) ceil((strtotime($expires) - time()) / 86400) : null;
+            return [
+                'activated' => true,
+                'expires_at' => $expires,
+                'expired' => $expired,
+                'days_left' => $daysLeft,
+                'valid' => !$expired,
+            ];
+        } catch (Exception $e) {
+            error_log('LicenseHelper::getStatus: ' . $e->getMessage());
+            // Fail open — do not lock a gym out on an unexpected error.
+            return ['activated' => true, 'expires_at' => null, 'expired' => false, 'days_left' => null, 'valid' => true];
+        }
+    }
+
+    /** Activated AND not expired. */
+    public function isLicenseValid() {
+        $s = $this->getStatus();
+        return $s['activated'] && $s['valid'];
+    }
+
     /**
      * Get server fingerprint (unique identifier for this server)
      */

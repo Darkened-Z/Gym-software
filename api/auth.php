@@ -13,15 +13,26 @@ require_once __DIR__ . '/../app/services/AttendanceWriteService.php';
 
 header('Content-Type: application/json');
 
-// Check system activation for admin operations
+// Enforce the license: must be activated AND not past its subscription expiry.
+// Used to gate login (staff + member) and the session check — a full lockout.
 function checkSystemActivation($db) {
     $licenseHelper = new LicenseHelper($db);
-    if (!$licenseHelper->isSystemActivated()) {
+    $status = $licenseHelper->getStatus();
+    if (!$status['activated']) {
         http_response_code(403);
         echo json_encode([
             'success' => false,
             'message' => 'System not activated. Please run setup.php to activate the system.',
             'error_code' => 'SYSTEM_NOT_ACTIVATED'
+        ]);
+        exit;
+    }
+    if ($status['expired']) {
+        http_response_code(403);
+        echo json_encode([
+            'success' => false,
+            'message' => 'This gym\'s subscription has expired. Please contact your provider to renew.',
+            'error_code' => 'SUBSCRIPTION_EXPIRED'
         ]);
         exit;
     }
@@ -138,7 +149,9 @@ try {
                         ]);
                     }
                 } elseif (!empty($memberCode)) {
-                    // Member login
+                    // Member login — also blocked when the subscription has expired.
+                    checkSystemActivation($db);
+
                     $memberMen = new Member($db, 'men');
                     $memberWomen = new Member($db, 'women');
                     
@@ -247,11 +260,10 @@ try {
 
         case 'check':
             if (isset($_SESSION['role'])) {
-                // For admin/staff dashboard access, verify system is activated
-                if (in_array($_SESSION['role'], ['admin', 'staff'], true)) {
-                    checkSystemActivation($db);
-                }
-                
+                // Verify the subscription is active for ANY logged-in role —
+                // an expired gym kicks staff and members alike on next load.
+                checkSystemActivation($db);
+
                 $response = [
                     'authenticated' => true,
                     'role' => $_SESSION['role']
@@ -272,6 +284,21 @@ try {
                 echo json_encode([
                     'authenticated' => false
                 ]);
+            }
+            break;
+
+        case 'license_status':
+            // Public, non-sensitive: lets the login page show a lockout notice.
+            try {
+                $st = (new LicenseHelper($db))->getStatus();
+                echo json_encode([
+                    'success' => true,
+                    'activated' => $st['activated'],
+                    'expired' => $st['expired'],
+                    'days_left' => $st['days_left']
+                ]);
+            } catch (Exception $e) {
+                echo json_encode(['success' => true, 'activated' => true, 'expired' => false, 'days_left' => null]);
             }
             break;
 
