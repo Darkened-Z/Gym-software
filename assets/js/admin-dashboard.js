@@ -285,7 +285,7 @@ function switchSection(section) {
         'payments': 'Payments',
         'due-fees': 'Members Who Need to Pay',
         'expenses': 'Money Spent',
-        'packages': 'Packages',
+        'details': 'Details',
         'reports': 'Reports',
         'staff': 'Staff',
         'activity-log': 'Activity Log',
@@ -343,8 +343,8 @@ function loadSection(section) {
         case 'expenses':
             loadExpenses();
             break;
-        case 'packages':
-            loadPackages();
+        case 'details':
+            loadDetails();
             break;
         case 'reports':
             loadReports();
@@ -7316,5 +7316,112 @@ function deletePackage(id) {
         .catch(err => {
             console.error('Package delete error:', err);
             Utils.showNotification('Error deleting package', 'error');
+        });
+}
+
+/* ===================== Details (gym info + socials + packages) ===================== */
+function loadDetails() {
+    const contentBody = document.getElementById('contentBody');
+    if (!contentBody) return;
+    contentBody.innerHTML = `
+        <div id="detailsSettingsContainer"><div class="loading">Loading gym details…</div></div>
+        <div class="section-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;margin:2rem 0 1rem;">
+            <div>
+                <h2 style="margin:0;">Membership Packages</h2>
+                <p style="margin:.25rem 0 0;color:var(--text-secondary);">The plans your gym sells — monthly and any others.</p>
+            </div>
+            ${isAdminUser() ? '<button class="btn btn-primary" onclick="showAddPackageForm()">+ Add Package</button>' : ''}
+        </div>
+        <div id="packagesTableContainer"><div class="loading">Loading packages…</div></div>
+    `;
+    loadDetailsSettings();
+    loadPackagesTable();
+}
+
+function loadDetailsSettings() {
+    fetch('api/settings.php?action=admin_get')
+        .then(async res => {
+            if (!res.ok) throw new Error('Failed to load details');
+            return JSON.parse(await res.text());
+        })
+        .then(data => {
+            if (data.success) renderDetailsSettings(data.data || {});
+            else Utils.showNotification(data.message || 'Failed to load gym details', 'error');
+        })
+        .catch(err => {
+            console.error('Details load error:', err);
+            const c = document.getElementById('detailsSettingsContainer');
+            if (c) c.innerHTML = '<div class="error">Could not load gym details.</div>';
+        });
+}
+
+function renderDetailsSettings(s) {
+    const c = document.getElementById('detailsSettingsContainer');
+    if (!c) return;
+    const admin = isAdminUser();
+    const dis = admin ? '' : 'disabled';
+    const field = (id, label, val, ph, type) => `
+        <div class="form-group">
+            <label>${label}</label>
+            <input type="${type || 'text'}" id="${id}" value="${packageEscHtml(val || '')}" placeholder="${ph || ''}" ${dis}>
+        </div>`;
+    c.innerHTML = `
+      <div class="dashboard-recent" style="padding:1.25rem;">
+        <h2 style="margin:0 0 .25rem;">Gym Details &amp; Social Links</h2>
+        <p style="color:var(--text-secondary);margin:0 0 1rem;">${admin ? 'These appear in your gym’s public footer. Only admin can change them.' : 'Only admin can change these.'}</p>
+        <div class="form-row">
+            ${field('set_gym_name', 'Gym Name', s.gym_name, 'Bhatti Gym')}
+            ${field('set_phone', 'Phone', s.phone, '0300 1234567', 'tel')}
+        </div>
+        <div class="form-row">
+            ${field('set_email', 'Email', s.email, 'gym@example.com', 'email')}
+            ${field('set_address_url', 'Google Maps Link', s.address_url, 'https://maps.app.goo.gl/…', 'url')}
+        </div>
+        <div class="form-row">
+            ${field('set_social_whatsapp', 'WhatsApp Link', s.social_whatsapp, 'https://whatsapp.com/channel/…', 'url')}
+            ${field('set_social_youtube', 'YouTube Link', s.social_youtube, 'https://youtube.com/@…', 'url')}
+        </div>
+        <div class="form-row">
+            ${field('set_social_facebook', 'Facebook Link', s.social_facebook, 'https://facebook.com/…', 'url')}
+            ${field('set_social_instagram', 'Instagram Link', s.social_instagram, 'https://instagram.com/…', 'url')}
+        </div>
+        <div class="form-row">
+            ${field('set_social_snapchat', 'Snapchat Link', s.social_snapchat, 'https://snapchat.com/add/…', 'url')}
+            ${field('set_social_tiktok', 'TikTok Link', s.social_tiktok, 'https://tiktok.com/@…', 'url')}
+        </div>
+        ${admin ? '<button class="btn btn-primary" onclick="saveDetailsSettings()">Save Details</button>' : ''}
+      </div>`;
+}
+
+function saveDetailsSettings() {
+    if (!requireAdminAccess('change gym details')) return;
+    const val = id => { const e = document.getElementById(id); return e ? e.value.trim() : ''; };
+    const payload = {
+        gym_name: val('set_gym_name'),
+        phone: val('set_phone'),
+        email: val('set_email'),
+        address_url: val('set_address_url'),
+        social_whatsapp: val('set_social_whatsapp'),
+        social_youtube: val('set_social_youtube'),
+        social_facebook: val('set_social_facebook'),
+        social_instagram: val('set_social_instagram'),
+        social_snapchat: val('set_social_snapchat'),
+        social_tiktok: val('set_social_tiktok')
+    };
+    fetch('api/settings.php?action=save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    })
+        .then(async res => {
+            if (!res.ok) throw new Error('Failed to save details');
+            return JSON.parse(await res.text());
+        })
+        .then(data => {
+            Utils.showNotification(data.success ? (data.message || 'Details saved.') : (data.message || 'Failed to save details'), data.success ? 'success' : 'error');
+        })
+        .catch(err => {
+            console.error('Details save error:', err);
+            Utils.showNotification('Error saving details', 'error');
         });
 }
