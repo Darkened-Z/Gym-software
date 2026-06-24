@@ -4,8 +4,13 @@
 # Pulls the latest code into every gym install under /var/www/*.<BASE_DOMAIN>/
 # and reruns `composer install --no-dev`. Skips non-git folders.
 #
-# Run after pushing a fix to GitHub. Each install must be on the same branch
-# (default: main) and have no local changes — otherwise the pull aborts.
+# Run after pushing a fix to GitHub. Each install pulls its own tracked branch
+# (e.g. main, or a per-gym branch like bhatti) and must have no conflicting
+# local changes — otherwise the pull aborts.
+#
+# Installs are owned by www-data, but this script runs as root, so git is run
+# as the owner (sudo -u www-data) to avoid "detected dubious ownership in
+# repository" aborting every pull.
 #
 # Usage:  sudo update-all-gyms.sh
 
@@ -27,7 +32,9 @@ for dir in /var/www/*."${BASE_DOMAIN}"/; do
   fi
 
   echo "→ Updating ${dir}"
-  if ! git -C "$dir" pull --ff-only; then
+  # Run git as the checkout owner (www-data); pulls the install's own tracked
+  # branch via its configured upstream, not necessarily main.
+  if ! sudo -u www-data git -C "$dir" pull --ff-only; then
     echo "  ✗ git pull failed — skipping composer install"
     FAIL=$((FAIL + 1))
     continue
