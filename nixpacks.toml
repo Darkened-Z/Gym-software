@@ -1,0 +1,23 @@
+# Nixpacks config for the PHP web app (Railway service: "web")
+#
+# We use PHP's built-in server because:
+#   - the app has no URL rewriting (every URL is a real .php / .html file)
+#   - it's predictable on Railway and avoids fighting nginx config
+# Single-threaded built-in server is fine for evaluation / small gyms.
+# For production traffic, switch to nginx + php-fpm.
+
+[phases.setup]
+nixPkgs = ["php82", "php82Packages.composer", "php82Extensions.pdo", "php82Extensions.pdo_mysql", "php82Extensions.mbstring", "php82Extensions.zip", "php82Extensions.gd", "php82Extensions.curl", "php82Extensions.xml"]
+
+[phases.install]
+cmds = ["composer install --no-dev --optimize-autoloader --no-interaction"]
+
+[phases.build]
+# Create writable subdirs that the app expects
+cmds = [
+  "mkdir -p uploads/profiles uploads/imports logs",
+  "chmod -R 0775 uploads logs",
+]
+
+[start]
+cmd = "php -S 0.0.0.0:$PORT -t ."

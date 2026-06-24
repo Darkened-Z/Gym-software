@@ -1,0 +1,32 @@
+# Nixpacks config for the WhatsApp bot (Railway service: "whatsapp-bot")
+# Root directory for this Railway service must be set to "whatsapp-bot/".
+#
+# whatsapp-web.js uses puppeteer, which needs Chromium. We install Chromium
+# from nixpkgs and point puppeteer at it via PUPPETEER_EXECUTABLE_PATH so it
+# doesn't try to download its own (won't work on Nixpacks).
+
+[variables]
+PUPPETEER_SKIP_DOWNLOAD = "true"
+NODE_ENV = "production"
+
+[phases.setup]
+nixPkgs = ["nodejs_20", "chromium"]
+# Extra OS deps Chromium needs at runtime
+aptPkgs = [
+  "fonts-liberation",
+  "libnss3",
+  "libatk-bridge2.0-0",
+  "libdrm2",
+  "libxcomposite1",
+  "libxdamage1",
+  "libxrandr2",
+  "libgbm1",
+  "libasound2",
+]
+
+[phases.install]
+cmds = ["npm ci --omit=dev"]
+
+[start]
+# Daemon mode runs the scheduler in the foreground
+cmd = "WHATSAPP_PUPPETEER_EXECUTABLE_PATH=$(which chromium) node src/index.js"
