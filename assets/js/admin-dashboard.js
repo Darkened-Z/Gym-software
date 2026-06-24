@@ -285,6 +285,7 @@ function switchSection(section) {
         'payments': 'Payments',
         'due-fees': 'Members Who Need to Pay',
         'expenses': 'Money Spent',
+        'packages': 'Packages',
         'reports': 'Reports',
         'staff': 'Staff',
         'activity-log': 'Activity Log',
@@ -341,6 +342,9 @@ function loadSection(section) {
             break;
         case 'expenses':
             loadExpenses();
+            break;
+        case 'packages':
+            loadPackages();
             break;
         case 'reports':
             loadReports();
@@ -7092,4 +7096,225 @@ function capturePhoto() {
         stopCamera();
         Utils.showNotification('Photo captured!', 'success');
     }, 'image/jpeg', 0.99); // 99% quality
+}
+
+/* ========================= Packages (membership plans) ========================= */
+function packageDurationLabel(months) {
+    months = parseInt(months) || 1;
+    if (months === 12) return '12 months (1 year)';
+    if (months % 12 === 0) return months + ' months (' + (months / 12) + ' years)';
+    return months + (months === 1 ? ' month' : ' months');
+}
+
+function packageEscHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function loadPackages() {
+    const contentBody = document.getElementById('contentBody');
+    if (!contentBody) return;
+    contentBody.innerHTML = `
+        <div class="section-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;margin-bottom:1rem;">
+            <div>
+                <h2 style="margin:0;">Membership Packages</h2>
+                <p style="margin:.25rem 0 0;color:var(--text-secondary);">Set up the plans your gym sells — monthly and any other packages.</p>
+            </div>
+            ${isAdminUser() ? '<button class="btn btn-primary" onclick="showAddPackageForm()">+ Add Package</button>' : ''}
+        </div>
+        <div id="packagesTableContainer"><div class="loading">Loading packages…</div></div>
+    `;
+    loadPackagesTable();
+}
+
+function loadPackagesTable() {
+    fetch('api/packages.php?action=list&limit=200')
+        .then(async res => {
+            if (!res.ok) throw new Error('Failed to load packages');
+            return JSON.parse(await res.text());
+        })
+        .then(data => {
+            if (data.success) renderPackagesTable(data.data || []);
+            else Utils.showNotification(data.message || 'Failed to load packages', 'error');
+        })
+        .catch(err => {
+            console.error('Packages load error:', err);
+            const c = document.getElementById('packagesTableContainer');
+            if (c) c.innerHTML = '<div class="error">Could not load packages.</div>';
+        });
+}
+
+function renderPackagesTable(packages) {
+    const container = document.getElementById('packagesTableContainer');
+    if (!container) return;
+    if (!packages || packages.length === 0) {
+        container.innerHTML = `<div class="empty-state" style="text-align:center;padding:2rem;color:var(--text-secondary);">
+            <strong style="display:block;margin-bottom:.35rem;">No packages yet</strong>
+            ${isAdminUser() ? 'Click “Add Package” to create your first plan (e.g. Monthly).' : 'No packages have been set up yet.'}
+        </div>`;
+        return;
+    }
+    const rows = packages.map((p, idx) => `
+        <tr>
+            <td data-label="#">${idx + 1}</td>
+            <td data-label="Package"><strong>${packageEscHtml(p.name)}</strong></td>
+            <td data-label="Duration">${packageDurationLabel(p.duration_months)}</td>
+            <td data-label="Price"><strong>${Utils.formatCurrency(p.price || 0)}</strong></td>
+            <td data-label="Admission Fee">${parseFloat(p.admission_fee) > 0 ? Utils.formatCurrency(p.admission_fee) : '—'}</td>
+            <td data-label="Status">${parseInt(p.is_active) ? '<span class="status-badge status-active">Active</span>' : '<span class="status-badge status-inactive">Inactive</span>'}</td>
+            <td data-label="Actions">
+                ${isAdminUser() ? `
+                    <button class="btn btn-sm btn-primary" onclick="showEditPackageForm(${p.id})">Edit</button>
+                    <button class="btn btn-sm btn-danger" onclick="deletePackage(${p.id})">Delete</button>
+                ` : '<span style="color:#6b7280;">Read only</span>'}
+            </td>
+        </tr>
+    `).join('');
+    container.innerHTML = `
+        <table class="data-table">
+            <thead>
+                <tr><th>#</th><th>Package</th><th>Duration</th><th>Price</th><th>Admission Fee</th><th>Status</th><th>Actions</th></tr>
+            </thead>
+            <tbody>${rows}</tbody>
+        </table>
+    `;
+}
+
+function showAddPackageForm() {
+    if (!requireAdminAccess('add packages')) return;
+    showPackageForm(null);
+}
+
+function showEditPackageForm(id) {
+    if (!requireAdminAccess('edit packages')) return;
+    fetch('api/packages.php?action=get&id=' + encodeURIComponent(id))
+        .then(async res => JSON.parse(await res.text()))
+        .then(data => {
+            if (data.success && data.data) showPackageForm(data.data);
+            else Utils.showNotification(data.message || 'Could not load package.', 'error');
+        })
+        .catch(err => {
+            console.error('Package load error:', err);
+            Utils.showNotification('Could not load package for editing.', 'error');
+        });
+}
+
+function showPackageForm(pkg) {
+    const isEdit = !!pkg;
+    const active = isEdit ? parseInt(pkg.is_active) : 1;
+    const html = `
+        <div class="modal" id="packageModal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>${isEdit ? 'Edit Package' : 'Add Package'}</h2>
+                    <button class="modal-close" onclick="closePackageModal()">&times;</button>
+                </div>
+                <form id="packageForm" class="modal-body">
+                    <input type="hidden" id="packageId" value="${isEdit ? pkg.id : ''}">
+                    <div class="form-group">
+                        <label>Package Name *</label>
+                        <input type="text" id="packageName" placeholder="e.g. Monthly, 3-Month, Annual" value="${isEdit ? packageEscHtml(pkg.name) : ''}" required>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Duration (months) *</label>
+                            <input type="number" id="packageDuration" min="1" step="1" value="${isEdit ? (parseInt(pkg.duration_months) || 1) : 1}" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Price *</label>
+                            <input type="number" id="packagePrice" min="0" step="0.01" value="${isEdit ? (parseFloat(pkg.price) || 0) : ''}" placeholder="0.00" required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Admission Fee (one-time)</label>
+                            <input type="number" id="packageAdmission" min="0" step="0.01" value="${isEdit ? (parseFloat(pkg.admission_fee) || 0) : 0}" placeholder="0.00">
+                        </div>
+                        <div class="form-group">
+                            <label>Status</label>
+                            <select id="packageActive">
+                                <option value="1" ${active ? 'selected' : ''}>Active</option>
+                                <option value="0" ${active ? '' : 'selected'}>Inactive</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Description</label>
+                        <textarea id="packageDescription" rows="3" placeholder="What's included (optional)">${isEdit ? packageEscHtml(pkg.description || '') : ''}</textarea>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" onclick="closePackageModal()">Cancel</button>
+                        <button type="submit" class="btn btn-primary">${isEdit ? 'Save Changes' : 'Add Package'}</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', html);
+    document.getElementById('packageForm').addEventListener('submit', function (e) {
+        e.preventDefault();
+        savePackage();
+    });
+}
+
+function closePackageModal() {
+    const m = document.getElementById('packageModal');
+    if (m) m.remove();
+}
+
+function savePackage() {
+    const id = document.getElementById('packageId').value;
+    const isEdit = !!id;
+    const name = document.getElementById('packageName').value.trim();
+    if (!name) { Utils.showNotification('Package name is required.', 'error'); return; }
+    const payload = {
+        name: name,
+        duration_months: parseInt(document.getElementById('packageDuration').value) || 1,
+        price: parseFloat(document.getElementById('packagePrice').value) || 0,
+        admission_fee: parseFloat(document.getElementById('packageAdmission').value) || 0,
+        description: document.getElementById('packageDescription').value.trim() || null,
+        is_active: parseInt(document.getElementById('packageActive').value)
+    };
+    if (isEdit) payload.id = id;
+
+    fetch(`api/packages.php?action=${isEdit ? 'update' : 'create'}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    })
+        .then(async res => {
+            if (!res.ok) throw new Error('Failed to save package');
+            return JSON.parse(await res.text());
+        })
+        .then(data => {
+            if (data.success) {
+                Utils.showNotification(data.message || (isEdit ? 'Package updated.' : 'Package added.'), 'success');
+                closePackageModal();
+                loadPackagesTable();
+            } else {
+                Utils.showNotification(data.message || 'Failed to save package', 'error');
+            }
+        })
+        .catch(err => {
+            console.error('Package save error:', err);
+            Utils.showNotification(err.message || 'Error saving package', 'error');
+        });
+}
+
+function deletePackage(id) {
+    if (!requireAdminAccess('delete packages')) return;
+    if (!confirm('Delete this package? This cannot be undone.')) return;
+    fetch('api/packages.php?action=delete&id=' + encodeURIComponent(id), { method: 'POST' })
+        .then(async res => JSON.parse(await res.text()))
+        .then(data => {
+            if (data && data.success) {
+                Utils.showNotification('Package deleted.', 'success');
+                loadPackagesTable();
+            } else {
+                Utils.showNotification(data?.message || 'Failed to delete package', 'error');
+            }
+        })
+        .catch(err => {
+            console.error('Package delete error:', err);
+            Utils.showNotification('Error deleting package', 'error');
+        });
 }
