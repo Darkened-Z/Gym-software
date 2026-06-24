@@ -1,0 +1,130 @@
+/* ============================================================================
+   Bhatti Gym branding overlay (bhatti branch only)
+   Loaded on top of style.css. Keeps per-gym branding isolated from core CSS.
+   Brand colors: yellow #F5C518, ink #0D0D0D.
+   ============================================================================ */
+:root {
+  --brand-yellow: #f5c518;
+  --brand-ink: #0d0d0d;
+}
+
+/* ---- 0.6s loading splash ------------------------------------------------- */
+#brand-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 50% 45%, #1c1c1c 0%, #0d0d0d 70%);
+  transition: opacity .4s ease;
+}
+#brand-splash.brand-hide { opacity: 0; pointer-events: none; }
+#brand-splash .brand-splash-logo {
+  width: 170px;
+  height: 170px;
+  animation: brandPop .6s cubic-bezier(.2, .8, .3, 1.2) both;
+  filter: drop-shadow(0 8px 28px rgba(245, 197, 24, .35));
+}
+@keyframes brandPop {
+  0%   { transform: scale(.55); opacity: 0; }
+  60%  { transform: scale(1.06); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #brand-splash .brand-splash-logo { animation: none; }
+}
+
+/* ---- Login page logo + title -------------------------------------------- */
+.brand-login-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .35rem;
+  margin-bottom: .25rem;
+}
+.brand-login-logo {
+  width: 92px;
+  height: 92px;
+  filter: drop-shadow(0 4px 14px rgba(0, 0, 0, .18));
+}
+.brand-login-head h1 {
+  color: var(--brand-ink);
+  letter-spacing: .5px;
+  margin: 0;
+}
+
+/* ---- Sidebar (dashboard) top-left logo ----------------------------------- */
+.sidebar-header.brand-sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+}
+.brand-sidebar-logo {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+}
+.sidebar-header.brand-sidebar-header h2 {
+  margin: 0;
+  font-size: 1.15rem;
+  line-height: 1.1;
+  letter-spacing: .3px;
+}
+
+/* ---- Contact + social footer (login page) -------------------------------- */
+.brand-footer {
+  max-width: 760px;
+  margin: 1.75rem auto 1rem;
+  padding: 1.25rem 1rem 0;
+  border-top: 1px solid rgba(0, 0, 0, .08);
+  text-align: center;
+  color: var(--text-secondary, #5b6b60);
+  font-size: .9rem;
+}
+.brand-contact {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: .5rem 1.4rem;
+  margin-bottom: 1rem;
+}
+.brand-contact a {
+  color: inherit;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+}
+.brand-contact a:hover { color: var(--brand-ink); }
+.brand-contact svg { width: 16px; height: 16px; fill: currentColor; flex: 0 0 auto; }
+
+.brand-social {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: .6rem;
+  margin-bottom: 1rem;
+}
+.brand-social a {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--brand-ink);
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+.brand-social a:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0, 0, 0, .22); }
+.brand-social svg { width: 20px; height: 20px; fill: #fff; }
+/* brand-tinted hovers */
+.brand-social .s-yt:hover     { background: #ff0000; }
+.brand-social .s-wa:hover     { background: #25d366; }
+.brand-social .s-fb:hover     { background: #1877f2; }
+.brand-social .s-ig:hover     { background: #e1306c; }
+.brand-social .s-sc:hover     { background: #fffc00; }
+.brand-social .s-sc:hover svg { fill: #0d0d0d; }
+.brand-social .s-tt:hover     { background: #000; }
+
+.brand-copy { margin: .25rem 0 0; font-size: .8rem; opacity: .8; }

@@ -1,31 +1,25 @@
 {
-  "name": "Gym Management System",
-  "short_name": "GymDesk",
-  "description": "Front desk and member portal for gym operations.",
+  "name": "Bhatti Gym",
+  "short_name": "Bhatti Gym",
+  "description": "Front desk and member portal for Bhatti Gym.",
   "start_url": "/index.html",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#f3f7f4",
-  "theme_color": "#166534",
+  "background_color": "#0d0d0d",
+  "theme_color": "#0d0d0d",
   "orientation": "portrait-primary",
   "prefer_related_applications": false,
   "icons": [
     {
-      "src": "/assets/icons/gym-icon-192.png",
+      "src": "/assets/icons/bhatti-icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/assets/icons/gym-icon-512.png",
+      "src": "/assets/icons/bhatti-icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/assets/icons/gym-icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
       "purpose": "any"
     }
   ]

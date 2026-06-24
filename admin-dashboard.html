@@ -7,25 +7,30 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <title>Gym Front Desk Dashboard</title>
-    <meta name="theme-color" content="#166534">
+    <title>Bhatti Gym — Front Desk</title>
+    <meta name="theme-color" content="#0d0d0d">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <link rel="manifest" href="manifest.webmanifest">
-    <link rel="icon" type="image/svg+xml" href="assets/icons/gym-icon.svg">
-    <link rel="apple-touch-icon" href="assets/icons/gym-icon-192.png">
+    <link rel="icon" type="image/png" href="assets/images/bhatti-logo.png">
+    <link rel="apple-touch-icon" href="assets/icons/bhatti-icon-192.png">
     <link rel="stylesheet" href="assets/css/style.css?v=7">
     <link rel="stylesheet" href="assets/css/admin-dashboard.css?v=7">
     <link rel="stylesheet" href="assets/css/pwa.css">
+    <link rel="stylesheet" href="assets/css/brand.css?v=1">
 </head>
 
 <body>
+    <div id="brand-splash" aria-hidden="true">
+        <img src="assets/images/bhatti-logo.png" alt="Bhatti Gym" class="brand-splash-logo">
+    </div>
     <button class="mobile-menu-toggle" id="mobileMenuToggle" aria-label="Open or close menu"
         aria-expanded="false">☰ Menu</button>
     <div class="dashboard-container">
         <!-- Sidebar -->
         <aside class="sidebar" id="sidebar">
-            <div class="sidebar-header">
-                <h2>Gym Front Desk</h2>
+            <div class="sidebar-header brand-sidebar-header">
+                <img src="assets/images/bhatti-logo.png" alt="Bhatti Gym logo" class="brand-sidebar-logo">
+                <h2>Bhatti Gym</h2>
             </div>
             <nav class="sidebar-nav" role="navigation" aria-label="Main navigation">
                 <a href="#" class="nav-item active" data-section="dashboard" aria-label="Home dashboard">
@@ -93,6 +98,17 @@
         </main>
     </div>
 
+    <script>
+        // Brand splash: show logo ~0.6s then fade out.
+        (function () {
+            var s = document.getElementById('brand-splash');
+            if (!s) return;
+            window.setTimeout(function () {
+                s.classList.add('brand-hide');
+                window.setTimeout(function () { s.style.display = 'none'; }, 450);
+            }, 600);
+        })();
+    </script>
     <script src="assets/js/utils.js?v=6"></script>
     <script src="assets/js/offline-state.js?v=1"></script>
     <script src="assets/js/pwa.js?v=2"></script>
