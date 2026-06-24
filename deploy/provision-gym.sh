@@ -87,7 +87,14 @@ else
     [ -f "${INSTALL_DIR}/database/${sql}" ] && mysql "$DB_NAME" < "${INSTALL_DIR}/database/${sql}"
   done
 fi
-[ -f "${INSTALL_DIR}/sql/add_indexes.sql" ] && mysql "$DB_NAME" < "${INSTALL_DIR}/sql/add_indexes.sql"
+# Supplemental indexes (legacy script). full_setup.sql / 01_schema.sql already
+# define most indexes inline, so tolerate "Duplicate key name" while still
+# applying any index the base schema is missing (e.g. attendance idx_date).
+if [ -f "${INSTALL_DIR}/sql/add_indexes.sql" ]; then
+  echo "→ Applying supplemental indexes (tolerating already-present)..."
+  mysql --force "$DB_NAME" < "${INSTALL_DIR}/sql/add_indexes.sql" 2>&1 \
+    | grep -vi 'duplicate key name' || true
+fi
 
 # ---- 5. write .env ----
 echo "→ Writing .env..."
