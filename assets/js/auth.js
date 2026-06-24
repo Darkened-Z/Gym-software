@@ -2,7 +2,26 @@
  * Authentication JavaScript
  */
 
+function showSubscriptionLock() {
+    document.body.innerHTML =
+        '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:2rem;text-align:center;font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:#0d0d0d;color:#fff;">'
+        + '<div style="max-width:480px;">'
+        + '<div style="font-size:3rem;margin-bottom:1rem;">🔒</div>'
+        + '<h1 style="margin:0 0 .75rem;font-size:1.8rem;">Subscription expired</h1>'
+        + '<p style="opacity:.85;line-height:1.6;">This gym\'s subscription has ended. Please contact your provider to renew and restore access.</p>'
+        + '</div></div>';
+}
+
 document.addEventListener('DOMContentLoaded', function () {
+    // Lock the login page outright if this gym's subscription has expired.
+    if ((document.getElementById('adminForm') || document.getElementById('memberForm'))
+        && window.Utils && Utils.isOnline && Utils.isOnline()) {
+        fetch('api/auth.php?action=license_status')
+            .then(function (r) { return r.json(); })
+            .then(function (d) { if (d && d.expired) showSubscriptionLock(); })
+            .catch(function () { });
+    }
+
     const adminForm = document.getElementById('adminForm');
     const memberForm = document.getElementById('memberForm');
 
@@ -66,6 +85,8 @@ function handleAdminLogin() {
                         window.location.href = 'index.html';
                     }
                 }, 500);
+            } else if (data.error_code === 'SUBSCRIPTION_EXPIRED') {
+                showSubscriptionLock();
             } else {
                 Utils.showNotification(data.message || 'Login failed', 'error');
             }
@@ -121,6 +142,8 @@ function handleMemberLogin() {
                         window.location.href = 'member-profile-women.html';
                     }
                 }, 500);
+            } else if (data.error_code === 'SUBSCRIPTION_EXPIRED') {
+                showSubscriptionLock();
             } else {
                 Utils.showNotification(data.message || 'Invalid member code', 'error');
             }

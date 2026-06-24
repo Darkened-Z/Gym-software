@@ -56,6 +56,7 @@ CREATE TABLE system_license (
     server_fingerprint VARCHAR(255) NOT NULL,
     activated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     is_active TINYINT(1) DEFAULT 1,
+    expires_at DATETIME NULL,
     INDEX idx_license_key (license_key),
     INDEX idx_is_active (is_active)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
