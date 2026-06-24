@@ -2,7 +2,11 @@
    Bhatti Gym branding overlay (bhatti branch only)
    Loaded on top of style.css. Keeps per-gym branding isolated from core CSS.
    Brand colors: yellow #F5C518, ink #0D0D0D.
+   Direction: athletic / bold — condensed display type, black + chrome-yellow,
+   hairline borders instead of shadows.
    ============================================================================ */
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Hanken+Grotesque:wght@400;500;600;700;800&display=swap');
+
 :root {
   --brand-yellow: #f5c518;
   --brand-ink: #0d0d0d;
@@ -128,3 +132,102 @@
 .brand-social .s-tt:hover     { background: #000; }
 
 .brand-copy { margin: .25rem 0 0; font-size: .8rem; opacity: .8; }
+
+/* ============================================================================
+   THEME — athletic black + chrome-yellow. Overrides the core green theme by
+   re-pointing the shared CSS variables and restyling the key components.
+   60/30/10: paper/ink surfaces, yellow as the single signal color.
+   ============================================================================ */
+:root {
+  --primary-color: #0d0d0d;
+  --primary-gradient: linear-gradient(135deg, #1f1f1f 0%, #0d0d0d 100%);
+  --secondary-color: #ffffff;
+  --bg-color: #f4f3f0;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #fbf4d4;
+  --text-color: #161616;
+  --text-secondary: #5e5e5e;
+  --text-muted: #8b8b8b;
+  --border-color: #e6e4de;        /* neutral hairline (was green) */
+  --shadow: 0 1px 0 rgba(0, 0, 0, .04);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, .10);
+  --shadow-glow: 0 0 0 4px rgba(245, 197, 24, .30);
+}
+
+/* ---- Type: condensed athletic display + clean grotesque body ------------- */
+body { font-family: 'Hanken Grotesque', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+.brand-login-head h1,
+.sidebar-header.brand-sidebar-header h2,
+#pageTitle,
+.content-header h1,
+.dashboard-recent h2,
+.dashboard-intro-copy h2,
+.modal-header h2 {
+  font-family: 'Bebas Neue', 'Arial Narrow', sans-serif;
+  font-weight: 400;
+  letter-spacing: .04em;
+  -webkit-text-fill-color: currentColor;   /* cancel the green gradient text-clip */
+  background: none;
+}
+.brand-login-head h1 { font-size: 3rem; line-height: 1; color: var(--brand-ink); }
+.content-header h1, #pageTitle { font-size: 2rem; color: var(--brand-ink); }
+.sidebar-header.brand-sidebar-header h2 { font-size: 1.5rem; }
+
+::selection { background: var(--brand-yellow); color: var(--brand-ink); }
+
+/* ---- Login surfaces: clean paper, hairline borders, no green glow -------- */
+.login-container { background: var(--bg-color); animation: none; }
+.login-container::before { display: none; }
+.login-box { border-radius: 14px; border: 1px solid var(--border-color); }
+.login-access-card,
+.login-form-panel { box-shadow: none; border: 1px solid var(--border-color); border-radius: 10px; background: #fff; }
+.access-intro { background: #faf7ea; border-color: var(--border-color); border-radius: 8px; }
+.access-intro strong { color: var(--brand-ink); }
+.login-divider span { box-shadow: none; }
+
+/* ---- Badges -------------------------------------------------------------- */
+.login-panel-badge { background: var(--brand-ink); color: var(--brand-yellow); border-radius: 6px; text-transform: uppercase; letter-spacing: .06em; }
+.member-badge { background: var(--brand-yellow); color: var(--brand-ink); }
+
+/* ---- Inputs: neutral border, yellow focus ring --------------------------- */
+.form-group input, .form-group select, .form-group textarea,
+.search-input, .lookup-input {
+  border: 2px solid var(--border-color); border-radius: 8px;
+}
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus,
+.search-input:focus, .lookup-input:focus {
+  border-color: var(--brand-ink); box-shadow: 0 0 0 3px rgba(245, 197, 24, .45); transform: none;
+}
+
+/* ---- Buttons: yellow = the action color ---------------------------------- */
+.btn { border-radius: 8px; box-shadow: none; text-transform: uppercase; letter-spacing: .03em; font-weight: 700; }
+.btn::before { display: none; }                      /* kill the white ripple (wrong on yellow) */
+.btn:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0, 0, 0, .16); }
+.btn-primary { background: var(--brand-yellow); color: var(--brand-ink); }
+.btn-primary:hover { background: #ffd72e; box-shadow: 0 6px 18px rgba(245, 197, 24, .45); }
+
+/* ---- Tables -------------------------------------------------------------- */
+.data-table { box-shadow: none; border: 1px solid var(--border-color); border-radius: 8px; }
+.data-table thead { background: var(--brand-ink); color: #fff; }
+.data-table tbody tr:hover { background: rgba(245, 197, 24, .10); transform: none; }
+
+/* ---- Dashboard sidebar: ink slab with a yellow active marker ------------- */
+.sidebar { background: #0d0d0d; box-shadow: none; border-right: 1px solid #1c1c1c; }
+.sidebar-header.brand-sidebar-header { background: #111; border-bottom: 1px solid #232323; }
+.sidebar-nav .nav-item { color: #cccccc; }
+.sidebar-nav .nav-item:hover { color: #fff; }
+.sidebar-nav .nav-item:hover::before,
+.sidebar-nav .nav-item.active::before { background: rgba(245, 197, 24, .12); }
+.sidebar-nav .nav-item.active {
+  color: var(--brand-yellow);
+  background: rgba(245, 197, 24, .10);
+  box-shadow: inset 3px 0 0 var(--brand-yellow);
+}
+
+/* ---- Dashboard cards: flat with hairline borders ------------------------- */
+.content-header { box-shadow: none; border-bottom: 1px solid var(--border-color); }
+.stat-card, .dashboard-recent, .dashboard-intro-card {
+  box-shadow: none; border: 1px solid var(--border-color); border-radius: 10px;
+}
+.stat-card:hover { box-shadow: 0 8px 22px rgba(0, 0, 0, .08); }
+.stat-value { color: var(--brand-ink); }
