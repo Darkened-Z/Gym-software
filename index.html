@@ -98,15 +98,15 @@
 
     <footer class="brand-footer">
         <div class="brand-contact">
-            <a href="tel:+923007934106" aria-label="Call Bhatti Gym">
+            <a href="tel:+923007934106" id="foot-phone" aria-label="Call Bhatti Gym">
                 <svg viewBox="0 0 24 24"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
                 0300 7934106
             </a>
-            <a href="mailto:bhattigym1@gmail.com" aria-label="Email Bhatti Gym">
+            <a href="mailto:bhattigym1@gmail.com" id="foot-email" aria-label="Email Bhatti Gym">
                 <svg viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>
                 bhattigym1@gmail.com
             </a>
-            <a href="https://maps.app.goo.gl/2JQM9yZTgmzvSuiK7" target="_blank" rel="noopener" aria-label="Find Bhatti Gym on Google Maps">
+            <a href="https://maps.app.goo.gl/2JQM9yZTgmzvSuiK7" id="foot-maps" target="_blank" rel="noopener" aria-label="Find Bhatti Gym on Google Maps">
                 <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 010-5 2.5 2.5 0 010 5z"/></svg>
                 Find us on Google Maps
             </a>
@@ -131,6 +131,36 @@
                 s.classList.add('brand-hide');
                 window.setTimeout(function () { s.style.display = 'none'; }, 450);
             }, 600);
+        })();
+    </script>
+    <script>
+        // Populate the footer (contact + socials) from admin-defined gym details.
+        // Falls back to the hardcoded values if the settings API is unreachable.
+        (function () {
+            fetch('api/settings.php?action=public')
+                .then(function (r) { return r.json(); })
+                .then(function (res) {
+                    if (!res || !res.success || !res.data) return;
+                    var s = res.data;
+                    function tail(el, text) {
+                        var n = el.lastChild;
+                        if (n && n.nodeType === 3) n.nodeValue = ' ' + text;
+                        else el.appendChild(document.createTextNode(' ' + text));
+                    }
+                    var phone = (s.phone || '').trim();
+                    if (phone) { var p = document.getElementById('foot-phone'); if (p) { p.href = 'tel:' + phone.replace(/[^0-9+]/g, ''); tail(p, phone); } }
+                    var email = (s.email || '').trim();
+                    if (email) { var e = document.getElementById('foot-email'); if (e) { e.href = 'mailto:' + email; tail(e, email); } }
+                    var maps = (s.address_url || '').trim();
+                    if (maps) { var m = document.getElementById('foot-maps'); if (m) m.href = maps; }
+                    [['s-yt', 'social_youtube'], ['s-wa', 'social_whatsapp'], ['s-fb', 'social_facebook'], ['s-ig', 'social_instagram'], ['s-sc', 'social_snapchat'], ['s-tt', 'social_tiktok']].forEach(function (pr) {
+                        var el = document.querySelector('.brand-social .' + pr[0]);
+                        if (!el) return;
+                        var v = (s[pr[1]] || '').trim();
+                        if (v) { el.href = v; el.style.display = ''; } else { el.style.display = 'none'; }
+                    });
+                })
+                .catch(function () { /* keep hardcoded footer on failure */ });
         })();
     </script>
     <script src="assets/js/utils.js?v=6"></script>
