@@ -19,6 +19,7 @@ DROP TABLE IF EXISTS system_jobs;
 DROP TABLE IF EXISTS gate_activity_log;
 DROP TABLE IF EXISTS gate_configuration;
 DROP TABLE IF EXISTS expenses;
+DROP TABLE IF EXISTS packages;
 DROP TABLE IF EXISTS reports;
 DROP TABLE IF EXISTS payments_women;
 DROP TABLE IF EXISTS payments_men;
@@ -319,6 +320,20 @@ CREATE TABLE expenses (
     INDEX idx_expense_date (expense_date),
     INDEX idx_category (category),
     INDEX idx_expense_type (expense_type)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE packages (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    duration_months INT NOT NULL DEFAULT 1,
+    price DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+    admission_fee DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+    description TEXT NULL,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    created_by INT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_is_active (is_active)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE reports (
