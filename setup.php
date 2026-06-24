@@ -94,6 +94,15 @@ try {
     if ($licenseHelper->activateSystem($licenseKey, $serverFingerprint)) {
         $output[] = "✓ System activated successfully!";
         $output[] = "✓ License key generated and stored";
+        // Start the subscription clock: 30 days from first activation. Only set
+        // when empty, so re-running setup.php never wipes a paid expiry date.
+        try {
+            $licenseHelper->ensureExpiryColumn();
+            $db->exec("UPDATE system_license SET expires_at = DATE_ADD(NOW(), INTERVAL 30 DAY) WHERE is_active = 1 AND expires_at IS NULL");
+            $output[] = "✓ Subscription started: 30 days";
+        } catch (Exception $e) {
+            // non-fatal
+        }
         $success = true;
     } else {
         $output[] = "✗ Failed to activate system";
