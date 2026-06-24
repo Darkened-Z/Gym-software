@@ -29,15 +29,23 @@ NGINX_VHOST_TEMPLATE="${NGINX_VHOST_TEMPLATE:-/etc/gym-deploy/nginx-vhost.conf.t
 DEFAULT_TIMEZONE="${DEFAULT_TIMEZONE:-Asia/Karachi}"
 
 # ---- args ----
-if [ $# -ne 1 ]; then
-  echo "Usage: $0 <slug>" >&2
-  echo "  slug: lowercase, alphanumeric or dashes (e.g. ironhouse, fit-zone-22)" >&2
+if [ $# -lt 1 ] || [ $# -gt 2 ]; then
+  echo "Usage: $0 <slug> [branch]" >&2
+  echo "  slug:   lowercase, alphanumeric or dashes (e.g. ironhouse, fit-zone-22)" >&2
+  echo "  branch: optional git branch to deploy (default: main). Use a per-gym" >&2
+  echo "          branch for custom branding, e.g. 'bhatti'." >&2
   exit 1
 fi
 
 SLUG="$1"
 if ! [[ "$SLUG" =~ ^[a-z0-9-]+$ ]]; then
   echo "ERROR: slug must be lowercase letters, digits or dashes only." >&2
+  exit 1
+fi
+
+BRANCH="${2:-main}"
+if ! [[ "$BRANCH" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+  echo "ERROR: branch name has invalid characters." >&2
   exit 1
 fi
 
@@ -60,10 +68,11 @@ fi
 echo "→ Provisioning ${FQDN}"
 echo "  Install dir: ${INSTALL_DIR}"
 echo "  Database:    ${DB_NAME}"
+echo "  Branch:      ${BRANCH}"
 
 # ---- 1. clone ----
-echo "→ Cloning repo..."
-git clone --depth 1 "$REPO_URL" "$INSTALL_DIR"
+echo "→ Cloning repo (branch ${BRANCH})..."
+git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$INSTALL_DIR"
 
 # ---- 2. composer install ----
 echo "→ composer install..."
