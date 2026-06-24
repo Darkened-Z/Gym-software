@@ -16,7 +16,10 @@ Scripts + docs to run **many separate gym installs** on **one Oracle Free VPS**,
 | [provision-gym.sh](provision-gym.sh) | `sudo provision-gym.sh <slug>` — creates a new gym install in ~2 min. |
 | [deprovision-gym.sh](deprovision-gym.sh) | `sudo deprovision-gym.sh <slug>` — removes a gym (with backup). |
 | [update-all-gyms.sh](update-all-gyms.sh) | `sudo update-all-gyms.sh` — git pulls latest code into every install. |
+| [list-gyms.sh](list-gyms.sh) | `sudo list-gyms.sh` — show every install (URL, install date, DB size, SSL). |
+| [backup-all-gyms.sh](backup-all-gyms.sh) | Daily DB backup (runs from cron, 7-day retention). |
 | [nginx-vhost.conf.template](nginx-vhost.conf.template) | Per-install nginx config (used by provision-gym.sh). |
+| [gym-whatsapp@.service](gym-whatsapp@.service) | systemd unit template for the per-gym WhatsApp bot. |
 
 ## TL;DR
 

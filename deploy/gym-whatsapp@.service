@@ -1,0 +1,43 @@
+# systemd unit template for the per-gym WhatsApp bot.
+#
+# Install once:
+#   sudo cp deploy/gym-whatsapp@.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#
+# Enable for a specific gym:
+#   sudo systemctl enable --now gym-whatsapp@<slug>
+#
+# Logs:
+#   sudo journalctl -u gym-whatsapp@<slug> -f
+#
+# Stop:
+#   sudo systemctl disable --now gym-whatsapp@<slug>
+#
+# The %i placeholder is replaced by the part after @ (the gym slug).
+
+[Unit]
+Description=Gym WhatsApp reminder bot for %i
+After=network-online.target mysql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/%i.yourdomain.com/whatsapp-bot
+EnvironmentFile=/var/www/%i.yourdomain.com/.env
+EnvironmentFile=-/var/www/%i.yourdomain.com/whatsapp-bot/.env
+ExecStart=/usr/bin/node src/index.js
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Light hardening
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -124,13 +124,21 @@ Type `y` when prompted.
 git clone https://github.com/Darkened-Z/Gym-software.git /opt/gym-deploy-src
 
 # Install scripts to /usr/local/bin
-sudo install -m 0755 /opt/gym-deploy-src/deploy/provision-gym.sh   /usr/local/bin/
-sudo install -m 0755 /opt/gym-deploy-src/deploy/deprovision-gym.sh /usr/local/bin/
-sudo install -m 0755 /opt/gym-deploy-src/deploy/update-all-gyms.sh /usr/local/bin/
+sudo install -m 0755 /opt/gym-deploy-src/deploy/provision-gym.sh    /usr/local/bin/
+sudo install -m 0755 /opt/gym-deploy-src/deploy/deprovision-gym.sh  /usr/local/bin/
+sudo install -m 0755 /opt/gym-deploy-src/deploy/update-all-gyms.sh  /usr/local/bin/
+sudo install -m 0755 /opt/gym-deploy-src/deploy/list-gyms.sh        /usr/local/bin/
+sudo install -m 0755 /opt/gym-deploy-src/deploy/backup-all-gyms.sh  /usr/local/bin/
 
 # Install nginx template
 sudo mkdir -p /etc/gym-deploy
 sudo cp /opt/gym-deploy-src/deploy/nginx-vhost.conf.template /etc/gym-deploy/
+
+# Install whatsapp-bot systemd unit (yourdomain.com gets replaced with your real base domain)
+sudo sed "s/yourdomain\.com/${BASE_DOMAIN:-yourdomain.com}/g" \
+    /opt/gym-deploy-src/deploy/gym-whatsapp@.service \
+    | sudo tee /etc/systemd/system/gym-whatsapp@.service > /dev/null
+sudo systemctl daemon-reload
 
 # Configure
 sudo tee /etc/gym-deploy.conf > /dev/null <<EOF
@@ -249,12 +257,55 @@ You won't be charged unless you exceed these limits. Realistic capacity: **30–
 
 ---
 
+## Daily backups (set this up before going live)
+
+Schedule `backup-all-gyms.sh` to run nightly:
+
+```bash
+sudo crontab -e
+# add:
+15 3 * * * /usr/local/bin/backup-all-gyms.sh >> /var/log/gym-backup.log 2>&1
+```
+
+This dumps every `gym_*` database to `/var/backups/gym-deploy/daily/` at 3:15am and prunes anything older than 7 days. Adjust `BACKUP_RETENTION_DAYS` in `/etc/gym-deploy.conf` if you want longer.
+
+For real safety, also sync `/var/backups/gym-deploy/` to off-server storage (Oracle Object Storage is free up to 20 GB).
+
+---
+
+## Per-gym WhatsApp bot (optional)
+
+Each gym has its own `whatsapp-bot/` directory. To run one as a background service that survives reboots:
+
+```bash
+sudo systemctl enable --now gym-whatsapp@ironhouse
+sudo journalctl -u gym-whatsapp@ironhouse -f    # first run: scan the QR shown here
+```
+
+To stop a gym's bot:
+```bash
+sudo systemctl disable --now gym-whatsapp@ironhouse
+```
+
+---
+
+## Operational tools
+
+| Command | What |
+|---|---|
+| `sudo list-gyms.sh` | Show every install: URL, install date, DB size, SSL status |
+| `sudo backup-all-gyms.sh` | Force a backup now (also runs nightly via cron) |
+| `sudo update-all-gyms.sh` | Git pull latest into every install |
+| `sudo provision-gym.sh <slug>` | Spin up a new gym |
+| `sudo deprovision-gym.sh <slug>` | Remove a gym (with backup) |
+
+---
+
 ## Things that will eventually need attention
 
 | When | What |
 |---|---|
 | Every 60 days | SSL certs auto-renew via certbot timer (already set up). Check: `sudo systemctl list-timers \| grep certbot` |
 | Monthly | Run `sudo apt update && sudo apt upgrade -y` |
-| When MySQL grows | Set up daily `mysqldump --all-databases` to `/var/backups/` or sync to object storage |
 | When you have 20+ gyms | Tune PHP-FPM `pm.max_children` in `/etc/php/8.2/fpm/pool.d/www.conf` |
 | When traffic spikes | Move MySQL to a separate Oracle instance (still free up to 2 instances) |

@@ -26,6 +26,14 @@ server {
         return 404;
     }
 
+    # ---- Block legacy maintenance/migration scripts (dangerous if exposed) ----
+    # setup.php IS reachable — needed once per install for license activation.
+    # Everything else below should never be called from the public web.
+    location ~ ^/(fix-admin-password|dbcheck|dbupdatesv1|fixesindb|updatesv3|check-auth)\.php$ {
+        deny all;
+        return 404;
+    }
+
     # ---- Static asset caching ----
     location ~* \.(jpg|jpeg|png|gif|webp|svg|css|js|ico|woff2?)$ {
         expires 7d;
