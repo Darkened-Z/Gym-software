@@ -1,0 +1,55 @@
+# Nginx vhost template for a single gym install.
+# Placeholders replaced by provision-gym.sh:
+#   __SUBDOMAIN__       e.g. ironhouse.yourdomain.com
+#   __INSTALL_DIR__     e.g. /var/www/ironhouse.yourdomain.com
+#   __PHP_FPM_SOCK__    e.g. /var/run/php/php8.2-fpm.sock
+#
+# Certbot edits this file to add HTTPS server { } block + redirects.
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name __SUBDOMAIN__;
+
+    root __INSTALL_DIR__;
+    index index.html index.php;
+
+    # ---- Block sensitive files ----
+    location ~ /\.(env|git|gitignore|gitattributes|htaccess) {
+        deny all;
+        return 404;
+    }
+
+    # ---- Block internal source folders (these contain PHP that must not be hit directly) ----
+    location ~ ^/(config|database|sql|scripts|app|vendor|whatsapp-bot|logs|backups)(/|$) {
+        deny all;
+        return 404;
+    }
+
+    # ---- Static asset caching ----
+    location ~* \.(jpg|jpeg|png|gif|webp|svg|css|js|ico|woff2?)$ {
+        expires 7d;
+        add_header Cache-Control "public, no-transform";
+        access_log off;
+        try_files $uri =404;
+    }
+
+    # ---- Default routing ----
+    location / {
+        try_files $uri $uri/ =404;
+    }
+
+    # ---- PHP execution ----
+    location ~ \.php$ {
+        try_files $uri =404;
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass unix:__PHP_FPM_SOCK__;
+        fastcgi_param HTTP_PROXY "";
+        fastcgi_read_timeout 60s;
+    }
+
+    client_max_body_size 20M;
+
+    access_log /var/log/nginx/__SUBDOMAIN__.access.log;
+    error_log  /var/log/nginx/__SUBDOMAIN__.error.log;
+}
