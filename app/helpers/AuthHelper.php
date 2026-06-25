@@ -30,20 +30,25 @@ class AuthHelper {
     }
 
     /**
-     * Hard-stop every gated API when the gym's subscription has expired, so an
-     * already-open session can't keep working. Fails OPEN on any error.
+     * Hard-stop STAFF/ADMIN APIs when the gym is locked (past expiry + grace), so
+     * an already-open front-desk session can't keep working. Partial lock —
+     * members (and unauthenticated) are never gated here. Fails OPEN on errors.
      */
     private static function enforceSubscriptionOrExit(): void {
         try {
+            $role = self::currentRole();
+            if ($role !== 'admin' && $role !== 'staff') {
+                return; // members keep working when the gym is locked
+            }
             require_once __DIR__ . '/../../config/database.php';
             require_once __DIR__ . '/LicenseHelper.php';
             $db = (new Database())->getConnection();
             $status = (new LicenseHelper($db))->getStatus();
-            if (!empty($status['activated']) && !empty($status['expired'])) {
+            if (!empty($status['activated']) && !empty($status['locked'])) {
                 http_response_code(403);
                 echo json_encode([
                     'success' => false,
-                    'message' => 'This gym\'s subscription has expired. Please contact your provider to renew.',
+                    'message' => 'This gym\'s subscription has expired. Front-desk access is locked — please contact your provider to renew.',
                     'error_code' => 'SUBSCRIPTION_EXPIRED'
                 ]);
                 exit;
