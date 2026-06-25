@@ -13,6 +13,7 @@ let sectionRefreshInterval = null; // Lightweight real-time refresh for live sec
 
 document.addEventListener('DOMContentLoaded', function () {
     checkAuth();
+    checkLicenseWarning();
     setupNavigation();
     setupMobileMenu();
     loadDashboard();
@@ -174,6 +175,37 @@ function checkAuth() {
             }
             window.location.href = 'index.html';
         });
+}
+
+function checkLicenseWarning() {
+    if (!window.Utils || !Utils.isOnline || !Utils.isOnline()) return;
+    fetch('api/auth.php?action=license_status')
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            if (!d || !d.success) return;
+            if (d.locked) { window.location.href = 'index.html'; return; } // safety net
+            var msg = null, urgent = false;
+            if (d.in_grace) {
+                urgent = true;
+                msg = '⚠ Your subscription has expired. Front-desk access will lock in '
+                    + d.grace_left + ' day' + (d.grace_left === 1 ? '' : 's') + ' — please renew now.';
+            } else if (d.days_left !== null && d.days_left >= 0 && d.days_left <= 7) {
+                msg = '⏳ Your subscription expires in ' + d.days_left + ' day' + (d.days_left === 1 ? '' : 's')
+                    + '. Renew soon to avoid interruption.';
+            }
+            if (msg) showLicenseBanner(msg, urgent);
+        })
+        .catch(function () { });
+}
+
+function showLicenseBanner(msg, urgent) {
+    if (document.getElementById('licBanner')) return;
+    var b = document.createElement('div');
+    b.id = 'licBanner';
+    b.style.cssText = 'position:sticky;top:0;z-index:50;padding:.7rem 1rem;text-align:center;font-weight:600;font-size:.9rem;'
+        + (urgent ? 'background:#7c2d12;color:#fff;' : 'background:#fde68a;color:#1f2937;');
+    b.textContent = msg;
+    document.body.insertBefore(b, document.body.firstChild);
 }
 
 function setupNavigation() {

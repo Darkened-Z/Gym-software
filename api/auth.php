@@ -13,8 +13,9 @@ require_once __DIR__ . '/../app/services/AttendanceWriteService.php';
 
 header('Content-Type: application/json');
 
-// Enforce the license: must be activated AND not past its subscription expiry.
-// Used to gate login (staff + member) and the session check — a full lockout.
+// Enforce the license for STAFF/ADMIN: must be activated and not LOCKED
+// (locked = past expiry + grace). Partial lock — members are NOT gated by this,
+// so they keep checking in even when the gym is locked for the owner.
 function checkSystemActivation($db) {
     $licenseHelper = new LicenseHelper($db);
     $status = $licenseHelper->getStatus();
@@ -27,11 +28,11 @@ function checkSystemActivation($db) {
         ]);
         exit;
     }
-    if ($status['expired']) {
+    if ($status['locked']) {
         http_response_code(403);
         echo json_encode([
             'success' => false,
-            'message' => 'This gym\'s subscription has expired. Please contact your provider to renew.',
+            'message' => 'This gym\'s subscription has expired. Front-desk access is locked — please contact your provider to renew.',
             'error_code' => 'SUBSCRIPTION_EXPIRED'
         ]);
         exit;
@@ -149,9 +150,8 @@ try {
                         ]);
                     }
                 } elseif (!empty($memberCode)) {
-                    // Member login — also blocked when the subscription has expired.
-                    checkSystemActivation($db);
-
+                    // Member login — NOT gated by subscription (partial lock:
+                    // members keep checking in even when the gym is locked).
                     $memberMen = new Member($db, 'men');
                     $memberWomen = new Member($db, 'women');
                     
@@ -260,9 +260,11 @@ try {
 
         case 'check':
             if (isset($_SESSION['role'])) {
-                // Verify the subscription is active for ANY logged-in role —
-                // an expired gym kicks staff and members alike on next load.
-                checkSystemActivation($db);
+                // Partial lock: only staff/admin are subscription-gated; members
+                // keep their session even when the gym is locked for the owner.
+                if (in_array($_SESSION['role'], ['admin', 'staff'], true)) {
+                    checkSystemActivation($db);
+                }
 
                 $response = [
                     'authenticated' => true,
@@ -295,10 +297,13 @@ try {
                     'success' => true,
                     'activated' => $st['activated'],
                     'expired' => $st['expired'],
-                    'days_left' => $st['days_left']
+                    'locked' => $st['locked'],
+                    'in_grace' => $st['in_grace'],
+                    'days_left' => $st['days_left'],
+                    'grace_left' => $st['grace_left']
                 ]);
             } catch (Exception $e) {
-                echo json_encode(['success' => true, 'activated' => true, 'expired' => false, 'days_left' => null]);
+                echo json_encode(['success' => true, 'activated' => true, 'expired' => false, 'locked' => false, 'in_grace' => false, 'days_left' => null, 'grace_left' => null]);
             }
             break;
 

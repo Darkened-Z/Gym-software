@@ -2,23 +2,26 @@
  * Authentication JavaScript
  */
 
-function showSubscriptionLock() {
-    document.body.innerHTML =
-        '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:2rem;text-align:center;font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:#0d0d0d;color:#fff;">'
-        + '<div style="max-width:480px;">'
-        + '<div style="font-size:3rem;margin-bottom:1rem;">🔒</div>'
-        + '<h1 style="margin:0 0 .75rem;font-size:1.8rem;">Subscription expired</h1>'
-        + '<p style="opacity:.85;line-height:1.6;">This gym\'s subscription has ended. Please contact your provider to renew and restore access.</p>'
-        + '</div></div>';
+// Partial lock: when the gym is LOCKED, staff are blocked but members can still
+// sign in — so we show a top banner, not a full-page wipe (forms stay usable).
+function showStaffLockBanner() {
+    if (document.getElementById('subLockBanner')) return;
+    var b = document.createElement('div');
+    b.id = 'subLockBanner';
+    b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#0d0d0d;color:#fff;padding:.85rem 1rem;text-align:center;font-family:-apple-system,Segoe UI,Roboto,sans-serif;border-bottom:3px solid #f5c518;font-size:.95rem;';
+    b.innerHTML = '🔒 <strong>Front-desk access is locked</strong> — this gym\'s subscription has expired. '
+        + 'Members can still sign in below. <span style="opacity:.8">Owner: contact your provider to renew.</span>';
+    document.body.appendChild(b);
+    document.body.style.paddingTop = '64px';
 }
 
 document.addEventListener('DOMContentLoaded', function () {
-    // Lock the login page outright if this gym's subscription has expired.
+    // If LOCKED, flag staff access (members are unaffected and can still log in).
     if ((document.getElementById('adminForm') || document.getElementById('memberForm'))
         && window.Utils && Utils.isOnline && Utils.isOnline()) {
         fetch('api/auth.php?action=license_status')
             .then(function (r) { return r.json(); })
-            .then(function (d) { if (d && d.expired) showSubscriptionLock(); })
+            .then(function (d) { if (d && d.locked) showStaffLockBanner(); })
             .catch(function () { });
     }
 
@@ -86,7 +89,7 @@ function handleAdminLogin() {
                     }
                 }, 500);
             } else if (data.error_code === 'SUBSCRIPTION_EXPIRED') {
-                showSubscriptionLock();
+                showStaffLockBanner();
             } else {
                 Utils.showNotification(data.message || 'Login failed', 'error');
             }
@@ -143,7 +146,7 @@ function handleMemberLogin() {
                     }
                 }, 500);
             } else if (data.error_code === 'SUBSCRIPTION_EXPIRED') {
-                showSubscriptionLock();
+                showStaffLockBanner();
             } else {
                 Utils.showNotification(data.message || 'Invalid member code', 'error');
             }

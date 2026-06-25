@@ -43,39 +43,60 @@ class LicenseHelper {
         }
     }
 
+    /** Grace days after the expiry date before staff access is actually locked. */
+    const GRACE_DAYS = 3;
+
     /**
-     * Subscription status for the active license.
-     * Returns: activated(bool), expires_at(?string), expired(bool),
-     * days_left(?int), valid(bool = activated && not expired).
-     * expires_at = NULL means "no expiry set" (grandfathered / unlimited).
+     * Subscription status for the active license. Keys:
+     *   activated   — setup.php has been run
+     *   expires_at  — paid-through date (NULL = unlimited / active until cancelled)
+     *   expired     — past the paid-through date (may still be inside grace)
+     *   locked      — past expiry + GRACE_DAYS → STAFF access is enforced off
+     *   in_grace    — expired but still within the grace window
+     *   days_left   — whole days to the expiry date (negative once expired)
+     *   grace_left  — days left in the grace window (only while in_grace)
+     *   valid       — activated AND not locked
      * Fails OPEN (valid) on errors so a transient DB hiccup never locks a gym.
      */
     public function getStatus() {
         $this->ensureExpiryColumn();
+        $base = ['activated' => false, 'expires_at' => null, 'expired' => false,
+                 'locked' => false, 'in_grace' => false, 'days_left' => null,
+                 'grace_left' => null, 'valid' => false];
         try {
             $stmt = $this->conn->query("SELECT is_active, expires_at FROM system_license WHERE is_active = 1 ORDER BY id DESC LIMIT 1");
             $row = $stmt ? $stmt->fetch() : null;
             if (!$row) {
-                return ['activated' => false, 'expires_at' => null, 'expired' => false, 'days_left' => null, 'valid' => false];
+                return $base;
             }
-            $expires = $row['expires_at'] ?? null;
-            $expired = ($expires !== null && $expires !== '') && strtotime($expires) < time();
-            $daysLeft = ($expires !== null && $expires !== '') ? (int) ceil((strtotime($expires) - time()) / 86400) : null;
+            $exp = $row['expires_at'] ?? null;
+            if ($exp === null || $exp === '') {
+                // Unlimited — active until cancelled.
+                return array_merge($base, ['activated' => true, 'valid' => true]);
+            }
+            $now = time();
+            $expTs = strtotime($exp);
+            $lockTs = $expTs + self::GRACE_DAYS * 86400;
+            $expired = $now > $expTs;
+            $locked = $now > $lockTs;
             return [
                 'activated' => true,
-                'expires_at' => $expires,
+                'expires_at' => $exp,
                 'expired' => $expired,
-                'days_left' => $daysLeft,
-                'valid' => !$expired,
+                'locked' => $locked,
+                'in_grace' => $expired && !$locked,
+                'days_left' => (int) ceil(($expTs - $now) / 86400),
+                'grace_left' => ($expired && !$locked) ? (int) ceil(($lockTs - $now) / 86400) : null,
+                'valid' => !$locked,
             ];
         } catch (Exception $e) {
             error_log('LicenseHelper::getStatus: ' . $e->getMessage());
             // Fail open — do not lock a gym out on an unexpected error.
-            return ['activated' => true, 'expires_at' => null, 'expired' => false, 'days_left' => null, 'valid' => true];
+            return array_merge($base, ['activated' => true, 'valid' => true]);
         }
     }
 
-    /** Activated AND not expired. */
+    /** Activated AND not locked (past expiry + grace). */
     public function isLicenseValid() {
         $s = $this->getStatus();
         return $s['activated'] && $s['valid'];
