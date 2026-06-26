@@ -22,10 +22,28 @@ class User {
 
     public function __construct($db) {
         $this->conn = $db;
+        $this->ensureSchema();
+    }
+
+    /** Self-heal: add the staff_section column on installs that predate it. */
+    private function ensureSchema(): void {
+        try {
+            $col = $this->conn->query("SHOW COLUMNS FROM {$this->table} LIKE 'staff_section'");
+            if ($col && $col->rowCount() === 0) {
+                $this->conn->exec("ALTER TABLE {$this->table} ADD COLUMN staff_section ENUM('men','women','both') NOT NULL DEFAULT 'both'");
+            }
+        } catch (Exception $e) {
+            error_log('User::ensureSchema: ' . $e->getMessage());
+        }
+    }
+
+    private function normalizeSection($v): string {
+        $v = strtolower(trim((string)$v));
+        return in_array($v, ['men', 'women', 'both'], true) ? $v : 'both';
     }
 
     public function authenticate($username, $password) {
-        $query = "SELECT id, username, password, role, name FROM " . $this->table . " WHERE username = :username LIMIT 1";
+        $query = "SELECT id, username, password, role, name, staff_section FROM " . $this->table . " WHERE username = :username LIMIT 1";
         $stmt = $this->conn->prepare($query);
         $stmt->bindValue(':username', $username, PDO::PARAM_STR);
         $stmt->execute();
@@ -37,7 +55,8 @@ class User {
                     'id' => $user['id'],
                     'username' => $user['username'],
                     'role' => $user['role'],
-                    'name' => $user['name']
+                    'name' => $user['name'],
+                    'staff_section' => $user['staff_section'] ?? 'both'
                 ];
             }
         }
@@ -63,7 +82,7 @@ class User {
             $where = 'WHERE username LIKE :search_username OR name LIKE :search_name OR role LIKE :search_role';
         }
 
-        $query = "SELECT id, username, role, name, created_at FROM {$this->table} {$where} ORDER BY id DESC LIMIT :limit OFFSET :offset";
+        $query = "SELECT id, username, role, name, staff_section, created_at FROM {$this->table} {$where} ORDER BY id DESC LIMIT :limit OFFSET :offset";
         $stmt = $this->conn->prepare($query);
         if ($search !== '') {
             $stmt->bindValue(':search_username', '%' . $search . '%', PDO::PARAM_STR);
@@ -96,12 +115,13 @@ class User {
     }
 
     public function create(array $data) {
-        $query = "INSERT INTO {$this->table} (username, password, role, name) VALUES (:username, :password, :role, :name)";
+        $query = "INSERT INTO {$this->table} (username, password, role, name, staff_section) VALUES (:username, :password, :role, :name, :staff_section)";
         $stmt = $this->conn->prepare($query);
         $stmt->bindValue(':username', $this->limitString($data['username'] ?? '', 50), PDO::PARAM_STR);
         $stmt->bindValue(':password', password_hash((string)$data['password'], PASSWORD_DEFAULT), PDO::PARAM_STR);
         $stmt->bindValue(':role', $this->limitString($data['role'] ?? 'staff', 50), PDO::PARAM_STR);
         $stmt->bindValue(':name', $this->limitString($data['name'] ?? '', 100), PDO::PARAM_STR);
+        $stmt->bindValue(':staff_section', $this->normalizeSection($data['staff_section'] ?? 'both'), PDO::PARAM_STR);
         $stmt->execute();
         return $this->conn->lastInsertId();
     }
@@ -110,7 +130,8 @@ class User {
         $fields = [
             'username = :username',
             'role = :role',
-            'name = :name'
+            'name = :name',
+            'staff_section = :staff_section'
         ];
         $query = "UPDATE {$this->table} SET " . implode(', ', $fields);
 
@@ -124,6 +145,7 @@ class User {
         $stmt->bindValue(':username', $this->limitString($data['username'] ?? '', 50), PDO::PARAM_STR);
         $stmt->bindValue(':role', $this->limitString($data['role'] ?? 'staff', 50), PDO::PARAM_STR);
         $stmt->bindValue(':name', $this->limitString($data['name'] ?? '', 100), PDO::PARAM_STR);
+        $stmt->bindValue(':staff_section', $this->normalizeSection($data['staff_section'] ?? 'both'), PDO::PARAM_STR);
         if (!empty($data['password'])) {
             $stmt->bindValue(':password', password_hash((string)$data['password'], PASSWORD_DEFAULT), PDO::PARAM_STR);
         }
