@@ -231,3 +231,56 @@ body { font-family: 'Hanken Grotesque', -apple-system, BlinkMacSystemFont, 'Sego
 }
 .stat-card:hover { box-shadow: 0 8px 22px rgba(0, 0, 0, .08); }
 .stat-value { color: var(--brand-ink); }
+
+/* ============================================================================
+   GOLD POLISH — commit to the logo's black + gold + white. Gold is used as
+   fills / borders / accents and as TEXT only on dark surfaces (contrast).
+   ============================================================================ */
+:root {
+  --brand-gold: #f5c518;
+  --gold-grad: linear-gradient(180deg, #f8d23c 0%, #efb70c 100%);
+}
+
+/* Metallic gold primary buttons (Open Dashboard, Scan, Save, Renew…) */
+.btn-primary { background: var(--gold-grad); color: #0d0d0d; border: 1px solid #d9a407; }
+.btn-primary:hover { background: linear-gradient(180deg, #ffdf52, #f5c518); box-shadow: 0 6px 18px rgba(245, 197, 24, .45); }
+
+/* Gold accent edge on the main surfaces */
+.login-box { border-top: 3px solid var(--brand-gold); }
+.dashboard-recent, .stat-card, .dashboard-intro-card, .data-table { border-top: 2px solid rgba(245, 197, 24, .55); }
+
+/* Gold underline under display headings (echoes the logo ring) */
+.brand-login-head h1::after,
+#pageTitle::after {
+  content: ''; display: block; height: 3px; width: 56px; border-radius: 2px;
+  background: var(--brand-gold); margin-top: .45rem;
+}
+.brand-login-head h1::after { margin-left: auto; margin-right: auto; }
+
+/* Table headers: gold text on black */
+.data-table thead {
+  background: var(--brand-ink); color: var(--brand-gold);
+  text-transform: uppercase; letter-spacing: .04em; font-size: .82rem;
+}
+
+/* Header accents */
+.sidebar-header.brand-sidebar-header { border-bottom: 2px solid rgba(245, 197, 24, .4); }
+.content-header { border-bottom: 2px solid var(--brand-gold); }
+
+/* Member lookup bar → black bar with a gold edge */
+.lookup-bar { background: #0d0d0d; border-bottom: 2px solid var(--brand-gold); }
+.lookup-bar .lookup-input { background: #fff; }
+
+/* Gold scrollbar */
+* { scrollbar-color: var(--brand-gold) #1c1c1c; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: #ededed; }
+::-webkit-scrollbar-thumb { background: var(--brand-gold); border-radius: 6px; }
+
+/* Login backdrop: clean white with a faint gold corner glow */
+.login-container {
+  background:
+    radial-gradient(circle at 12% 12%, rgba(245, 197, 24, .10), transparent 42%),
+    radial-gradient(circle at 88% 86%, rgba(245, 197, 24, .07), transparent 44%),
+    #faf9f6;
+}
