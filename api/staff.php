@@ -66,7 +66,8 @@ try {
                 'username' => $username,
                 'password' => $password,
                 'name' => $name,
-                'role' => $role
+                'role' => $role,
+                'staff_section' => (string)($data['staff_section'] ?? 'both')
             ]);
 
             $adminLogger->log('staff_created', 'user', $id, null, [
@@ -105,7 +106,8 @@ try {
                 'name' => trim((string)($data['name'] ?? '')),
                 'username' => trim((string)($data['username'] ?? '')),
                 'role' => trim((string)($data['role'] ?? 'staff')),
-                'password' => (string)($data['password'] ?? '')
+                'password' => (string)($data['password'] ?? ''),
+                'staff_section' => (string)($data['staff_section'] ?? 'both')
             ];
 
             if ($updateData['name'] === '' || $updateData['username'] === '') {

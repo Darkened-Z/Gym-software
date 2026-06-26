@@ -136,7 +136,8 @@ try {
                         $_SESSION['username'] = $result['username'];
                         $_SESSION['role'] = $result['role'];
                         $_SESSION['name'] = $result['name'];
-                        
+                        $_SESSION['staff_section'] = $result['staff_section'] ?? 'both';
+
                         echo json_encode([
                             'success' => true,
                             'role' => $result['role'],
@@ -275,6 +276,7 @@ try {
                     $response['user_id'] = $_SESSION['user_id'] ?? null;
                     $response['username'] = $_SESSION['username'] ?? null;
                     $response['name'] = $_SESSION['name'] ?? null;
+                    $response['staff_section'] = ($_SESSION['role'] === 'admin') ? 'both' : ($_SESSION['staff_section'] ?? 'both');
                 } elseif ($_SESSION['role'] === 'member') {
                     $response['member_id'] = $_SESSION['member_id'];
                     $response['member_code'] = $_SESSION['member_code'];

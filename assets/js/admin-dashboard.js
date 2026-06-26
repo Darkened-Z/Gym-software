@@ -5,6 +5,7 @@
 let currentSection = 'dashboard';
 let currentGender = 'men';
 let currentUserRole = null;
+let staffSection = 'both'; // 'men' | 'women' | 'both' — this staff member's section access
 let activeRequests = {}; // Track active fetch requests to cancel them if needed
 let isLoadingDashboard = false; // Prevent multiple simultaneous dashboard loads
 let memberStatusFilter = null; // 'active', 'inactive', or null for all
@@ -14,6 +15,7 @@ let sectionRefreshInterval = null; // Lightweight real-time refresh for live sec
 document.addEventListener('DOMContentLoaded', function () {
     checkAuth();
     checkLicenseWarning();
+    setupSectionGuard();
     setupNavigation();
     setupMobileMenu();
     loadDashboard();
@@ -135,6 +137,28 @@ function applyRolePermissions() {
     if (hiddenSections.includes(currentSection)) {
         switchSection('dashboard');
     }
+
+    // Section access: a men- or women-only staff is locked to their side.
+    if (staffSection === 'men' || staffSection === 'women') {
+        currentGender = staffSection;
+        hideDisallowedGenderTabs();
+    }
+}
+
+// Hide the other section's men/women tabs for a section-restricted staff member.
+function hideDisallowedGenderTabs() {
+    if (staffSection !== 'men' && staffSection !== 'women') return;
+    const blocked = staffSection === 'men' ? 'women' : 'men';
+    document.querySelectorAll('.gender-tab[data-gender="' + blocked + '"], .gender-tab[data-dashboard-recent-tab="' + blocked + '"]')
+        .forEach(function (t) { t.style.display = 'none'; });
+    if (currentGender !== staffSection) currentGender = staffSection;
+}
+
+function setupSectionGuard() {
+    var cb = document.getElementById('contentBody');
+    if (cb && window.MutationObserver) {
+        new MutationObserver(function () { hideDisallowedGenderTabs(); }).observe(cb, { childList: true, subtree: true });
+    }
 }
 
 function checkAuth() {
@@ -143,6 +167,7 @@ function checkAuth() {
         const storedName = sessionStorage.getItem('gym_last_username');
         if (['admin', 'staff'].includes(storedRole)) {
             currentUserRole = storedRole;
+            staffSection = sessionStorage.getItem('gym_last_section') || 'both';
             const userName = document.getElementById('userName');
             if (userName) {
                 userName.textContent = storedName || (storedRole === 'staff' ? 'Staff' : 'Admin');
@@ -159,7 +184,9 @@ function checkAuth() {
                 window.location.href = 'index.html';
             } else {
                 currentUserRole = data.role;
+                staffSection = data.staff_section || 'both';
                 sessionStorage.setItem('gym_last_role', data.role);
+                sessionStorage.setItem('gym_last_section', staffSection);
                 sessionStorage.setItem('gym_last_username', data.username || data.name || (data.role === 'staff' ? 'Staff' : 'Admin'));
                 const userName = document.getElementById('userName');
                 if (userName) {
@@ -3212,7 +3239,7 @@ function loadStaffTable(page = 1) {
                 <table class="data-table">
                     <thead>
                         <tr>
-                            <th>#</th><th>Name</th><th>Username</th><th>Role</th><th>Created</th><th>Actions</th>
+                            <th>#</th><th>Name</th><th>Username</th><th>Role</th><th>Section</th><th>Created</th><th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -3222,13 +3249,14 @@ function loadStaffTable(page = 1) {
                                 <td data-label="Name">${row.name || '-'}</td>
                                 <td data-label="Username">${row.username}</td>
                                 <td data-label="Role"><span class="status-badge status-active">${row.role}</span></td>
+                                <td data-label="Section">${row.role === 'admin' ? 'Both' : ({ men: 'Men', women: 'Women', both: 'Both' }[row.staff_section] || 'Both')}</td>
                                 <td data-label="Created">${Utils.formatDate(row.created_at)}</td>
                                 <td data-label="Actions">
                                     <button class="btn btn-sm btn-primary" onclick="editStaff(${row.id})">Edit</button>
                                     <button class="btn btn-sm btn-danger" onclick="deleteStaff(${row.id})">Delete</button>
                                 </td>
                             </tr>
-                        `).join('') : '<tr><td colspan="6"><div class="empty-state"><strong>No staff found</strong>Add your first staff user here.</div></td></tr>'}
+                        `).join('') : '<tr><td colspan="7"><div class="empty-state"><strong>No staff found</strong>Add your first staff user here.</div></td></tr>'}
                     </tbody>
                 </table>
                 ${pagination.pages > 1 ? `
@@ -3260,6 +3288,11 @@ function showStaffForm(staff = null) {
                     <div class="form-group"><label>Username *</label><input type="text" id="staffUsername" value="${staff?.username || ''}" required></div>
                     <div class="form-group"><label>Password ${isEdit ? '(leave empty to keep old password)' : '*'}</label><input type="password" id="staffPassword" ${isEdit ? '' : 'required'}></div>
                     <div class="form-group"><label>Role</label><select id="staffRole"><option value="staff" ${staff?.role === 'staff' ? 'selected' : ''}>Staff</option><option value="admin" ${staff?.role === 'admin' ? 'selected' : ''}>Admin</option></select></div>
+                    <div class="form-group"><label>Section (which side they manage)</label><select id="staffSection">
+                        <option value="both" ${(!staff || staff?.staff_section === 'both') ? 'selected' : ''}>Both (combined)</option>
+                        <option value="men" ${staff?.staff_section === 'men' ? 'selected' : ''}>Men only</option>
+                        <option value="women" ${staff?.staff_section === 'women' ? 'selected' : ''}>Women only</option>
+                    </select></div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" onclick="closeStaffModal()">Cancel</button>
                         <button type="submit" class="btn btn-primary">Save Staff User</button>
@@ -3286,7 +3319,8 @@ function saveStaff() {
         name: document.getElementById('staffName')?.value?.trim(),
         username: document.getElementById('staffUsername')?.value?.trim(),
         password: document.getElementById('staffPassword')?.value || '',
-        role: document.getElementById('staffRole')?.value || 'staff'
+        role: document.getElementById('staffRole')?.value || 'staff',
+        staff_section: document.getElementById('staffSection')?.value || 'both'
     };
     const action = id ? 'update' : 'create';
     fetch(`api/staff.php?action=${action}`, {

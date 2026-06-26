@@ -64,6 +64,41 @@ class AuthHelper {
 
     public static function requireAdminOrStaff(): void {
         self::requireRoles(['admin', 'staff']);
+        // Central men/women section gate: a staff member assigned to one section
+        // cannot touch the other side's data (members, attendance, payments…).
+        self::requireGenderAccess($_GET['gender'] ?? $_POST['gender'] ?? null);
+    }
+
+    /** The gender section the current user may access: admin -> 'both'. */
+    public static function allowedSection(): string {
+        self::ensureSession();
+        if (($_SESSION['role'] ?? null) === 'admin') {
+            return 'both';
+        }
+        $s = strtolower((string)($_SESSION['staff_section'] ?? 'both'));
+        return in_array($s, ['men', 'women', 'both'], true) ? $s : 'both';
+    }
+
+    /** Block a staff member from a gender section they aren't assigned to. */
+    public static function requireGenderAccess(?string $gender): void {
+        if ($gender === null) {
+            return;
+        }
+        $gender = strtolower(trim($gender));
+        if ($gender !== 'men' && $gender !== 'women') {
+            return;
+        }
+        $allowed = self::allowedSection();
+        if ($allowed === 'both' || $allowed === $gender) {
+            return;
+        }
+        http_response_code(403);
+        echo json_encode([
+            'success' => false,
+            'message' => 'You do not have access to this section.',
+            'error_code' => 'SECTION_FORBIDDEN'
+        ]);
+        exit;
     }
 
     public static function ensureAdminAction(string $message = 'Only admin can perform this action'): void {
