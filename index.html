@@ -154,6 +154,8 @@
         .signup-body label { font-size: .85rem; color: var(--text-secondary, #c8c8c8); }
         .signup-body input, .signup-body select { background: #1a1a1a; color: var(--text-color, #ededed); border: 2px solid #2e2e2e; border-radius: 8px; padding: .6rem .7rem; font-size: 16px; }
         .signup-body input:focus, .signup-body select:focus { outline: none; border-color: var(--brand-gold, #f5c518); box-shadow: 0 0 0 3px rgba(245, 197, 24, .4); }
+        .signup-section-label { margin: 1.1rem 0 .4rem; font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; color: var(--brand-gold, #f5c518); }
+        .signup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 .6rem; }
         .signup-foot { display: flex; gap: .6rem; margin-top: 1rem; }
         .signup-foot .btn { flex: 1; }
         .signup-msg { margin-top: .75rem; font-size: .9rem; text-align: center; }
@@ -168,14 +170,31 @@
             </div>
             <p class="signup-sub">Send your details to request a membership. The gym will set up your profile and give you your member code after payment.</p>
             <form id="signupForm" class="signup-body">
-                <div class="fg"><label for="su_name">Full name *</label><input id="su_name" maxlength="200" autocomplete="name" required></div>
-                <div class="fg"><label for="su_phone">Phone *</label><input id="su_phone" maxlength="20" inputmode="tel" autocomplete="tel" placeholder="03xx xxxxxxx" required></div>
-                <div class="fg"><label for="su_gender">Gender *</label><select id="su_gender" required><option value="">Choose…</option><option value="men">Men</option><option value="women">Women</option></select></div>
-                <div class="fg"><label for="su_address">Address</label><input id="su_address" maxlength="255" autocomplete="street-address"></div>
-                <div class="fg"><label for="su_cnic">CNIC</label><input id="su_cnic" maxlength="20" placeholder="xxxxx-xxxxxxx-x"></div>
+                <div class="fg"><label for="su_name">Name *</label><input id="su_name" maxlength="200" autocomplete="name" required></div>
+                <div class="fg"><label for="su_phone">Phone (Cell) *</label><input id="su_phone" maxlength="20" inputmode="tel" autocomplete="tel" placeholder="03xx xxxxxxx" required></div>
+                <div class="fg"><label for="su_cnic">CNIC *</label><input id="su_cnic" maxlength="20" placeholder="xxxxx-xxxxxxx-x" required></div>
+                <div class="fg"><label for="su_gender">Side</label><select id="su_gender"><option value="">Choose…</option><option value="men">Men (Gents)</option><option value="women">Women (Ladies)</option></select></div>
+                <div class="fg"><label for="su_father">Husband's / Father's name</label><input id="su_father" maxlength="120"></div>
+                <div class="fg"><label for="su_occupation">Occupation / Profession</label><input id="su_occupation" maxlength="120"></div>
                 <div class="fg"><label for="su_dob">Date of birth</label><input id="su_dob" type="date"></div>
-                <div class="fg"><label for="su_en">Emergency contact name</label><input id="su_en" maxlength="120"></div>
-                <div class="fg"><label for="su_ep">Emergency contact phone</label><input id="su_ep" maxlength="20" inputmode="tel"></div>
+                <div class="fg"><label for="su_email">Email</label><input id="su_email" type="email" maxlength="120"></div>
+                <div class="fg"><label for="su_address">Residence address</label><input id="su_address" maxlength="255" autocomplete="street-address"></div>
+                <div class="fg"><label for="su_office_address">Office address</label><input id="su_office_address" maxlength="255"></div>
+                <div class="fg"><label for="su_office_phone">Office phone</label><input id="su_office_phone" maxlength="20" inputmode="tel"></div>
+                <div class="fg"><label for="su_blood">Blood group</label><input id="su_blood" maxlength="8" placeholder="e.g. B+"></div>
+                <div class="signup-section-label">Body measurements (optional)</div>
+                <div class="signup-grid">
+                    <div class="fg"><label for="su_height">Height</label><input id="su_height" maxlength="20"></div>
+                    <div class="fg"><label for="su_weight">Weight</label><input id="su_weight" maxlength="20"></div>
+                    <div class="fg"><label for="su_chest">Chest</label><input id="su_chest" maxlength="20"></div>
+                    <div class="fg"><label for="su_waist">Waist</label><input id="su_waist" maxlength="20"></div>
+                    <div class="fg"><label for="su_shoulder">Shoulder</label><input id="su_shoulder" maxlength="20"></div>
+                    <div class="fg"><label for="su_bicep">Bicep</label><input id="su_bicep" maxlength="20"></div>
+                    <div class="fg"><label for="su_forearm">Forearm</label><input id="su_forearm" maxlength="20"></div>
+                    <div class="fg"><label for="su_hip">Hip</label><input id="su_hip" maxlength="20"></div>
+                    <div class="fg"><label for="su_thigh">Thigh</label><input id="su_thigh" maxlength="20"></div>
+                    <div class="fg"><label for="su_calf">Calf</label><input id="su_calf" maxlength="20"></div>
+                </div>
                 <div class="signup-foot">
                     <button type="button" class="btn btn-secondary" id="signupCancelBtn">Cancel</button>
                     <button type="submit" class="btn btn-primary" id="signupSubmitBtn">Submit request</button>
@@ -203,8 +222,15 @@
             if (form) form.addEventListener('submit', function (e) {
                 e.preventDefault();
                 var btn = document.getElementById('signupSubmitBtn');
-                var payload = { name: val('su_name'), phone: val('su_phone'), gender: val('su_gender'), address: val('su_address'), cnic: val('su_cnic'), dob: val('su_dob'), emergency_name: val('su_en'), emergency_phone: val('su_ep') };
-                if (!payload.name || !payload.phone || !payload.gender) { setMsg('Please fill in name, phone and gender.', 'err'); return; }
+                var payload = {
+                    name: val('su_name'), phone: val('su_phone'), cnic: val('su_cnic'), gender: val('su_gender'),
+                    father_name: val('su_father'), occupation: val('su_occupation'), dob: val('su_dob'), email: val('su_email'),
+                    address: val('su_address'), office_address: val('su_office_address'), office_phone: val('su_office_phone'),
+                    blood_group: val('su_blood'), height: val('su_height'), weight: val('su_weight'), chest: val('su_chest'),
+                    waist: val('su_waist'), shoulder: val('su_shoulder'), bicep: val('su_bicep'), forearm: val('su_forearm'),
+                    hip: val('su_hip'), thigh: val('su_thigh'), calf: val('su_calf')
+                };
+                if (!payload.name || !payload.phone || !payload.cnic) { setMsg('Please fill in name, phone and CNIC.', 'err'); return; }
                 if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
                 setMsg('', '');
                 fetch('api/registrations.php?action=submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })

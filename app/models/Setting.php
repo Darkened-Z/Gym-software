@@ -25,6 +25,18 @@ class Setting {
         'social_tiktok',
     ];
 
+    /** Admin-only settings (editable in the dashboard, never exposed publicly). */
+    public static $adminKeys = [
+        'staff_hours_enabled',
+        'staff_hours_start',
+        'staff_hours_end',
+    ];
+
+    /** All keys the admin Details screen may read and write. */
+    public static function editableKeys(): array {
+        return array_merge(self::$publicKeys, self::$adminKeys);
+    }
+
     public function __construct($db) {
         $this->conn = $db;
         $this->ensureSchema();

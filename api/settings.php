@@ -37,7 +37,7 @@ try {
 
     switch ($action) {
         case 'admin_get':
-            echo json_encode(['success' => true, 'data' => $setting->getMap(Setting::$publicKeys)]);
+            echo json_encode(['success' => true, 'data' => $setting->getMap(Setting::editableKeys())]);
             break;
 
         case 'save':
@@ -50,7 +50,7 @@ try {
                     break;
                 }
                 $assoc = [];
-                foreach (Setting::$publicKeys as $k) {
+                foreach (Setting::editableKeys() as $k) {
                     if (array_key_exists($k, $data)) {
                         $assoc[$k] = is_string($data[$k]) ? trim($data[$k]) : $data[$k];
                     }

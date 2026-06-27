@@ -27,6 +27,67 @@ class AuthHelper {
             exit;
         }
         self::enforceSubscriptionOrExit();
+        self::enforceStaffHoursOrExit();
+    }
+
+    private static function parseHm($v): ?int {
+        $v = trim((string)$v);
+        if (!preg_match('/^(\d{1,2}):(\d{2})$/', $v, $m)) {
+            return null;
+        }
+        $h = (int)$m[1];
+        $min = (int)$m[2];
+        if ($h > 23 || $min > 59) {
+            return null;
+        }
+        return $h * 60 + $min;
+    }
+
+    private static function fmtHm(int $mins): string {
+        return sprintf('%02d:%02d', intdiv($mins, 60), $mins % 60);
+    }
+
+    /**
+     * Whether front-desk staff access is open right now, per the gym-wide window
+     * set in Settings. Times are evaluated in Pakistan time. Handles overnight
+     * windows (e.g. 16:00–02:00). Returns enabled/open/start/end.
+     */
+    public static function staffHoursState(PDO $db): array {
+        require_once __DIR__ . '/../models/Setting.php';
+        $map = (new Setting($db))->getMap(['staff_hours_enabled', 'staff_hours_start', 'staff_hours_end']);
+        $enabled = !empty($map['staff_hours_enabled']) && $map['staff_hours_enabled'] !== '0';
+        $start = self::parseHm($map['staff_hours_start'] ?? '');
+        $end = self::parseHm($map['staff_hours_end'] ?? '');
+        if (!$enabled || $start === null || $end === null || $start === $end) {
+            return ['enabled' => false, 'open' => true, 'start' => '', 'end' => ''];
+        }
+        $dt = new DateTime('now', new DateTimeZone('Asia/Karachi'));
+        $now = (int)$dt->format('H') * 60 + (int)$dt->format('i');
+        $open = ($start < $end) ? ($now >= $start && $now < $end) : ($now >= $start || $now < $end);
+        return ['enabled' => true, 'open' => $open, 'start' => self::fmtHm($start), 'end' => self::fmtHm($end)];
+    }
+
+    /** Hard-stop STAFF (only) APIs outside the configured hours. Admins exempt. */
+    private static function enforceStaffHoursOrExit(): void {
+        try {
+            if (self::currentRole() !== 'staff') {
+                return;
+            }
+            require_once __DIR__ . '/../../config/database.php';
+            $db = (new Database())->getConnection();
+            $st = self::staffHoursState($db);
+            if ($st['enabled'] && !$st['open']) {
+                http_response_code(403);
+                echo json_encode([
+                    'success' => false,
+                    'message' => 'Staff access is closed right now. Front-desk hours are ' . $st['start'] . ' to ' . $st['end'] . '.',
+                    'error_code' => 'STAFF_HOURS_CLOSED'
+                ]);
+                exit;
+            }
+        } catch (Throwable $e) {
+            // Fail open — never lock staff out over a settings/clock error.
+        }
     }
 
     /**
