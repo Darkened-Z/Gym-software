@@ -36,6 +36,7 @@ class MemberRegistration {
                     emergency_name VARCHAR(120) NULL,
                     emergency_phone VARCHAR(20) NULL,
                     note VARCHAR(500) NULL,
+                    details TEXT NULL,
                     status ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
                     assigned_member_code VARCHAR(50) NULL,
                     member_id INT NULL,
@@ -49,6 +50,11 @@ class MemberRegistration {
                     INDEX idx_phone (phone)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
             );
+            // Self-heal the details column on installs created before it existed.
+            $c = $this->conn->query("SHOW COLUMNS FROM {$this->table} LIKE 'details'");
+            if ($c && $c->rowCount() === 0) {
+                $this->conn->exec("ALTER TABLE {$this->table} ADD COLUMN details TEXT NULL");
+            }
         } catch (Throwable $e) {
             error_log('MemberRegistration::ensureSchema: ' . $e->getMessage());
         }
@@ -112,19 +118,24 @@ class MemberRegistration {
 
     public function create(array $data): string {
         $sql = "INSERT INTO {$this->table}
-            (gender, name, phone, address, cnic, dob, emergency_name, emergency_phone, note, source_ip, status)
-            VALUES (:gender, :name, :phone, :address, :cnic, :dob, :emergency_name, :emergency_phone, :note, :source_ip, 'pending')";
+            (gender, name, phone, cnic, dob, address, note, details, source_ip, status)
+            VALUES (:gender, :name, :phone, :cnic, :dob, :address, :note, :details, :source_ip, 'pending')";
         $stmt = $this->conn->prepare($sql);
         $dob = trim((string)($data['dob'] ?? ''));
+        $details = $data['details'] ?? null;
+        if (is_array($details)) {
+            // keep only non-empty optional fields
+            $details = array_filter($details, static function ($v) { return $v !== '' && $v !== null; });
+            $details = $details ? json_encode($details, JSON_UNESCAPED_UNICODE) : null;
+        }
         $stmt->bindValue(':gender', $this->normGender($data['gender'] ?? 'men'), PDO::PARAM_STR);
         $stmt->bindValue(':name', $this->limitString($data['name'] ?? '', 200), PDO::PARAM_STR);
         $stmt->bindValue(':phone', $this->limitString($data['phone'] ?? '', 20), PDO::PARAM_STR);
-        $stmt->bindValue(':address', $this->nullable($this->limitString($data['address'] ?? '', 255)));
         $stmt->bindValue(':cnic', $this->nullable($this->limitString($data['cnic'] ?? '', 20)));
         $stmt->bindValue(':dob', $dob !== '' ? $dob : null);
-        $stmt->bindValue(':emergency_name', $this->nullable($this->limitString($data['emergency_name'] ?? '', 120)));
-        $stmt->bindValue(':emergency_phone', $this->nullable($this->limitString($data['emergency_phone'] ?? '', 20)));
+        $stmt->bindValue(':address', $this->nullable($this->limitString($data['address'] ?? '', 255)));
         $stmt->bindValue(':note', $this->nullable($this->limitString($data['note'] ?? '', 500)));
+        $stmt->bindValue(':details', $details ?: null);
         $stmt->bindValue(':source_ip', $this->nullable($this->limitString($data['source_ip'] ?? '', 45)));
         $stmt->execute();
         return $this->conn->lastInsertId();

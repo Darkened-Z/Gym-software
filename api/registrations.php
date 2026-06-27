@@ -51,19 +51,18 @@ try {
             $data = reg_input();
             $name = trim((string)($data['name'] ?? ''));
             $phone = trim((string)($data['phone'] ?? ''));
+            $cnic = trim((string)($data['cnic'] ?? ''));
             $gender = strtolower(trim((string)($data['gender'] ?? '')));
-
-            if ($name === '' || $phone === '') {
-                http_response_code(400);
-                echo json_encode(['success' => false, 'message' => 'Please enter your name and phone number.']);
-                exit;
-            }
             if ($gender !== 'men' && $gender !== 'women') {
+                $gender = 'men'; // optional on the form; admin confirms the side at approval
+            }
+
+            // Only name, phone and CNIC are required (mirrors the gym's paper form).
+            if ($name === '' || $phone === '' || $cnic === '') {
                 http_response_code(400);
-                echo json_encode(['success' => false, 'message' => 'Please select Men or Women.']);
+                echo json_encode(['success' => false, 'message' => 'Please enter your name, phone number and CNIC.']);
                 exit;
             }
-            // Phone sanity: 7–15 digits (allow + and spaces in input).
             $digits = preg_replace('/\D+/', '', $phone);
             if (strlen($digits) < 7 || strlen($digits) > 15) {
                 http_response_code(400);
@@ -79,16 +78,26 @@ try {
                 exit;
             }
 
+            // All other admission-form fields are optional; keep them in details.
+            $detailKeys = ['father_name', 'occupation', 'email', 'office_address', 'office_phone', 'blood_group',
+                'shoulder', 'chest', 'bicep', 'forearm', 'waist', 'hip', 'thigh', 'calf', 'height', 'weight'];
+            $details = [];
+            foreach ($detailKeys as $k) {
+                $v = trim((string)($data[$k] ?? ''));
+                if ($v !== '') {
+                    $details[$k] = mb_substr($v, 0, 120);
+                }
+            }
+
             $registrations->create([
                 'gender' => $gender,
                 'name' => $name,
                 'phone' => $phone,
-                'address' => $data['address'] ?? '',
-                'cnic' => $data['cnic'] ?? '',
+                'cnic' => $cnic,
                 'dob' => $data['dob'] ?? '',
-                'emergency_name' => $data['emergency_name'] ?? '',
-                'emergency_phone' => $data['emergency_phone'] ?? '',
+                'address' => $data['address'] ?? '',
                 'note' => $data['note'] ?? '',
+                'details' => $details,
                 'source_ip' => $ip,
             ]);
 
@@ -152,7 +161,16 @@ try {
                 exit;
             }
 
-            $gender = ($reg['gender'] === 'women') ? 'women' : 'men';
+            // Admin confirms the side (men/women) at approval; fall back to the request.
+            $gender = strtolower(trim((string)($data['gender'] ?? $reg['gender'])));
+            $gender = ($gender === 'women') ? 'women' : 'men';
+            $regDetails = [];
+            if (!empty($reg['details'])) {
+                $decoded = json_decode((string)$reg['details'], true);
+                if (is_array($decoded)) {
+                    $regDetails = $decoded;
+                }
+            }
             $memberCode = trim((string)($data['member_code'] ?? ''));
             if ($memberCode === '') {
                 http_response_code(400);
@@ -198,6 +216,7 @@ try {
                     'name' => $reg['name'],
                     'phone' => $reg['phone'],
                     'address' => $reg['address'],
+                    'email' => $regDetails['email'] ?? null,
                     'membership_type' => $membershipType,
                     'join_date' => $joinDate,
                     'admission_fee' => $admissionFee,
