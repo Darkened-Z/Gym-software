@@ -167,8 +167,8 @@
 
   --text-color: #ededed;
   --text-primary: #ededed;      /* member-profile.css consumer */
-  --text-secondary: #a8a8a8;
-  --text-muted: #909090;        /* bumped from #7d7d7d → ~4.7:1 on #0d0d0d (AA) */
+  --text-secondary: #c8c8c8;    /* brightened from #a8a8a8 — small grey labels were hard to read on black */
+  --text-muted: #aeaeae;        /* brightened from #909090 — ~7:1 on #0d0d0d */
 
   --border-color: #2a2a2a;      /* neutral hairline on dark */
 
@@ -754,3 +754,31 @@ select, select option, optgroup,
 .mobile-menu-toggle { background: var(--gold-grad); color: #0d0d0d; }  /* hamburger — invisible on dark otherwise */
 .stat-card::before { background: var(--gold-grad); }                   /* animated hover top-stripe */
 .report-card::before { background: rgba(245, 197, 24, .08); }          /* faint gold hover wash (was dark gradient) */
+
+/* ============================================================================
+   15. MOBILE LAYOUT FIX — the PWA status bar (pwa.css) and the member page's
+   .lookup-bar were BOTH position:sticky; top:0, so on scroll they piled on top
+   of each other (the green "Online" bar overlapping the member-code box on
+   phones). The status bar is informational; the lookup box is the control —
+   so let the status bar scroll normally and keep the lookup box sticky.
+   ============================================================================ */
+.pwa-status-bar { position: static; }
+
+/* Member lookup header on phones: keep the logo from crowding the field/buttons
+   and make the action buttons full-width so they don't get clipped. */
+@media (max-width: 600px) {
+  .lookup-bar .lookup-container { align-items: stretch; }
+  .lookup-bar .brand-sidebar-logo { width: 38px; height: 38px; align-self: center; }
+  .lookup-bar .lookup-input { width: 100%; }
+  .lookup-bar .btn { width: 100%; }
+}
+
+/* Payments / data tables on phones: scroll horizontally with momentum instead
+   of clipping the last columns; keep a sensible min width so cells don't crush. */
+@media (max-width: 600px) {
+  .fee-history, .fee-table, .data-table, .recent-table-wrap, .activity-table-wrap {
+    -webkit-overflow-scrolling: touch;
+  }
+  .fee-table, .data-table { min-width: 540px; }
+  .fee-history, .recent-table-wrap, .activity-table-wrap { overflow-x: auto; }
+}
