@@ -175,13 +175,14 @@ try {
             $admissionFee = round((float)($data['admission_fee'] ?? 0), 2);
             $monthlyFee = round((float)($data['monthly_fee'] ?? 0), 2);
             $lockerFee = round((float)($data['locker_fee'] ?? 0), 2);
+            $ptfFee = round((float)($data['ptf_fee'] ?? 0), 2);
             $amountPaid = round((float)($data['amount_paid'] ?? 0), 2);
             $method_pay = trim((string)($data['payment_method'] ?? 'Cash')) ?: 'Cash';
             $joinDate = trim((string)($data['join_date'] ?? '')) ?: date('Y-m-d');
             $nextDue = trim((string)($data['next_fee_due_date'] ?? '')) ?: date('Y-m-d', strtotime('+1 month'));
             $membershipType = trim((string)($data['membership_type'] ?? 'Basic')) ?: 'Basic';
 
-            $charges = round($admissionFee + $monthlyFee + $lockerFee, 2);
+            $charges = round($admissionFee + $monthlyFee + $lockerFee + $ptfFee, 2);
             $remaining = max(0, round($charges - $amountPaid, 2));
 
             $reviewerId = (int)($_SESSION['user_id'] ?? 0);
@@ -211,11 +212,12 @@ try {
                 }
 
                 // Retain the extra application fields on the member.
-                $upd = $db->prepare("UPDATE members_{$gender} SET cnic = :cnic, dob = :dob, emergency_name = :en, emergency_phone = :ep WHERE id = :id");
+                $upd = $db->prepare("UPDATE members_{$gender} SET cnic = :cnic, dob = :dob, emergency_name = :en, emergency_phone = :ep, ptf_fee = :ptf WHERE id = :id");
                 $upd->bindValue(':cnic', $reg['cnic'] ?: null);
                 $upd->bindValue(':dob', $reg['dob'] ?: null);
                 $upd->bindValue(':en', $reg['emergency_name'] ?: null);
                 $upd->bindValue(':ep', $reg['emergency_phone'] ?: null);
+                $upd->bindValue(':ptf', $ptfFee);
                 $upd->bindValue(':id', (int)$memberId, PDO::PARAM_INT);
                 $upd->execute();
 

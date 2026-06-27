@@ -7633,6 +7633,7 @@ function showApproveRegistration(id) {
                     <div class="form-group"><label>Admission fee</label><input type="number" id="ar_admission" min="0" step="any" value="0"></div>
                     <div class="form-group"><label>Monthly fee</label><input type="number" id="ar_monthly" min="0" step="any" value="0"></div>
                     <div class="form-group"><label>Locker fee</label><input type="number" id="ar_locker" min="0" step="any" value="0"></div>
+                    <div class="form-group"><label>Personal training fee (PTF)</label><input type="number" id="ar_ptf" min="0" step="any" value="0"></div>
                     <div class="form-group"><label>Amount paid now</label><input type="number" id="ar_paid" min="0" step="any" value="0"></div>
                     <div class="form-group"><label>Payment method</label><select id="ar_method"><option>Cash</option><option>Card</option><option>Bank Transfer</option><option>Easypaisa</option><option>JazzCash</option></select></div>
                     <div class="form-group"><label>Next fee due date</label><input type="date" id="ar_nextdue" value="${nextDue}"></div>
@@ -7661,6 +7662,7 @@ function saveApproveRegistration() {
         admission_fee: document.getElementById('ar_admission')?.value || 0,
         monthly_fee: document.getElementById('ar_monthly')?.value || 0,
         locker_fee: document.getElementById('ar_locker')?.value || 0,
+        ptf_fee: document.getElementById('ar_ptf')?.value || 0,
         amount_paid: document.getElementById('ar_paid')?.value || 0,
         payment_method: document.getElementById('ar_method')?.value || 'Cash',
         next_fee_due_date: document.getElementById('ar_nextdue')?.value

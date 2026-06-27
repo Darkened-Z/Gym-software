@@ -773,12 +773,48 @@ select, select option, optgroup,
   .lookup-bar .btn { width: 100%; }
 }
 
-/* Payments / data tables on phones: scroll horizontally with momentum instead
-   of clipping the last columns; keep a sensible min width so cells don't crush. */
-@media (max-width: 600px) {
-  .fee-history, .fee-table, .data-table, .recent-table-wrap, .activity-table-wrap {
-    -webkit-overflow-scrolling: touch;
+/* Member-profile fee table: never let columns overlap — scroll horizontally
+   with a min width and no-wrap cells, at EVERY screen size (the cramped
+   landscape view in particular). The fee table does NOT use the card layout. */
+.fee-section, .fee-history { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.fee-table { min-width: 560px; }
+.fee-table th, .fee-table td { white-space: nowrap; }
+.recent-table-wrap, .activity-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* On phones the .data-table switches to a STACKED-CARD layout (admin-dashboard
+   .css turns each row into a card) — and paints that card #ffffff, so our light
+   text became invisible (the "white area" on the Registrations list). Re-skin
+   the cards for the dark theme. NOTE: no min-width here — cards are full-width. */
+@media (max-width: 768px) {
+  .data-table tr {
+    background: #161616;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
   }
-  .fee-table, .data-table { min-width: 540px; }
-  .fee-history, .recent-table-wrap, .activity-table-wrap { overflow-x: auto; }
+  .data-table td { color: var(--text-color); border-bottom-color: #242424; }
+  .data-table td::before { color: var(--brand-gold); }   /* the field labels */
+  .data-table tbody tr:hover { background: #1b1b1b; }
+}
+
+/* ============================================================================
+   16. "Create profile" CTA — make it read as an on-theme GOLD action, not a
+   muted dark button that blends into the login card.
+   ============================================================================ */
+.member-signup-cta { border-top-color: rgba(245, 197, 24, .35); }
+.member-signup-cta .form-hint { color: var(--text-secondary); }
+#openSignupBtn {
+  background: transparent;
+  color: var(--brand-gold);
+  border: 2px solid var(--brand-gold);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  width: 100%;
+  padding: .7rem 1rem;
+  border-radius: 8px;
+}
+#openSignupBtn:hover {
+  background: var(--gold-grad);
+  color: #0d0d0d;
+  box-shadow: 0 6px 18px rgba(245, 197, 24, .4);
 }

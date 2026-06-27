@@ -63,6 +63,7 @@ class MemberRegistration {
             'dob' => 'DATE NULL',
             'emergency_name' => 'VARCHAR(120) NULL',
             'emergency_phone' => 'VARCHAR(20) NULL',
+            'ptf_fee' => 'DECIMAL(10,2) NULL DEFAULT 0',
         ];
         foreach ($cols as $col => $def) {
             try {
