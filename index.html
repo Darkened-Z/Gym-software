@@ -83,6 +83,10 @@
                             <small class="form-hint">If you are a gym member, use this side only.</small>
                             <button type="submit" class="btn btn-primary" aria-label="Login as Member">Open Member Profile</button>
                         </form>
+                        <div class="member-signup-cta">
+                            <span class="form-hint">New here and don't have a code yet?</span>
+                            <button type="button" class="btn btn-secondary" id="openSignupBtn">Create profile</button>
+                        </div>
                     </section>
                 </div>
             </div>
@@ -133,6 +137,86 @@
                 })
                 .catch(err => console.error('Auth check error:', err));
         }
+    </script>
+
+    <!-- Member self-registration ("Create profile") ------------------------- -->
+    <style>
+        .member-signup-cta { margin-top: 1rem; padding-top: 1rem; border-top: 1px dashed var(--border-color, #2a2a2a); text-align: center; }
+        .member-signup-cta .form-hint { display: block; margin-bottom: .5rem; }
+        .signup-modal { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: flex-start; justify-content: center; background: rgba(0, 0, 0, .72); overflow-y: auto; padding: 24px 14px; }
+        .signup-modal[hidden] { display: none; }
+        .signup-card { background: var(--bg-secondary, #161616); color: var(--text-color, #ededed); border: 1px solid var(--border-color, #2a2a2a); border-top: 3px solid var(--brand-gold, #f5c518); border-radius: 14px; width: 100%; max-width: 440px; padding: 20px 22px 22px; box-shadow: 0 16px 40px rgba(0, 0, 0, .6); }
+        .signup-head { display: flex; align-items: center; justify-content: space-between; }
+        .signup-head h2 { margin: 0; font-size: 1.5rem; color: #fff; }
+        .signup-close { background: none; border: none; color: var(--text-secondary, #c8c8c8); font-size: 1.7rem; line-height: 1; cursor: pointer; padding: 0 .25rem; }
+        .signup-sub { color: var(--text-secondary, #c8c8c8); font-size: .9rem; margin: .35rem 0 1rem; }
+        .signup-body .fg { margin-bottom: .7rem; display: flex; flex-direction: column; gap: .3rem; }
+        .signup-body label { font-size: .85rem; color: var(--text-secondary, #c8c8c8); }
+        .signup-body input, .signup-body select { background: #1a1a1a; color: var(--text-color, #ededed); border: 2px solid #2e2e2e; border-radius: 8px; padding: .6rem .7rem; font-size: 16px; }
+        .signup-body input:focus, .signup-body select:focus { outline: none; border-color: var(--brand-gold, #f5c518); box-shadow: 0 0 0 3px rgba(245, 197, 24, .4); }
+        .signup-foot { display: flex; gap: .6rem; margin-top: 1rem; }
+        .signup-foot .btn { flex: 1; }
+        .signup-msg { margin-top: .75rem; font-size: .9rem; text-align: center; }
+        .signup-msg.ok { color: #4ade80; }
+        .signup-msg.err { color: #ff6b6b; }
+    </style>
+    <div id="signupModal" class="signup-modal" hidden>
+        <div class="signup-card" role="dialog" aria-modal="true" aria-labelledby="signupTitle">
+            <div class="signup-head">
+                <h2 id="signupTitle">Create your profile</h2>
+                <button type="button" class="signup-close" id="signupCloseBtn" aria-label="Close">&times;</button>
+            </div>
+            <p class="signup-sub">Send your details to request a membership. The gym will set up your profile and give you your member code after payment.</p>
+            <form id="signupForm" class="signup-body">
+                <div class="fg"><label for="su_name">Full name *</label><input id="su_name" maxlength="200" autocomplete="name" required></div>
+                <div class="fg"><label for="su_phone">Phone *</label><input id="su_phone" maxlength="20" inputmode="tel" autocomplete="tel" placeholder="03xx xxxxxxx" required></div>
+                <div class="fg"><label for="su_gender">Gender *</label><select id="su_gender" required><option value="">Choose…</option><option value="men">Men</option><option value="women">Women</option></select></div>
+                <div class="fg"><label for="su_address">Address</label><input id="su_address" maxlength="255" autocomplete="street-address"></div>
+                <div class="fg"><label for="su_cnic">CNIC</label><input id="su_cnic" maxlength="20" placeholder="xxxxx-xxxxxxx-x"></div>
+                <div class="fg"><label for="su_dob">Date of birth</label><input id="su_dob" type="date"></div>
+                <div class="fg"><label for="su_en">Emergency contact name</label><input id="su_en" maxlength="120"></div>
+                <div class="fg"><label for="su_ep">Emergency contact phone</label><input id="su_ep" maxlength="20" inputmode="tel"></div>
+                <div class="signup-foot">
+                    <button type="button" class="btn btn-secondary" id="signupCancelBtn">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="signupSubmitBtn">Submit request</button>
+                </div>
+                <div class="signup-msg" id="signupMsg" role="status" aria-live="polite"></div>
+            </form>
+        </div>
+    </div>
+    <script>
+        (function () {
+            var modal = document.getElementById('signupModal');
+            var openBtn = document.getElementById('openSignupBtn');
+            var msg = document.getElementById('signupMsg');
+            var form = document.getElementById('signupForm');
+            function val(id) { var el = document.getElementById(id); return el ? el.value.trim() : ''; }
+            function setMsg(t, k) { if (msg) { msg.textContent = t; msg.className = 'signup-msg ' + (k || ''); } }
+            function openModal() { if (modal) { modal.hidden = false; var n = document.getElementById('su_name'); if (n) n.focus(); } }
+            function closeModal() { if (modal) { modal.hidden = true; setMsg('', ''); } }
+            if (openBtn) openBtn.addEventListener('click', openModal);
+            var c1 = document.getElementById('signupCloseBtn'), c2 = document.getElementById('signupCancelBtn');
+            if (c1) c1.addEventListener('click', closeModal);
+            if (c2) c2.addEventListener('click', closeModal);
+            if (modal) modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
+            document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && modal && !modal.hidden) closeModal(); });
+            if (form) form.addEventListener('submit', function (e) {
+                e.preventDefault();
+                var btn = document.getElementById('signupSubmitBtn');
+                var payload = { name: val('su_name'), phone: val('su_phone'), gender: val('su_gender'), address: val('su_address'), cnic: val('su_cnic'), dob: val('su_dob'), emergency_name: val('su_en'), emergency_phone: val('su_ep') };
+                if (!payload.name || !payload.phone || !payload.gender) { setMsg('Please fill in name, phone and gender.', 'err'); return; }
+                if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+                setMsg('', '');
+                fetch('api/registrations.php?action=submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+                    .then(function (r) { return r.json(); })
+                    .then(function (d) {
+                        if (d && d.success) { form.reset(); setMsg(d.message || 'Your request has been sent.', 'ok'); }
+                        else { setMsg((d && d.message) || 'Could not send your request.', 'err'); }
+                    })
+                    .catch(function () { setMsg('Network error. Please try again.', 'err'); })
+                    .finally(function () { if (btn) { btn.disabled = false; btn.textContent = 'Submit request'; } });
+            });
+        })();
     </script>
 </body>
 </html>

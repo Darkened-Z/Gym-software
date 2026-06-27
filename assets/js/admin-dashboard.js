@@ -125,7 +125,7 @@ function setupMobileMenu() {
 
 function applyRolePermissions() {
     const hiddenSectionsByRole = {
-        staff: ['staff', 'activity-log', 'import', 'sync', 'reminders']
+        staff: ['staff', 'registrations', 'activity-log', 'import', 'sync', 'reminders']
     };
 
     const hiddenSections = hiddenSectionsByRole[currentUserRole] || [];
@@ -303,7 +303,7 @@ function startSectionAutoRefresh() {
 
 function switchSection(section) {
     const blockedSectionsByRole = {
-        staff: ['staff', 'activity-log', 'import', 'sync', 'reminders']
+        staff: ['staff', 'registrations', 'activity-log', 'import', 'sync', 'reminders']
     };
     if ((blockedSectionsByRole[currentUserRole] || []).includes(section)) {
         Utils.showNotification('This section is available for admin only.', 'error');
@@ -340,6 +340,7 @@ function switchSection(section) {
     const titles = {
         'dashboard': 'Home Dashboard',
         'members': 'Members',
+        'registrations': 'New Member Requests',
         'attendance': 'Check In / Out',
         'payments': 'Payments',
         'due-fees': 'Members Who Need to Pay',
@@ -389,6 +390,9 @@ function loadSection(section) {
             break;
         case 'members':
             loadMembers();
+            break;
+        case 'registrations':
+            loadRegistrations();
             break;
         case 'attendance':
             loadAttendance();
@@ -7490,4 +7494,197 @@ function saveDetailsSettings() {
             console.error('Details save error:', err);
             Utils.showNotification('Error saving details', 'error');
         });
+}
+
+// ============================================================================
+// MEMBER REGISTRATIONS — the public "Create profile" queue. Admin reviews a
+// request, then approves (creates the member + records the first payment +
+// assigns the member code) or rejects. All applicant text is escaped because
+// it comes from public input. Admin only (staff is blocked from the section).
+// ============================================================================
+let _registrationsCache = [];
+
+function loadRegistrations() {
+    const html = `
+        <div class="members-section">
+            ${renderSectionGuideCard({
+                chip: 'Registrations Help',
+                title: 'New member requests',
+                description: 'People who tap "Create profile" on the login page land here. Approve after payment to create the member and give them a code.',
+                steps: [
+                    'Review the request (Approve opens the full details).',
+                    'Enter the fees and the amount paid, then confirm the member code.',
+                    'Approving creates the member, records the first payment, and activates them.'
+                ]
+            })}
+            <div class="section-header">
+                <div class="section-actions">
+                    <select id="regStatusFilter" class="search-input" style="max-width:170px;">
+                        <option value="pending">Pending</option>
+                        <option value="approved">Approved</option>
+                        <option value="rejected">Rejected</option>
+                        <option value="all">All</option>
+                    </select>
+                    <input type="text" id="regSearch" placeholder="Search by name, phone, CNIC, or code" class="search-input">
+                </div>
+            </div>
+            <div id="registrationsTableContainer"></div>
+        </div>
+    `;
+    document.getElementById('contentBody').innerHTML = html;
+    document.getElementById('regStatusFilter')?.addEventListener('change', () => loadRegistrationsTable(1));
+    document.getElementById('regSearch')?.addEventListener('input', Utils.debounce(() => loadRegistrationsTable(1), 300));
+    loadRegistrationsTable(1);
+}
+
+function loadRegistrationsTable(page = 1) {
+    const status = document.getElementById('regStatusFilter')?.value || 'pending';
+    const search = document.getElementById('regSearch')?.value || '';
+    const container = document.getElementById('registrationsTableContainer');
+    if (container) container.innerHTML = '<div class="loading">Loading...</div>';
+    fetch(`api/registrations.php?action=list&status=${encodeURIComponent(status)}&page=${page}&search=${encodeURIComponent(search)}`)
+        .then(res => res.json())
+        .then(data => {
+            if (!data.success) throw new Error(data.message || 'Failed to load registrations');
+            _registrationsCache = data.data || [];
+            const rows = _registrationsCache;
+            const pagination = data.pagination || { page: 1, pages: 1, limit: 20 };
+            const startIndex = ((pagination.page || 1) - 1) * (pagination.limit || 20);
+            const badge = (s) => s === 'pending' ? '<span class="status-badge status-pending">Pending</span>'
+                : s === 'approved' ? '<span class="status-badge status-active">Approved</span>'
+                    : '<span class="status-badge status-inactive">Rejected</span>';
+            container.innerHTML = `
+                <table class="data-table">
+                    <thead><tr>
+                        <th>#</th><th>Name</th><th>Phone</th><th>Side</th><th>CNIC</th><th>Requested</th><th>Status</th><th>Actions</th>
+                    </tr></thead>
+                    <tbody>
+                        ${rows.length ? rows.map((r, idx) => `
+                            <tr>
+                                <td data-label="#">${startIndex + idx + 1}</td>
+                                <td data-label="Name">${escapeHtml(r.name || '-')}</td>
+                                <td data-label="Phone">${escapeHtml(r.phone || '-')}</td>
+                                <td data-label="Side">${r.gender === 'women' ? 'Women' : 'Men'}</td>
+                                <td data-label="CNIC">${escapeHtml(r.cnic || '-')}</td>
+                                <td data-label="Requested">${Utils.formatDate(r.created_at)}</td>
+                                <td data-label="Status">${badge(r.status)}${r.assigned_member_code ? ' <strong>' + escapeHtml(r.assigned_member_code) + '</strong>' : ''}</td>
+                                <td data-label="Actions">
+                                    ${r.status === 'pending' ? `
+                                        <button class="btn btn-sm btn-primary" onclick="showApproveRegistration(${r.id})">Approve</button>
+                                        <button class="btn btn-sm btn-danger" onclick="rejectRegistration(${r.id})">Reject</button>
+                                    ` : `<button class="btn btn-sm btn-secondary" onclick="showRegistrationDetails(${r.id})">View</button>`}
+                                </td>
+                            </tr>
+                        `).join('') : '<tr><td colspan="8"><div class="empty-state"><strong>No requests</strong>New "Create profile" requests will show up here.</div></td></tr>'}
+                    </tbody>
+                </table>
+                ${pagination.pages > 1 ? `
+                    <div class="pagination" style="margin-top:1rem;display:flex;gap:1rem;justify-content:center;align-items:center;">
+                        <button class="btn btn-secondary" ${pagination.page === 1 ? 'disabled' : ''} onclick="loadRegistrationsTable(${pagination.page - 1})">Previous</button>
+                        <span>Page ${pagination.page} of ${pagination.pages}</span>
+                        <button class="btn btn-secondary" ${pagination.page === pagination.pages ? 'disabled' : ''} onclick="loadRegistrationsTable(${pagination.page + 1})">Next</button>
+                    </div>` : ''}
+            `;
+        })
+        .catch(err => { if (container) container.innerHTML = `<div class="error">${escapeHtml(err.message)}</div>`; });
+}
+
+function _regById(id) { return _registrationsCache.find(r => String(r.id) === String(id)); }
+
+function showRegistrationDetails(id) {
+    const r = _regById(id);
+    if (!r) return;
+    const row = (label, val) => `<div class="detail-item" style="display:flex;justify-content:space-between;gap:1rem;padding:.5rem 0;border-bottom:1px solid var(--border-color);"><span class="detail-label">${label}</span><strong>${escapeHtml(val || '-')}</strong></div>`;
+    const html = `
+        <div class="modal" id="regDetailModal">
+            <div class="modal-content">
+                <div class="modal-header"><h2>Request details</h2><button class="modal-close" onclick="document.getElementById('regDetailModal').remove()">&times;</button></div>
+                <div class="modal-body">
+                    ${row('Name', r.name)}${row('Phone', r.phone)}${row('Side', r.gender === 'women' ? 'Women' : 'Men')}
+                    ${row('Address', r.address)}${row('CNIC', r.cnic)}${row('Date of birth', r.dob)}
+                    ${row('Emergency name', r.emergency_name)}${row('Emergency phone', r.emergency_phone)}
+                    ${row('Status', r.status)}${r.assigned_member_code ? row('Member code', r.assigned_member_code) : ''}
+                    ${r.rejection_reason ? row('Reason', r.rejection_reason) : ''}
+                </div>
+                <div class="modal-footer"><button class="btn btn-secondary" onclick="document.getElementById('regDetailModal').remove()">Close</button></div>
+            </div>
+        </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function showApproveRegistration(id) {
+    const r = _regById(id);
+    if (!r) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const nm = new Date(); nm.setMonth(nm.getMonth() + 1);
+    const nextDue = nm.toISOString().slice(0, 10);
+    const html = `
+        <div class="modal" id="approveRegModal">
+            <div class="modal-content">
+                <div class="modal-header"><h2>Approve &amp; create member</h2><button class="modal-close" onclick="closeApproveRegModal()">&times;</button></div>
+                <form id="approveRegForm" class="modal-body">
+                    <input type="hidden" id="ar_id" value="${r.id}">
+                    <div class="section-guide" style="margin-bottom:1rem;padding:.75rem 1rem;">
+                        <strong>${escapeHtml(r.name || '')}</strong> · ${escapeHtml(r.phone || '')} · ${r.gender === 'women' ? 'Women' : 'Men'}
+                        ${r.cnic ? '<br>CNIC: ' + escapeHtml(r.cnic) : ''}${r.address ? '<br>' + escapeHtml(r.address) : ''}
+                    </div>
+                    <div class="form-group"><label>Member code / serial *</label><input type="text" id="ar_code" required placeholder="Loading suggestion…"></div>
+                    <div class="form-group"><label>Join date</label><input type="date" id="ar_join" value="${today}"></div>
+                    <div class="form-group"><label>Admission fee</label><input type="number" id="ar_admission" min="0" step="any" value="0"></div>
+                    <div class="form-group"><label>Monthly fee</label><input type="number" id="ar_monthly" min="0" step="any" value="0"></div>
+                    <div class="form-group"><label>Locker fee</label><input type="number" id="ar_locker" min="0" step="any" value="0"></div>
+                    <div class="form-group"><label>Amount paid now</label><input type="number" id="ar_paid" min="0" step="any" value="0"></div>
+                    <div class="form-group"><label>Payment method</label><select id="ar_method"><option>Cash</option><option>Card</option><option>Bank Transfer</option><option>Easypaisa</option><option>JazzCash</option></select></div>
+                    <div class="form-group"><label>Next fee due date</label><input type="date" id="ar_nextdue" value="${nextDue}"></div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" onclick="closeApproveRegModal()">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Approve &amp; create</button>
+                    </div>
+                </form>
+            </div>
+        </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+    fetch('api/registrations.php?action=next_code').then(res => res.json()).then(d => {
+        const el = document.getElementById('ar_code');
+        if (el && d && d.success) { el.value = d.next_code; el.placeholder = ''; }
+    }).catch(() => { const el = document.getElementById('ar_code'); if (el) el.placeholder = 'Enter a code'; });
+    document.getElementById('approveRegForm')?.addEventListener('submit', function (e) { e.preventDefault(); saveApproveRegistration(); });
+}
+
+function closeApproveRegModal() { document.getElementById('approveRegModal')?.remove(); }
+
+function saveApproveRegistration() {
+    const payload = {
+        id: document.getElementById('ar_id')?.value,
+        member_code: document.getElementById('ar_code')?.value?.trim(),
+        join_date: document.getElementById('ar_join')?.value,
+        admission_fee: document.getElementById('ar_admission')?.value || 0,
+        monthly_fee: document.getElementById('ar_monthly')?.value || 0,
+        locker_fee: document.getElementById('ar_locker')?.value || 0,
+        amount_paid: document.getElementById('ar_paid')?.value || 0,
+        payment_method: document.getElementById('ar_method')?.value || 'Cash',
+        next_fee_due_date: document.getElementById('ar_nextdue')?.value
+    };
+    if (!payload.member_code) { Utils.showNotification('Enter a member code', 'error'); return; }
+    fetch('api/registrations.php?action=approve', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+        .then(res => res.json())
+        .then(data => {
+            if (!data.success) throw new Error(data.message || 'Failed to approve');
+            Utils.showNotification(data.message || 'Member created', 'success');
+            closeApproveRegModal();
+            loadRegistrationsTable(1);
+        })
+        .catch(err => Utils.showNotification(err.message, 'error'));
+}
+
+function rejectRegistration(id) {
+    if (!confirm('Reject this request? It will not create a member.')) return;
+    fetch('api/registrations.php?action=reject', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
+        .then(res => res.json())
+        .then(data => {
+            if (!data.success) throw new Error(data.message || 'Failed to reject');
+            Utils.showNotification(data.message || 'Rejected', 'success');
+            loadRegistrationsTable(1);
+        })
+        .catch(err => Utils.showNotification(err.message, 'error'));
 }
