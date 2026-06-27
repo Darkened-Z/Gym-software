@@ -7459,6 +7459,18 @@ function renderDetailsSettings(s) {
             ${field('set_social_snapchat', 'Snapchat Link', s.social_snapchat, 'https://snapchat.com/add/…', 'url')}
             ${field('set_social_tiktok', 'TikTok Link', s.social_tiktok, 'https://tiktok.com/@…', 'url')}
         </div>
+        <h3 style="margin:1.75rem 0 .25rem;border-top:1px solid var(--border-color);padding-top:1.25rem;">Staff Access Hours</h3>
+        <p style="color:var(--text-secondary);margin:0 0 1rem;">Limit when front-desk STAFF can log in and use the dashboard. Admin is always allowed. Leave off for 24-hour access.</p>
+        <div class="form-group">
+            <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;">
+                <input type="checkbox" id="set_staff_hours_enabled" ${s.staff_hours_enabled === '1' ? 'checked' : ''} ${dis} style="width:auto;margin:0;">
+                Limit staff to the hours below
+            </label>
+        </div>
+        <div class="form-row">
+            ${field('set_staff_hours_start', 'Open time', s.staff_hours_start, '', 'time')}
+            ${field('set_staff_hours_end', 'Close time', s.staff_hours_end, '', 'time')}
+        </div>
         ${admin ? '<button class="btn btn-primary" onclick="saveDetailsSettings()">Save Details</button>' : ''}
       </div>`;
 }
@@ -7476,7 +7488,10 @@ function saveDetailsSettings() {
         social_facebook: val('set_social_facebook'),
         social_instagram: val('set_social_instagram'),
         social_snapchat: val('set_social_snapchat'),
-        social_tiktok: val('set_social_tiktok')
+        social_tiktok: val('set_social_tiktok'),
+        staff_hours_enabled: document.getElementById('set_staff_hours_enabled')?.checked ? '1' : '0',
+        staff_hours_start: val('set_staff_hours_start'),
+        staff_hours_end: val('set_staff_hours_end')
     };
     fetch('api/settings.php?action=save', {
         method: 'POST',
@@ -7594,15 +7609,22 @@ function _regById(id) { return _registrationsCache.find(r => String(r.id) === St
 function showRegistrationDetails(id) {
     const r = _regById(id);
     if (!r) return;
-    const row = (label, val) => `<div class="detail-item" style="display:flex;justify-content:space-between;gap:1rem;padding:.5rem 0;border-bottom:1px solid var(--border-color);"><span class="detail-label">${label}</span><strong>${escapeHtml(val || '-')}</strong></div>`;
+    let d = {};
+    if (r.details) { try { d = JSON.parse(r.details) || {}; } catch (e) { d = {}; } }
+    const row = (label, val) => (val ? `<div class="detail-item" style="display:flex;justify-content:space-between;gap:1rem;padding:.5rem 0;border-bottom:1px solid var(--border-color);"><span class="detail-label">${label}</span><strong style="text-align:right;">${escapeHtml(String(val))}</strong></div>` : '');
+    const ml = { height: 'Height', weight: 'Weight', chest: 'Chest', waist: 'Waist', shoulder: 'Shoulder', bicep: 'Bicep', forearm: 'Forearm', hip: 'Hip', thigh: 'Thigh', calf: 'Calf' };
+    const measures = Object.keys(ml).filter(k => d[k]).map(k => ml[k] + ': ' + d[k]).join(' · ');
     const html = `
         <div class="modal" id="regDetailModal">
             <div class="modal-content">
                 <div class="modal-header"><h2>Request details</h2><button class="modal-close" onclick="document.getElementById('regDetailModal').remove()">&times;</button></div>
                 <div class="modal-body">
-                    ${row('Name', r.name)}${row('Phone', r.phone)}${row('Side', r.gender === 'women' ? 'Women' : 'Men')}
-                    ${row('Address', r.address)}${row('CNIC', r.cnic)}${row('Date of birth', r.dob)}
-                    ${row('Emergency name', r.emergency_name)}${row('Emergency phone', r.emergency_phone)}
+                    ${row('Name', r.name)}${row('Phone (Cell)', r.phone)}${row('CNIC', r.cnic)}
+                    ${row('Side', r.gender === 'women' ? 'Women' : 'Men')}
+                    ${row("Husband's / Father's name", d.father_name)}${row('Occupation', d.occupation)}
+                    ${row('Date of birth', r.dob)}${row('Email', d.email)}
+                    ${row('Residence address', r.address)}${row('Office address', d.office_address)}${row('Office phone', d.office_phone)}
+                    ${row('Blood group', d.blood_group)}${row('Measurements', measures)}
                     ${row('Status', r.status)}${r.assigned_member_code ? row('Member code', r.assigned_member_code) : ''}
                     ${r.rejection_reason ? row('Reason', r.rejection_reason) : ''}
                 </div>
@@ -7628,11 +7650,13 @@ function showApproveRegistration(id) {
                         <strong>${escapeHtml(r.name || '')}</strong> · ${escapeHtml(r.phone || '')} · ${r.gender === 'women' ? 'Women' : 'Men'}
                         ${r.cnic ? '<br>CNIC: ' + escapeHtml(r.cnic) : ''}${r.address ? '<br>' + escapeHtml(r.address) : ''}
                     </div>
+                    <div class="form-group"><label>Side (which section)</label><select id="ar_side"><option value="men" ${r.gender !== 'women' ? 'selected' : ''}>Men</option><option value="women" ${r.gender === 'women' ? 'selected' : ''}>Women</option></select></div>
                     <div class="form-group"><label>Member code / serial *</label><input type="text" id="ar_code" required placeholder="Loading suggestion…"></div>
                     <div class="form-group"><label>Join date</label><input type="date" id="ar_join" value="${today}"></div>
                     <div class="form-group"><label>Admission fee</label><input type="number" id="ar_admission" min="0" step="any" value="0"></div>
                     <div class="form-group"><label>Monthly fee</label><input type="number" id="ar_monthly" min="0" step="any" value="0"></div>
                     <div class="form-group"><label>Locker fee</label><input type="number" id="ar_locker" min="0" step="any" value="0"></div>
+                    <div class="form-group"><label>Personal training fee (PTF)</label><input type="number" id="ar_ptf" min="0" step="any" value="0"></div>
                     <div class="form-group"><label>Amount paid now</label><input type="number" id="ar_paid" min="0" step="any" value="0"></div>
                     <div class="form-group"><label>Payment method</label><select id="ar_method"><option>Cash</option><option>Card</option><option>Bank Transfer</option><option>Easypaisa</option><option>JazzCash</option></select></div>
                     <div class="form-group"><label>Next fee due date</label><input type="date" id="ar_nextdue" value="${nextDue}"></div>
@@ -7656,11 +7680,13 @@ function closeApproveRegModal() { document.getElementById('approveRegModal')?.re
 function saveApproveRegistration() {
     const payload = {
         id: document.getElementById('ar_id')?.value,
+        gender: document.getElementById('ar_side')?.value || 'men',
         member_code: document.getElementById('ar_code')?.value?.trim(),
         join_date: document.getElementById('ar_join')?.value,
         admission_fee: document.getElementById('ar_admission')?.value || 0,
         monthly_fee: document.getElementById('ar_monthly')?.value || 0,
         locker_fee: document.getElementById('ar_locker')?.value || 0,
+        ptf_fee: document.getElementById('ar_ptf')?.value || 0,
         amount_paid: document.getElementById('ar_paid')?.value || 0,
         payment_method: document.getElementById('ar_method')?.value || 'Cash',
         next_fee_due_date: document.getElementById('ar_nextdue')?.value
