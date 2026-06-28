@@ -175,12 +175,12 @@
 
         if (!hasPending) {
             return `
-                <div style="margin:1rem 0;padding:1rem 1.25rem;border:1px solid rgba(22,101,52,0.15);border-radius:12px;background:#f8fafc;">
+                <div style="margin:1rem 0;padding:1rem 1.25rem;border:1px solid rgba(22,101,52,0.15);border-radius:12px;background:var(--bg-secondary);">
                     <div style="display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;align-items:center;">
                         <div>
                             <div style="font-size:0.85rem;text-transform:uppercase;letter-spacing:0.08em;color:#166534;font-weight:700;">Attendance outbox</div>
                             <h3 style="margin:0.35rem 0 0;">No pending attendance actions</h3>
-                            <p style="margin:0.5rem 0 0;color:#475569;">Attendance writes are not waiting on this device right now.</p>
+                            <p style="margin:0.5rem 0 0;color:var(--text-secondary);">Attendance writes are not waiting on this device right now.</p>
                         </div>
                         <span style="padding:0.35rem 0.7rem;border-radius:999px;background:#dcfce7;color:#166534;font-weight:700;">0 pending</span>
                     </div>
@@ -191,7 +191,7 @@
         const items = summary.items.slice(0, 3).map(item => `
             <li style="display:flex;justify-content:space-between;gap:1rem;padding:0.45rem 0;border-top:1px solid rgba(148,163,184,0.18);">
                 <span>${describeQueueItem(item)}</span>
-                <span style="color:#64748b;">${item.source === 'attendance-outbox' ? '' : item.source}</span>
+                <span style="color:var(--text-secondary);">${item.source === 'attendance-outbox' ? '' : item.source}</span>
             </li>
         `).join('');
 
