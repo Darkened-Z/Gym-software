@@ -227,7 +227,7 @@ define('GATE_OPEN_DURATION', (int)env('GATE_OPEN_DURATION_MS', 3000));
 // Rate Limiting Configuration
 // ============================================================================
 
-define('RATE_LIMIT_LOGIN_MAX', (int)env('RATE_LIMIT_LOGIN_MAX', 5));
+define('RATE_LIMIT_LOGIN_MAX', (int)env('RATE_LIMIT_LOGIN_MAX', 20));
 define('RATE_LIMIT_LOGIN_WINDOW', (int)env('RATE_LIMIT_LOGIN_WINDOW', 900));
 define('RATE_LIMIT_GATE_MAX', (int)env('RATE_LIMIT_GATE_MAX', 10));
 define('RATE_LIMIT_GATE_WINDOW', (int)env('RATE_LIMIT_GATE_WINDOW', 60));
