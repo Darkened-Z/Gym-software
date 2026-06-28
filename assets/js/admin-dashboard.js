@@ -3230,6 +3230,16 @@ function loadStaff() {
     loadStaffTable(1);
 }
 
+function formatStaffAccess(row) {
+    if (row.role === 'admin') return 'Full';
+    if (!Number(row.access_enabled)) return '24/7';
+    const names = { 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat', 7: 'Sun' };
+    const days = String(row.access_days || '').split(',').map(Number).filter(n => n >= 1 && n <= 7).sort((a, b) => a - b);
+    const dayStr = (!days.length || days.length === 7) ? 'Every day' : days.map(d => names[d]).join(' ');
+    const hourStr = (row.access_start && row.access_end) ? `${row.access_start}–${row.access_end}` : 'all hours';
+    return `${dayStr} · ${hourStr}`;
+}
+
 function loadStaffTable(page = 1) {
     const search = document.getElementById('staffSearch')?.value || '';
     fetch(`api/staff.php?action=list&page=${page}&search=${encodeURIComponent(search)}`)
@@ -3243,7 +3253,7 @@ function loadStaffTable(page = 1) {
                 <table class="data-table">
                     <thead>
                         <tr>
-                            <th>#</th><th>Name</th><th>Username</th><th>Role</th><th>Section</th><th>Created</th><th>Actions</th>
+                            <th>#</th><th>Name</th><th>Username</th><th>Role</th><th>Section</th><th>Access</th><th>Created</th><th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -3254,13 +3264,14 @@ function loadStaffTable(page = 1) {
                                 <td data-label="Username">${row.username}</td>
                                 <td data-label="Role"><span class="status-badge status-active">${row.role}</span></td>
                                 <td data-label="Section">${row.role === 'admin' ? 'Both' : ({ men: 'Men', women: 'Women', both: 'Both' }[row.staff_section] || 'Both')}</td>
+                                <td data-label="Access">${escapeHtml(formatStaffAccess(row))}</td>
                                 <td data-label="Created">${Utils.formatDate(row.created_at)}</td>
                                 <td data-label="Actions">
                                     <button class="btn btn-sm btn-primary" onclick="editStaff(${row.id})">Edit</button>
                                     <button class="btn btn-sm btn-danger" onclick="deleteStaff(${row.id})">Delete</button>
                                 </td>
                             </tr>
-                        `).join('') : '<tr><td colspan="7"><div class="empty-state"><strong>No staff found</strong>Add your first staff user here.</div></td></tr>'}
+                        `).join('') : '<tr><td colspan="8"><div class="empty-state"><strong>No staff found</strong>Add your first staff user here.</div></td></tr>'}
                     </tbody>
                 </table>
                 ${pagination.pages > 1 ? `

@@ -441,10 +441,10 @@
                         body: '#14532d'
                     }
                     : {
-                        background: '#f8fafc',
-                        border: '#cbd5e1',
-                        title: '#334155',
-                        body: '#475569'
+                        background: 'var(--bg-secondary)',
+                        border: 'var(--border-color)',
+                        title: 'var(--text-color)',
+                        body: 'var(--text-secondary)'
                     };
 
         return `
