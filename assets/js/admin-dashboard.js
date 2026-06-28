@@ -854,7 +854,7 @@ function renderDashboard(data) {
         modalEl.id = 'changePasswordModal';
         modalEl.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(243,247,244,0.92);z-index:9999;align-items:center;justify-content:center;';
         modalEl.innerHTML = `
-            <div style="background:#fff;border-radius:12px;padding:2rem;width:100%;max-width:420px;box-shadow:0 8px 32px rgba(20,41,28,0.12);border:1px solid #d1fae5;">
+            <div style="background:var(--bg-secondary);border-radius:12px;padding:2rem;width:100%;max-width:420px;box-shadow:0 8px 32px rgba(20,41,28,0.12);border:1px solid #d1fae5;">
                 <h2 style="margin-top:0;">🔑 Change Password</h2>
                 <div id="changePwError" style="display:none;color:#dc2626;margin-bottom:1rem;padding:0.5rem;background:#fef2f2;border-radius:6px;"></div>
                 <label style="display:block;margin-bottom:0.4rem;font-weight:600;">Current Password</label>
@@ -1285,7 +1285,7 @@ function loadMembers() {
             </div>
             <div style="margin-bottom:1rem;">
                 <input type="text" id="crossGenderSearch" placeholder="🔍 Search across ALL members (both genders)…" class="search-input" style="width:100%;max-width:480px;">
-                <div id="crossGenderResults" style="display:none;margin-top:0.5rem;background:#fff;border:1px solid #d1fae5;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(20,41,28,0.08);"></div>
+                <div id="crossGenderResults" style="display:none;margin-top:0.5rem;background:var(--bg-secondary);border:1px solid #d1fae5;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(20,41,28,0.08);"></div>
             </div>
             <div id="membersAnalyticsContainer" style="margin-bottom:1.5rem;"></div>
             <div id="membersTableContainer"></div>
@@ -2918,9 +2918,9 @@ function showUpdateFeeForm(member) {
             'Enter how much money you received. The default value is the monthly fee.'}
                         </small>
                     </div>
-                    <div id="paymentCalculation" style="background: #f8fffb; color: #14291c; padding: 0.75rem; border-radius: 5px; margin-top: 0.5rem; font-size: 0.9rem; border: 1px solid var(--border-color);">
+                    <div id="paymentCalculation" style="background: var(--bg-secondary); color: var(--text-color); padding: 0.75rem; border-radius: 5px; margin-top: 0.5rem; font-size: 0.9rem; border: 1px solid var(--border-color);">
                         <strong>Payment Summary:</strong>
-                        <div id="calcDetails" style="margin-top: 0.25rem; color: #4b7a5e;">
+                        <div id="calcDetails" style="margin-top: 0.25rem; color: var(--text-secondary);">
                             ${member.total_due_amount > 0 ?
             `Previous Due: ${Utils.formatCurrency(member.total_due_amount)}<br>
                                  Monthly Fee: ${Utils.formatCurrency(member.monthly_fee)}<br>
@@ -3297,6 +3297,24 @@ function showStaffForm(staff = null) {
                         <option value="men" ${staff?.staff_section === 'men' ? 'selected' : ''}>Men only</option>
                         <option value="women" ${staff?.staff_section === 'women' ? 'selected' : ''}>Women only</option>
                     </select></div>
+                    <div class="form-group" style="border-top:1px solid var(--border-color);padding-top:.85rem;">
+                        <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;">
+                            <input type="checkbox" id="staffAccessEnabled" ${staff?.access_enabled ? 'checked' : ''} style="width:auto;margin:0;">
+                            Limit this staff's access to set days &amp; hours
+                        </label>
+                        <small class="form-hint" style="display:block;margin-top:.35rem;">Off = 24/7 access. Admins are never limited.</small>
+                    </div>
+                    <div class="form-group"><label>Allowed days <span style="color:var(--text-muted);font-weight:400;">(none ticked = every day)</span></label>
+                        <div style="display:flex;flex-wrap:wrap;gap:.4rem;">
+                            ${[['1', 'Mon'], ['2', 'Tue'], ['3', 'Wed'], ['4', 'Thu'], ['5', 'Fri'], ['6', 'Sat'], ['7', 'Sun']].map(([n, lbl]) =>
+            `<label style="display:inline-flex;align-items:center;gap:.3rem;border:1px solid var(--border-color);border-radius:6px;padding:.3rem .55rem;cursor:pointer;"><input type="checkbox" class="staffDay" value="${n}" ${String(staff?.access_days || '').split(',').includes(n) ? 'checked' : ''} style="width:auto;margin:0;">${lbl}</label>`
+        ).join('')}
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:.6rem;">
+                        <div class="form-group" style="flex:1;"><label>Start time</label><input type="time" id="staffAccessStart" value="${staff?.access_start || ''}"></div>
+                        <div class="form-group" style="flex:1;"><label>End time <span style="color:var(--text-muted);font-weight:400;">(blank = all hours)</span></label><input type="time" id="staffAccessEnd" value="${staff?.access_end || ''}"></div>
+                    </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" onclick="closeStaffModal()">Cancel</button>
                         <button type="submit" class="btn btn-primary">Save Staff User</button>
@@ -3324,7 +3342,11 @@ function saveStaff() {
         username: document.getElementById('staffUsername')?.value?.trim(),
         password: document.getElementById('staffPassword')?.value || '',
         role: document.getElementById('staffRole')?.value || 'staff',
-        staff_section: document.getElementById('staffSection')?.value || 'both'
+        staff_section: document.getElementById('staffSection')?.value || 'both',
+        access_enabled: document.getElementById('staffAccessEnabled')?.checked ? 1 : 0,
+        access_days: Array.from(document.querySelectorAll('.staffDay:checked')).map(c => c.value).join(','),
+        access_start: document.getElementById('staffAccessStart')?.value || '',
+        access_end: document.getElementById('staffAccessEnd')?.value || ''
     };
     const action = id ? 'update' : 'create';
     fetch(`api/staff.php?action=${action}`, {
@@ -4543,8 +4565,8 @@ function showUpdateDueFeeModal(memberId, gender, currentDueAmount, memberName) {
                     </div>
 
                     <div class="form-group">
-                        <div id="dueFeePreview" style="background: #f8fffb; color: #14291c; padding: 1rem; border-radius: 5px; margin-top: 1rem; border: 1px solid var(--border-color);">
-                            <strong style="color: #166534;">Preview:</strong> <span style="color: #4b7a5e;">New unpaid amount will be: <span id="previewAmount" style="color: #14291c; font-weight: bold;">${Utils.formatCurrency(currentDueAmount)}</span></span>
+                        <div id="dueFeePreview" style="background: var(--bg-secondary); color: var(--text-color); padding: 1rem; border-radius: 5px; margin-top: 1rem; border: 1px solid var(--border-color);">
+                            <strong style="color: var(--text-color);">Preview:</strong> <span style="color: var(--text-secondary);">New unpaid amount will be: <span id="previewAmount" style="color: var(--text-color); font-weight: bold;">${Utils.formatCurrency(currentDueAmount)}</span></span>
                         </div>
                     </div>
 
@@ -6109,8 +6131,8 @@ function renderOutboxReviewTable(title, sourceLabel, rows, note = '') {
         const queuedValue = formatOutboxReviewValue(row.queued, row.type);
         const currentValue = formatOutboxReviewValue(row.current, row.type);
         const differs = row.compare !== false && queuedValue !== currentValue;
-        const queuedStyle = differs ? 'color:#92400e;font-weight:700;' : 'color:#14291c;';
-        const currentStyle = differs ? 'color:#7f1d1d;font-weight:700;' : 'color:#14291c;';
+        const queuedStyle = differs ? 'color:#92400e;font-weight:700;' : 'color:var(--text-color);';
+        const currentStyle = differs ? 'color:#7f1d1d;font-weight:700;' : 'color:var(--text-color);';
 
         return `
             <tr>
@@ -6122,11 +6144,11 @@ function renderOutboxReviewTable(title, sourceLabel, rows, note = '') {
     }).join('');
 
     return `
-        <div style="margin-top:0.75rem;padding:0.9rem;border-radius:10px;background:#f8fafc;border:1px solid #cbd5e1;">
+        <div style="margin-top:0.75rem;padding:0.9rem;border-radius:10px;background:var(--bg-secondary);border:1px solid #cbd5e1;">
             <div style="display:flex;justify-content:space-between;gap:0.75rem;flex-wrap:wrap;align-items:center;">
                 <div>
                     <strong style="color:#0f172a;">${escapeSyncHtml(title)}</strong>
-                    <div style="margin-top:0.2rem;color:#475569;font-size:0.9rem;">${escapeSyncHtml(sourceLabel)}</div>
+                    <div style="margin-top:0.2rem;color:var(--text-secondary);font-size:0.9rem;">${escapeSyncHtml(sourceLabel)}</div>
                 </div>
                 <span style="padding:0.28rem 0.6rem;border-radius:999px;background:#ecfdf3;color:#166534;font-size:0.8rem;font-weight:700;">Read only • ${escapeSyncHtml(changedLabel)}</span>
             </div>
@@ -6487,9 +6509,9 @@ function renderOfflineOutboxModuleCard(moduleKey) {
             <div style="padding:0.75rem 0;border-top:1px solid rgba(148,163,184,0.18);">
                 <div style="display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;align-items:center;">
                     <strong>${escapeSyncHtml(item.action || 'item')} • ${escapeSyncHtml(formatOfflineOutboxAge(item.createdAt))}</strong>
-                    <span style="font-size:0.85rem;color:#64748b;">Attempts: ${Number(item.attempts || 0)}</span>
+                    <span style="font-size:0.85rem;color:var(--text-secondary);">Attempts: ${Number(item.attempts || 0)}</span>
                 </div>
-                <div style="margin-top:0.25rem;color:#64748b;font-size:0.9rem;">Source: ${escapeSyncHtml(item.source || 'outbox')}</div>
+                <div style="margin-top:0.25rem;color:var(--text-secondary);font-size:0.9rem;">Source: ${escapeSyncHtml(item.source || 'outbox')}</div>
                 ${itemError}
                 ${hasConflict ? '<div style="margin-top:0.35rem;color:#7c2d12;font-size:0.9rem;font-weight:700;">Conflict retained for manual review.</div>' : ''}
                 ${reviewButton}
@@ -6512,12 +6534,12 @@ function renderOfflineOutboxModuleCard(moduleKey) {
     `).join('');
 
     return `
-        <div style="padding:1rem 1.15rem;border:1px solid ${pendingCount > 0 ? '#f59e0b' : '#bbf7d0'};border-radius:12px;background:${pendingCount > 0 ? '#fffbeb' : '#f8fafc'};">
+        <div style="padding:1rem 1.15rem;border:1px solid ${pendingCount > 0 ? '#f59e0b' : '#bbf7d0'};border-radius:12px;background:${pendingCount > 0 ? '#fffbeb' : 'var(--bg-secondary)'};">
             <div style="display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;align-items:flex-start;">
                 <div>
                     <div style="font-size:0.82rem;text-transform:uppercase;letter-spacing:0.08em;color:#166534;font-weight:700;">${escapeSyncHtml(moduleState.label)}</div>
                     <h4 style="margin:0.35rem 0 0;">${pendingCount} pending${failedCount ? `, ${failedCount} with errors` : ''}${conflictCount ? `, ${conflictCount} need review` : ''}</h4>
-                    <p style="margin:0.45rem 0 0;color:#475569;">${summary.persistenceMode === 'session' ? 'Session-only queue.' : 'Stored locally until replay.'}${conflictCount ? ' Conflicting edits stay queued until you review or resolve them.' : ''}</p>
+                    <p style="margin:0.45rem 0 0;color:var(--text-secondary);">${summary.persistenceMode === 'session' ? 'Session-only queue.' : 'Stored locally until replay.'}${conflictCount ? ' Conflicting edits stay queued until you review or resolve them.' : ''}</p>
                     ${latestIssue ? `<p style="margin:0.35rem 0 0;color:${latestIssueColor};">Last issue: ${escapeSyncHtml(latestIssue.message || 'Unknown error')}</p>` : ''}
                 </div>
                 <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.5rem;">
@@ -6526,13 +6548,13 @@ function renderOfflineOutboxModuleCard(moduleKey) {
                 </div>
             </div>
             <div style="margin-top:0.9rem;">
-                ${items.length ? itemRows : '<div style="color:#64748b;">No queued items right now.</div>'}
+                ${items.length ? itemRows : '<div style="color:var(--text-secondary);">No queued items right now.</div>'}
             </div>
             ${conflictCount ? `
             <div style="margin-top:1rem;padding-top:0.75rem;border-top:1px solid rgba(148,163,184,0.18);">
                 <strong style="color:#7c2d12;">Conflict review queue</strong>
                 <p style="margin:0.35rem 0 0;color:#7c2d12;font-size:0.9rem;">These queued edits need a human compare step before retrying.</p>
-                ${conflictReviewRows || '<div style="margin-top:0.5rem;color:#64748b;">Conflict items are already shown above.</div>'}
+                ${conflictReviewRows || '<div style="margin-top:0.5rem;color:var(--text-secondary);">Conflict items are already shown above.</div>'}
                 ${conflictItems.length > 5 ? `<div style="margin-top:0.5rem;color:#7c2d12;font-size:0.88rem;">... and ${conflictItems.length - 5} more conflict${conflictItems.length - 5 === 1 ? '' : 's'} pending review.</div>` : ''}
             </div>` : ''}
         </div>
@@ -6550,7 +6572,7 @@ function loadOfflineOutbox() {
             <div style="display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;align-items:center;">
                 <div>
                     <h3 style="margin:0;">Offline outbox</h3>
-                    <p style="margin:0.35rem 0 0;color:#475569;">Queued attendance, member, and payment writes live here. Conflicting member/payment edits stay queued until you resolve them manually. Nothing is auto-merged.</p>
+                    <p style="margin:0.35rem 0 0;color:var(--text-secondary);">Queued attendance, member, and payment writes live here. Conflicting member/payment edits stay queued until you resolve them manually. Nothing is auto-merged.</p>
                 </div>
                 <button type="button" class="btn btn-secondary" ${retryAllDisabled ? 'disabled' : ''} onclick="retryAllOfflineOutbox()">Retry all</button>
             </div>
@@ -6631,9 +6653,9 @@ function loadSync() {
             : '<button class="btn btn-primary" id="syncNowBtn">🔄 Send to Online</button><button class="btn btn-secondary" id="retryFailedSyncBtn">↺ Retry Failed Only</button>'}
                 </div>
             </div>
-            <div style="background: #ffffff; color: #14291c; padding: 1.5rem; border-radius: 10px; box-shadow: var(--shadow); margin-bottom: 1.5rem; border: 1px solid var(--border-color);">
-                <h3 style="color: #166534;">Current Status</h3>
-                <div id="syncStatus" style="margin-top: 1rem; color: #4b7a5e;">
+            <div style="background: var(--bg-secondary); color: var(--text-color); padding: 1.5rem; border-radius: 10px; box-shadow: var(--shadow); margin-bottom: 1.5rem; border: 1px solid var(--border-color);">
+                <h3 style="color: var(--text-color);">Current Status</h3>
+                <div id="syncStatus" style="margin-top: 1rem; color: var(--text-secondary);">
                     <p>${isOnline
             ? 'Click "Download to Local" to copy online data into your local database.'
             : 'Click "Send to Online" to upload local data to the online server. Use Retry Failed Only if some records already failed.'}</p>
@@ -6641,16 +6663,16 @@ function loadSync() {
             </div>
             <div id="offlineOutboxSummary"></div>
             <div style="display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));">
-                <div style="background: #ffffff; color: #14291c; padding: 1.5rem; border-radius: 10px; box-shadow: var(--shadow); border: 1px solid var(--border-color);">
-                    <h3 style="color: #166534;">Recent Activity</h3>
+                <div style="background: var(--bg-secondary); color: var(--text-color); padding: 1.5rem; border-radius: 10px; box-shadow: var(--shadow); border: 1px solid var(--border-color);">
+                    <h3 style="color: var(--text-color);">Recent Activity</h3>
                     <div id="syncHistory" style="margin-top: 1rem;">
                         <div class="loading">Loading sync history...</div>
                     </div>
                 </div>
                 ${isOnline ? '' : `
-                <div style="background: #ffffff; color: #14291c; padding: 1.5rem; border-radius: 10px; box-shadow: var(--shadow); border: 1px solid var(--border-color);">
-                    <h3 style="color: #166534;">Failed Records</h3>
-                    <div id="failedSyncRecords" style="margin-top: 1rem; color: #4b7a5e;">
+                <div style="background: var(--bg-secondary); color: var(--text-color); padding: 1.5rem; border-radius: 10px; box-shadow: var(--shadow); border: 1px solid var(--border-color);">
+                    <h3 style="color: var(--text-color);">Failed Records</h3>
+                    <div id="failedSyncRecords" style="margin-top: 1rem; color: var(--text-secondary);">
                         <div class="loading">Loading failed records...</div>
                     </div>
                 </div>`}
@@ -6693,15 +6715,15 @@ function renderSyncStatusCard(type, title, data = {}) {
     const note = data.message || '';
 
     return `
-        <div style="padding: 1rem; background: ${background}; border-radius: 10px; color: #14291c; border: 1px solid ${border};">
+        <div style="padding: 1rem; background: ${background}; border-radius: 10px; color: var(--text-color); border: 1px solid ${border};">
             <strong style="color: ${color};">${escapeSyncHtml(title)}</strong>
-            ${note ? `<p style="margin: 0.5rem 0 0 0; color: #4b7a5e;">${escapeSyncHtml(note)}</p>` : ''}
-            ${typeof data.total_synced !== 'undefined' ? `<p style="margin: 0.5rem 0 0 0;">Records Synced: <strong style="color: #166534;">${synced}</strong></p>` : ''}
+            ${note ? `<p style="margin: 0.5rem 0 0 0; color: var(--text-secondary);">${escapeSyncHtml(note)}</p>` : ''}
+            ${typeof data.total_synced !== 'undefined' ? `<p style="margin: 0.5rem 0 0 0;">Records Synced: <strong style="color: var(--text-color);">${synced}</strong></p>` : ''}
             ${typeof data.total_failed !== 'undefined' ? `<p style="margin: 0.35rem 0 0 0;">Records Failed: <strong style="color: ${failed > 0 ? '#DC2626' : '#166534'};">${failed}</strong></p>` : ''}
             ${errors.length ? `
                 <div style="margin-top: 0.75rem;">
                     <strong style="color: #B45309;">Main error reasons:</strong>
-                    <ul style="margin: 0.35rem 0 0 1rem; color: #4b7a5e;">
+                    <ul style="margin: 0.35rem 0 0 1rem; color: var(--text-secondary);">
                         ${errors.slice(0, 5).map(error => `<li>${escapeSyncHtml(error)}</li>`).join('')}
                         ${errors.length > 5 ? `<li>... and ${errors.length - 5} more</li>` : ''}
                     </ul>
@@ -6863,7 +6885,7 @@ async function loadSyncHistory() {
         const sessions = Array.isArray(data?.data) ? data.data : [];
 
         if (!sessions.length) {
-            syncHistory.innerHTML = '<p style="color: #4b7a5e;">No recent send/download activity yet.</p>';
+            syncHistory.innerHTML = '<p style="color: var(--text-secondary);">No recent send/download activity yet.</p>';
             return;
         }
 
@@ -6873,13 +6895,13 @@ async function loadSyncHistory() {
                 <div style="padding: 0.85rem 0; border-bottom: 1px solid #BBF7D0;">
                     <div style="display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; align-items: center;">
                         <div>
-                            <strong style="color: #14291c;">${escapeSyncHtml((session.session_type || 'sync').replace(/_/g, ' '))}</strong>
-                            <div style="font-size: 0.9rem; color: #4b7a5e; margin-top: 0.2rem;">Started: ${escapeSyncHtml(session.started_at || 'N/A')}</div>
-                            <div style="font-size: 0.9rem; color: #4b7a5e;">Finished: ${escapeSyncHtml(session.completed_at || 'Still running')}</div>
+                            <strong style="color: var(--text-color);">${escapeSyncHtml((session.session_type || 'sync').replace(/_/g, ' '))}</strong>
+                            <div style="font-size: 0.9rem; color: var(--text-secondary); margin-top: 0.2rem;">Started: ${escapeSyncHtml(session.started_at || 'N/A')}</div>
+                            <div style="font-size: 0.9rem; color: var(--text-secondary);">Finished: ${escapeSyncHtml(session.completed_at || 'Still running')}</div>
                         </div>
                         <div style="text-align: right;">
                             <div style="font-weight: 700; color: ${statusColor}; text-transform: capitalize;">${escapeSyncHtml(session.status || 'unknown')}</div>
-                            <div style="font-size: 0.9rem; color: #4b7a5e;">Sent: ${Number(session.records_synced || 0)} | Failed: ${Number(session.records_failed || 0)}</div>
+                            <div style="font-size: 0.9rem; color: var(--text-secondary);">Sent: ${Number(session.records_synced || 0)} | Failed: ${Number(session.records_failed || 0)}</div>
                         </div>
                     </div>
                     ${session.error_message ? `<div style="margin-top: 0.5rem; color: #B45309; font-size: 0.9rem; white-space: pre-line;">${escapeSyncHtml(session.error_message)}</div>` : ''}
@@ -6904,7 +6926,7 @@ async function loadFailedSyncRecords() {
         const records = Array.isArray(payload.records) ? payload.records : [];
 
         if (!records.length) {
-            failedContainer.innerHTML = '<p style="color: #166534;">No failed records right now. Good.</p>';
+            failedContainer.innerHTML = '<p style="color: var(--text-color);">No failed records right now. Good.</p>';
             return;
         }
 
@@ -6914,12 +6936,12 @@ async function loadFailedSyncRecords() {
                 ${records.map(record => `
                     <div style="padding: 0.9rem; border: 1px solid #FECACA; background: #FEF2F2; border-radius: 10px;">
                         <div style="display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; align-items: center;">
-                            <strong style="color: #14291c;">${escapeSyncHtml(record.table_name)} #${Number(record.record_id || 0)}</strong>
+                            <strong style="color: var(--text-color);">${escapeSyncHtml(record.table_name)} #${Number(record.record_id || 0)}</strong>
                             <span style="font-size: 0.85rem; color: #B45309;">Attempts: ${Number(record.sync_attempts || 0)}</span>
                         </div>
-                        <div style="margin-top: 0.35rem; color: #4b7a5e; font-size: 0.92rem;">${escapeSyncHtml(record.record_summary || 'Record summary unavailable')}</div>
+                        <div style="margin-top: 0.35rem; color: var(--text-secondary); font-size: 0.92rem;">${escapeSyncHtml(record.record_summary || 'Record summary unavailable')}</div>
                         <div style="margin-top: 0.45rem; color: #DC2626; font-size: 0.92rem;"><strong>Reason:</strong> ${escapeSyncHtml(record.last_error || 'Unknown error')}</div>
-                        <div style="margin-top: 0.35rem; color: #4b7a5e; font-size: 0.85rem;">Last try: ${escapeSyncHtml(record.updated_at || 'N/A')}</div>
+                        <div style="margin-top: 0.35rem; color: var(--text-secondary); font-size: 0.85rem;">Last try: ${escapeSyncHtml(record.updated_at || 'N/A')}</div>
                     </div>
                 `).join('')}
             </div>
@@ -7098,7 +7120,7 @@ function startCamera() {
                     <button class="modal-close" onclick="stopCamera()">&times;</button>
                 </div>
                 <div class="modal-body" style="text-align: center;">
-                    <video id="cameraVideo" autoplay playsinline style="width: 100%; max-height: 400px; background: #f8fffb; border-radius: 8px;"></video>
+                    <video id="cameraVideo" autoplay playsinline style="width: 100%; max-height: 400px; background: var(--bg-secondary); border-radius: 8px;"></video>
                     <canvas id="cameraCanvas" style="display: none;"></canvas>
                 </div>
                 <div class="modal-footer" style="justify-content: center;">
@@ -7459,18 +7481,6 @@ function renderDetailsSettings(s) {
             ${field('set_social_snapchat', 'Snapchat Link', s.social_snapchat, 'https://snapchat.com/add/…', 'url')}
             ${field('set_social_tiktok', 'TikTok Link', s.social_tiktok, 'https://tiktok.com/@…', 'url')}
         </div>
-        <h3 style="margin:1.75rem 0 .25rem;border-top:1px solid var(--border-color);padding-top:1.25rem;">Staff Access Hours</h3>
-        <p style="color:var(--text-secondary);margin:0 0 1rem;">Limit when front-desk STAFF can log in and use the dashboard. Admin is always allowed. Leave off for 24-hour access.</p>
-        <div class="form-group">
-            <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;">
-                <input type="checkbox" id="set_staff_hours_enabled" ${s.staff_hours_enabled === '1' ? 'checked' : ''} ${dis} style="width:auto;margin:0;">
-                Limit staff to the hours below
-            </label>
-        </div>
-        <div class="form-row">
-            ${field('set_staff_hours_start', 'Open time', s.staff_hours_start, '', 'time')}
-            ${field('set_staff_hours_end', 'Close time', s.staff_hours_end, '', 'time')}
-        </div>
         ${admin ? '<button class="btn btn-primary" onclick="saveDetailsSettings()">Save Details</button>' : ''}
       </div>`;
 }
@@ -7488,10 +7498,7 @@ function saveDetailsSettings() {
         social_facebook: val('set_social_facebook'),
         social_instagram: val('set_social_instagram'),
         social_snapchat: val('set_social_snapchat'),
-        social_tiktok: val('set_social_tiktok'),
-        staff_hours_enabled: document.getElementById('set_staff_hours_enabled')?.checked ? '1' : '0',
-        staff_hours_start: val('set_staff_hours_start'),
-        staff_hours_end: val('set_staff_hours_end')
+        social_tiktok: val('set_social_tiktok')
     };
     fetch('api/settings.php?action=save', {
         method: 'POST',

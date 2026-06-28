@@ -132,14 +132,14 @@ try {
                     $result = $user->authenticate($username, $password);
                     
                     if ($result) {
-                        // Staff (not admin) are limited to the gym's front-desk hours.
+                        // Staff (not admin) may be limited to their own allowed days/hours.
                         if (($result['role'] ?? '') === 'staff') {
-                            $hours = AuthHelper::staffHoursState($db);
-                            if ($hours['enabled'] && !$hours['open']) {
+                            $acc = AuthHelper::staffAccessState($db, (int)$result['id']);
+                            if ($acc['restricted'] && !$acc['open']) {
                                 http_response_code(403);
                                 echo json_encode([
                                     'success' => false,
-                                    'message' => 'Staff access is closed right now. Front-desk hours are ' . $hours['start'] . ' to ' . $hours['end'] . '.',
+                                    'message' => 'Your front-desk access is closed right now — you are outside your allowed days or hours. Please contact the admin.',
                                     'error_code' => 'STAFF_HOURS_CLOSED'
                                 ]);
                                 break;
