@@ -26,11 +26,7 @@ class Setting {
     ];
 
     /** Admin-only settings (editable in the dashboard, never exposed publicly). */
-    public static $adminKeys = [
-        'staff_hours_enabled',
-        'staff_hours_start',
-        'staff_hours_end',
-    ];
+    public static $adminKeys = [];
 
     /** All keys the admin Details screen may read and write. */
     public static function editableKeys(): array {

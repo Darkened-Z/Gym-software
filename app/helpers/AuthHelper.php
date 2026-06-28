@@ -48,45 +48,59 @@ class AuthHelper {
     }
 
     /**
-     * Whether front-desk staff access is open right now, per the gym-wide window
-     * set in Settings. Times are evaluated in Pakistan time. Handles overnight
-     * windows (e.g. 16:00–02:00). Returns enabled/open/start/end.
+     * Whether a specific staff member's access is open right now, per THEIR own
+     * allowed weekdays + hours (set by admin on the staff account). Times in
+     * Pakistan time; handles overnight windows. Returns restricted/open/reason.
      */
-    public static function staffHoursState(PDO $db): array {
-        require_once __DIR__ . '/../models/Setting.php';
-        $map = (new Setting($db))->getMap(['staff_hours_enabled', 'staff_hours_start', 'staff_hours_end']);
-        $enabled = !empty($map['staff_hours_enabled']) && $map['staff_hours_enabled'] !== '0';
-        $start = self::parseHm($map['staff_hours_start'] ?? '');
-        $end = self::parseHm($map['staff_hours_end'] ?? '');
-        if (!$enabled || $start === null || $end === null || $start === $end) {
-            return ['enabled' => false, 'open' => true, 'start' => '', 'end' => ''];
+    public static function staffAccessState(PDO $db, int $userId): array {
+        $stmt = $db->prepare("SELECT access_enabled, access_days, access_start, access_end FROM users WHERE id = :id LIMIT 1");
+        $stmt->bindValue(':id', $userId, PDO::PARAM_INT);
+        $stmt->execute();
+        $u = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$u || empty($u['access_enabled'])) {
+            return ['restricted' => false, 'open' => true, 'reason' => ''];
         }
-        $dt = new DateTime('now', new DateTimeZone('Asia/Karachi'));
-        $now = (int)$dt->format('H') * 60 + (int)$dt->format('i');
-        $open = ($start < $end) ? ($now >= $start && $now < $end) : ($now >= $start || $now < $end);
-        return ['enabled' => true, 'open' => $open, 'start' => self::fmtHm($start), 'end' => self::fmtHm($end)];
+        $now = new DateTime('now', new DateTimeZone('Asia/Karachi'));
+        // Day check (ISO: Mon=1..Sun=7). Empty list = every day.
+        $days = array_values(array_filter(array_map('intval', explode(',', (string)($u['access_days'] ?? '')))));
+        if ($days && !in_array((int)$now->format('N'), $days, true)) {
+            return ['restricted' => true, 'open' => false, 'reason' => 'day'];
+        }
+        // Hour window. Missing/equal = no hour limit (days-only).
+        $start = self::parseHm($u['access_start'] ?? '');
+        $end = self::parseHm($u['access_end'] ?? '');
+        if ($start === null || $end === null || $start === $end) {
+            return ['restricted' => true, 'open' => true, 'reason' => ''];
+        }
+        $mins = (int)$now->format('H') * 60 + (int)$now->format('i');
+        $open = ($start < $end) ? ($mins >= $start && $mins < $end) : ($mins >= $start || $mins < $end);
+        return ['restricted' => true, 'open' => $open, 'reason' => $open ? '' : 'hours'];
     }
 
-    /** Hard-stop STAFF (only) APIs outside the configured hours. Admins exempt. */
+    /** Hard-stop a STAFF member outside THEIR own allowed days/hours. Admins exempt. */
     private static function enforceStaffHoursOrExit(): void {
         try {
             if (self::currentRole() !== 'staff') {
                 return;
             }
+            $uid = (int)($_SESSION['user_id'] ?? 0);
+            if ($uid <= 0) {
+                return;
+            }
             require_once __DIR__ . '/../../config/database.php';
             $db = (new Database())->getConnection();
-            $st = self::staffHoursState($db);
-            if ($st['enabled'] && !$st['open']) {
+            $st = self::staffAccessState($db, $uid);
+            if ($st['restricted'] && !$st['open']) {
                 http_response_code(403);
                 echo json_encode([
                     'success' => false,
-                    'message' => 'Staff access is closed right now. Front-desk hours are ' . $st['start'] . ' to ' . $st['end'] . '.',
+                    'message' => 'Your front-desk access is closed right now — you are outside your allowed days or hours. Please contact the admin.',
                     'error_code' => 'STAFF_HOURS_CLOSED'
                 ]);
                 exit;
             }
         } catch (Throwable $e) {
-            // Fail open — never lock staff out over a settings/clock error.
+            // Fail open — never lock staff out over a clock/db error.
         }
     }
 

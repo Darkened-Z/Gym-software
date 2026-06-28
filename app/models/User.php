@@ -25,15 +25,24 @@ class User {
         $this->ensureSchema();
     }
 
-    /** Self-heal: add the staff_section column on installs that predate it. */
+    /** Self-heal: add the staff_section + per-staff access columns on older installs. */
     private function ensureSchema(): void {
-        try {
-            $col = $this->conn->query("SHOW COLUMNS FROM {$this->table} LIKE 'staff_section'");
-            if ($col && $col->rowCount() === 0) {
-                $this->conn->exec("ALTER TABLE {$this->table} ADD COLUMN staff_section ENUM('men','women','both') NOT NULL DEFAULT 'both'");
+        $cols = [
+            'staff_section' => "ENUM('men','women','both') NOT NULL DEFAULT 'both'",
+            'access_enabled' => 'TINYINT(1) NOT NULL DEFAULT 0',
+            'access_days' => 'VARCHAR(20) NULL',
+            'access_start' => 'VARCHAR(5) NULL',
+            'access_end' => 'VARCHAR(5) NULL',
+        ];
+        foreach ($cols as $col => $def) {
+            try {
+                $c = $this->conn->query("SHOW COLUMNS FROM {$this->table} LIKE " . $this->conn->quote($col));
+                if ($c && $c->rowCount() === 0) {
+                    $this->conn->exec("ALTER TABLE {$this->table} ADD COLUMN {$col} {$def}");
+                }
+            } catch (Exception $e) {
+                error_log('User::ensureSchema ' . $col . ': ' . $e->getMessage());
             }
-        } catch (Exception $e) {
-            error_log('User::ensureSchema: ' . $e->getMessage());
         }
     }
 
@@ -42,8 +51,36 @@ class User {
         return in_array($v, ['men', 'women', 'both'], true) ? $v : 'both';
     }
 
+    /** Normalize allowed weekdays to a sorted "1,2,3" string (ISO: Mon=1..Sun=7). */
+    private function normDays($v): string {
+        $parts = is_array($v) ? $v : explode(',', (string)$v);
+        $days = [];
+        foreach ($parts as $p) {
+            $n = (int)trim((string)$p);
+            if ($n >= 1 && $n <= 7 && !in_array($n, $days, true)) {
+                $days[] = $n;
+            }
+        }
+        sort($days);
+        return implode(',', $days);
+    }
+
+    /** Normalize an "HH:MM" time, or return null. */
+    private function normHm($v): ?string {
+        $v = trim((string)$v);
+        return preg_match('/^([01]?\d|2[0-3]):[0-5]\d$/', $v) ? $v : null;
+    }
+
+    /** Bind the per-staff access fields onto a prepared statement. */
+    private function bindAccess(PDOStatement $stmt, array $data): void {
+        $stmt->bindValue(':access_enabled', !empty($data['access_enabled']) ? 1 : 0, PDO::PARAM_INT);
+        $stmt->bindValue(':access_days', $this->normDays($data['access_days'] ?? ''), PDO::PARAM_STR);
+        $stmt->bindValue(':access_start', $this->normHm($data['access_start'] ?? ''));
+        $stmt->bindValue(':access_end', $this->normHm($data['access_end'] ?? ''));
+    }
+
     public function authenticate($username, $password) {
-        $query = "SELECT id, username, password, role, name, staff_section FROM " . $this->table . " WHERE username = :username LIMIT 1";
+        $query = "SELECT id, username, password, role, name, staff_section, access_enabled, access_days, access_start, access_end FROM " . $this->table . " WHERE username = :username LIMIT 1";
         $stmt = $this->conn->prepare($query);
         $stmt->bindValue(':username', $username, PDO::PARAM_STR);
         $stmt->execute();
@@ -56,7 +93,11 @@ class User {
                     'username' => $user['username'],
                     'role' => $user['role'],
                     'name' => $user['name'],
-                    'staff_section' => $user['staff_section'] ?? 'both'
+                    'staff_section' => $user['staff_section'] ?? 'both',
+                    'access_enabled' => (int)($user['access_enabled'] ?? 0),
+                    'access_days' => $user['access_days'] ?? '',
+                    'access_start' => $user['access_start'] ?? '',
+                    'access_end' => $user['access_end'] ?? ''
                 ];
             }
         }
@@ -82,7 +123,7 @@ class User {
             $where = 'WHERE username LIKE :search_username OR name LIKE :search_name OR role LIKE :search_role';
         }
 
-        $query = "SELECT id, username, role, name, staff_section, created_at FROM {$this->table} {$where} ORDER BY id DESC LIMIT :limit OFFSET :offset";
+        $query = "SELECT id, username, role, name, staff_section, access_enabled, access_days, access_start, access_end, created_at FROM {$this->table} {$where} ORDER BY id DESC LIMIT :limit OFFSET :offset";
         $stmt = $this->conn->prepare($query);
         if ($search !== '') {
             $stmt->bindValue(':search_username', '%' . $search . '%', PDO::PARAM_STR);
@@ -115,13 +156,14 @@ class User {
     }
 
     public function create(array $data) {
-        $query = "INSERT INTO {$this->table} (username, password, role, name, staff_section) VALUES (:username, :password, :role, :name, :staff_section)";
+        $query = "INSERT INTO {$this->table} (username, password, role, name, staff_section, access_enabled, access_days, access_start, access_end) VALUES (:username, :password, :role, :name, :staff_section, :access_enabled, :access_days, :access_start, :access_end)";
         $stmt = $this->conn->prepare($query);
         $stmt->bindValue(':username', $this->limitString($data['username'] ?? '', 50), PDO::PARAM_STR);
         $stmt->bindValue(':password', password_hash((string)$data['password'], PASSWORD_DEFAULT), PDO::PARAM_STR);
         $stmt->bindValue(':role', $this->limitString($data['role'] ?? 'staff', 50), PDO::PARAM_STR);
         $stmt->bindValue(':name', $this->limitString($data['name'] ?? '', 100), PDO::PARAM_STR);
         $stmt->bindValue(':staff_section', $this->normalizeSection($data['staff_section'] ?? 'both'), PDO::PARAM_STR);
+        $this->bindAccess($stmt, $data);
         $stmt->execute();
         return $this->conn->lastInsertId();
     }
@@ -131,7 +173,11 @@ class User {
             'username = :username',
             'role = :role',
             'name = :name',
-            'staff_section = :staff_section'
+            'staff_section = :staff_section',
+            'access_enabled = :access_enabled',
+            'access_days = :access_days',
+            'access_start = :access_start',
+            'access_end = :access_end'
         ];
         $query = "UPDATE {$this->table} SET " . implode(', ', $fields);
 
@@ -146,6 +192,7 @@ class User {
         $stmt->bindValue(':role', $this->limitString($data['role'] ?? 'staff', 50), PDO::PARAM_STR);
         $stmt->bindValue(':name', $this->limitString($data['name'] ?? '', 100), PDO::PARAM_STR);
         $stmt->bindValue(':staff_section', $this->normalizeSection($data['staff_section'] ?? 'both'), PDO::PARAM_STR);
+        $this->bindAccess($stmt, $data);
         if (!empty($data['password'])) {
             $stmt->bindValue(':password', password_hash((string)$data['password'], PASSWORD_DEFAULT), PDO::PARAM_STR);
         }

@@ -67,7 +67,11 @@ try {
                 'password' => $password,
                 'name' => $name,
                 'role' => $role,
-                'staff_section' => (string)($data['staff_section'] ?? 'both')
+                'staff_section' => (string)($data['staff_section'] ?? 'both'),
+                'access_enabled' => !empty($data['access_enabled']),
+                'access_days' => $data['access_days'] ?? '',
+                'access_start' => (string)($data['access_start'] ?? ''),
+                'access_end' => (string)($data['access_end'] ?? '')
             ]);
 
             $adminLogger->log('staff_created', 'user', $id, null, [
@@ -107,7 +111,11 @@ try {
                 'username' => trim((string)($data['username'] ?? '')),
                 'role' => trim((string)($data['role'] ?? 'staff')),
                 'password' => (string)($data['password'] ?? ''),
-                'staff_section' => (string)($data['staff_section'] ?? 'both')
+                'staff_section' => (string)($data['staff_section'] ?? 'both'),
+                'access_enabled' => !empty($data['access_enabled']),
+                'access_days' => $data['access_days'] ?? '',
+                'access_start' => (string)($data['access_start'] ?? ''),
+                'access_end' => (string)($data['access_end'] ?? '')
             ];
 
             if ($updateData['name'] === '' || $updateData['username'] === '') {
