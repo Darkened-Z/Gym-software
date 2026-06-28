@@ -3297,6 +3297,24 @@ function showStaffForm(staff = null) {
                         <option value="men" ${staff?.staff_section === 'men' ? 'selected' : ''}>Men only</option>
                         <option value="women" ${staff?.staff_section === 'women' ? 'selected' : ''}>Women only</option>
                     </select></div>
+                    <div class="form-group" style="border-top:1px solid var(--border-color);padding-top:.85rem;">
+                        <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;">
+                            <input type="checkbox" id="staffAccessEnabled" ${staff?.access_enabled ? 'checked' : ''} style="width:auto;margin:0;">
+                            Limit this staff's access to set days &amp; hours
+                        </label>
+                        <small class="form-hint" style="display:block;margin-top:.35rem;">Off = 24/7 access. Admins are never limited.</small>
+                    </div>
+                    <div class="form-group"><label>Allowed days <span style="color:var(--text-muted);font-weight:400;">(none ticked = every day)</span></label>
+                        <div style="display:flex;flex-wrap:wrap;gap:.4rem;">
+                            ${[['1', 'Mon'], ['2', 'Tue'], ['3', 'Wed'], ['4', 'Thu'], ['5', 'Fri'], ['6', 'Sat'], ['7', 'Sun']].map(([n, lbl]) =>
+            `<label style="display:inline-flex;align-items:center;gap:.3rem;border:1px solid var(--border-color);border-radius:6px;padding:.3rem .55rem;cursor:pointer;"><input type="checkbox" class="staffDay" value="${n}" ${String(staff?.access_days || '').split(',').includes(n) ? 'checked' : ''} style="width:auto;margin:0;">${lbl}</label>`
+        ).join('')}
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:.6rem;">
+                        <div class="form-group" style="flex:1;"><label>Start time</label><input type="time" id="staffAccessStart" value="${staff?.access_start || ''}"></div>
+                        <div class="form-group" style="flex:1;"><label>End time <span style="color:var(--text-muted);font-weight:400;">(blank = all hours)</span></label><input type="time" id="staffAccessEnd" value="${staff?.access_end || ''}"></div>
+                    </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" onclick="closeStaffModal()">Cancel</button>
                         <button type="submit" class="btn btn-primary">Save Staff User</button>
@@ -3324,7 +3342,11 @@ function saveStaff() {
         username: document.getElementById('staffUsername')?.value?.trim(),
         password: document.getElementById('staffPassword')?.value || '',
         role: document.getElementById('staffRole')?.value || 'staff',
-        staff_section: document.getElementById('staffSection')?.value || 'both'
+        staff_section: document.getElementById('staffSection')?.value || 'both',
+        access_enabled: document.getElementById('staffAccessEnabled')?.checked ? 1 : 0,
+        access_days: Array.from(document.querySelectorAll('.staffDay:checked')).map(c => c.value).join(','),
+        access_start: document.getElementById('staffAccessStart')?.value || '',
+        access_end: document.getElementById('staffAccessEnd')?.value || ''
     };
     const action = id ? 'update' : 'create';
     fetch(`api/staff.php?action=${action}`, {
@@ -7459,18 +7481,6 @@ function renderDetailsSettings(s) {
             ${field('set_social_snapchat', 'Snapchat Link', s.social_snapchat, 'https://snapchat.com/add/…', 'url')}
             ${field('set_social_tiktok', 'TikTok Link', s.social_tiktok, 'https://tiktok.com/@…', 'url')}
         </div>
-        <h3 style="margin:1.75rem 0 .25rem;border-top:1px solid var(--border-color);padding-top:1.25rem;">Staff Access Hours</h3>
-        <p style="color:var(--text-secondary);margin:0 0 1rem;">Limit when front-desk STAFF can log in and use the dashboard. Admin is always allowed. Leave off for 24-hour access.</p>
-        <div class="form-group">
-            <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;">
-                <input type="checkbox" id="set_staff_hours_enabled" ${s.staff_hours_enabled === '1' ? 'checked' : ''} ${dis} style="width:auto;margin:0;">
-                Limit staff to the hours below
-            </label>
-        </div>
-        <div class="form-row">
-            ${field('set_staff_hours_start', 'Open time', s.staff_hours_start, '', 'time')}
-            ${field('set_staff_hours_end', 'Close time', s.staff_hours_end, '', 'time')}
-        </div>
         ${admin ? '<button class="btn btn-primary" onclick="saveDetailsSettings()">Save Details</button>' : ''}
       </div>`;
 }
@@ -7488,10 +7498,7 @@ function saveDetailsSettings() {
         social_facebook: val('set_social_facebook'),
         social_instagram: val('set_social_instagram'),
         social_snapchat: val('set_social_snapchat'),
-        social_tiktok: val('set_social_tiktok'),
-        staff_hours_enabled: document.getElementById('set_staff_hours_enabled')?.checked ? '1' : '0',
-        staff_hours_start: val('set_staff_hours_start'),
-        staff_hours_end: val('set_staff_hours_end')
+        social_tiktok: val('set_social_tiktok')
     };
     fetch('api/settings.php?action=save', {
         method: 'POST',
