@@ -19,11 +19,20 @@ try {
     switch ($action) {
         case 'scan':
             // Called by ESP32
-            $uid = $_GET['uid'] ?? '';
-            
-            if (empty($uid)) {
+            $uid = trim($_GET['uid'] ?? '');
+
+            if ($uid === '') {
                 http_response_code(400);
                 echo json_encode(['success' => false, 'message' => 'UID required']);
+                exit;
+            }
+
+            // Card UIDs are hex (optionally colon-separated). Reject anything else
+            // so this unauthenticated endpoint can't cache injection/garbage that
+            // the admin UI would then read and try to assign.
+            if (!preg_match('/^[0-9A-Fa-f:]{4,32}$/', $uid)) {
+                http_response_code(400);
+                echo json_encode(['success' => false, 'message' => 'Invalid UID format']);
                 exit;
             }
 
