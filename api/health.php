@@ -82,4 +82,6 @@ if ($health['status'] === 'error') {
     http_response_code(200);
 }
 
-echo json_encode($health, JSON_PRETTY_PRINT);
+// Compact JSON (no JSON_PRETTY_PRINT): the ESP32 firmware health check looks for
+// the literal substring "status":"ok" with no space after the colon.
+echo json_encode($health);
