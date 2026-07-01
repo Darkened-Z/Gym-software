@@ -88,14 +88,20 @@ class Cache {
             $raw = stream_get_contents($handle);
             $cacheData = $raw !== false && $raw !== '' ? self::unserializeCacheValue($raw) : null;
 
+            // Fixed window: keep the ORIGINAL expiry across increments so the
+            // window actually elapses. (Resetting expires on every call made it a
+            // sliding window that never reset under continuous traffic — a busy
+            // gate would hit the cap and deny every member until activity paused.)
             $count = 0;
+            $expires = time() + $ttl;
             if ($cacheData !== null && ($cacheData['expires'] ?? 0) >= time()) {
                 $count = (int)($cacheData['data'] ?? 0);
+                $expires = (int)$cacheData['expires'];
             }
 
             $count++;
             $cacheData = [
-                'expires' => time() + $ttl,
+                'expires' => $expires,
                 'data' => $count
             ];
 
