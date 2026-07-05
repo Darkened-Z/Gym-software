@@ -12,6 +12,7 @@ class Member {
     private $dateColumn;
     private $attendanceTable;
     private $hasStatusForceActive;
+    private $hasPtfFee;
 
     public static function getStatusCaseExpression(string $joinDateExpression = 'join_date', string $attendanceTable = '', string $memberIdExpression = 'id', string $statusExpression = 'status', string $forceActiveExpression = 'status_force_active'): string {
         $attendanceRule = '';
@@ -40,6 +41,7 @@ class Member {
         $this->dateColumn = resolve_member_date_column($this->conn, $this->table);
         $this->attendanceTable = 'attendance_' . $this->gender;
         $this->hasStatusForceActive = table_has_column($this->conn, $this->table, 'status_force_active');
+        $this->hasPtfFee = table_has_column($this->conn, $this->table, 'ptf_fee');
     }
 
     private function statusForceActiveExpression(): string {
@@ -202,6 +204,10 @@ class Member {
             ':member_code', ':name', ':email', ':phone', ':rfid_uid', ':address', ':profile_image', ':membership_type',
             ':join_date', ':admission_fee', ':monthly_fee', ':locker_fee', ':next_fee_due_date', ':total_due_amount', ':status'
         ];
+        if ($this->hasPtfFee) {
+            $columns[] = 'ptf_fee';
+            $placeholders[] = ':ptf_fee';
+        }
         if ($this->hasStatusForceActive) {
             $columns[] = 'status_force_active';
             $placeholders[] = ':status_force_active';
@@ -227,6 +233,9 @@ class Member {
         $stmt->bindValue(':next_fee_due_date', $data['next_fee_due_date'] ?? null, PDO::PARAM_STR);
         $stmt->bindValue(':total_due_amount', $data['total_due_amount'] ?? 0.00, PDO::PARAM_STR);
         $stmt->bindValue(':status', $data['status'] ?? 'active', PDO::PARAM_STR);
+        if ($this->hasPtfFee) {
+            $stmt->bindValue(':ptf_fee', $data['ptf_fee'] ?? 0.00, PDO::PARAM_STR);
+        }
         if ($this->hasStatusForceActive) {
             $stmt->bindValue(':status_force_active', (int)($data['status_force_active'] ?? 0), PDO::PARAM_INT);
         }
@@ -261,6 +270,9 @@ class Member {
             'total_due_amount = :total_due_amount',
             'status = :status'
         ];
+        if ($this->hasPtfFee) {
+            $setParts[] = 'ptf_fee = :ptf_fee';
+        }
         if ($this->hasStatusForceActive) {
             $setParts[] = 'status_force_active = :status_force_active';
         }
@@ -315,6 +327,9 @@ class Member {
         $stmt->bindValue(':next_fee_due_date', $data['next_fee_due_date'] ?? null, PDO::PARAM_STR);
         $stmt->bindValue(':total_due_amount', $data['total_due_amount'] ?? 0.00, PDO::PARAM_STR);
         $stmt->bindValue(':status', $incomingStatus, PDO::PARAM_STR);
+        if ($this->hasPtfFee) {
+            $stmt->bindValue(':ptf_fee', $data['ptf_fee'] ?? 0.00, PDO::PARAM_STR);
+        }
         if ($this->hasStatusForceActive) {
             $stmt->bindValue(':status_force_active', $statusForceActive, PDO::PARAM_INT);
         }
