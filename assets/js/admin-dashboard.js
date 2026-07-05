@@ -3301,7 +3301,9 @@ function showStaffForm(staff = null) {
                     <input type="hidden" id="staffId" value="${staff?.id || ''}">
                     <div class="form-group"><label>Name *</label><input type="text" id="staffName" value="${staff?.name || ''}" required></div>
                     <div class="form-group"><label>Username *</label><input type="text" id="staffUsername" value="${staff?.username || ''}" required></div>
-                    <div class="form-group"><label>Password ${isEdit ? '(leave empty to keep old password)' : '*'}</label><input type="password" id="staffPassword" ${isEdit ? '' : 'required'}></div>
+                    <div class="form-group"><label>Password ${isEdit ? '(leave empty to keep old password)' : '*'}</label>
+                        <div class="pw-wrap" style="position:relative;"><input type="password" id="staffPassword" ${isEdit ? '' : 'required'} style="padding-right:2.75rem;"><button type="button" class="pw-toggle" aria-label="Show or hide password" onclick="var i=this.parentNode.querySelector('input');var s=i.type==='password';i.type=s?'text':'password';this.textContent=s?'🙈':'👁';" style="position:absolute;right:.5rem;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:1.15rem;line-height:1;padding:.15rem;color:inherit;">👁</button></div>
+                    </div>
                     <div class="form-group"><label>Role</label><select id="staffRole"><option value="staff" ${staff?.role === 'staff' ? 'selected' : ''}>Staff</option><option value="admin" ${staff?.role === 'admin' ? 'selected' : ''}>Admin</option></select></div>
                     <div class="form-group"><label>Section (which side they manage)</label><select id="staffSection">
                         <option value="both" ${(!staff || staff?.staff_section === 'both') ? 'selected' : ''}>Both (combined)</option>
@@ -3317,9 +3319,10 @@ function showStaffForm(staff = null) {
                     </div>
                     <div class="form-group"><label>Allowed days <span style="color:var(--text-muted);font-weight:400;">(none ticked = every day)</span></label>
                         <div style="display:flex;flex-wrap:wrap;gap:.4rem;">
-                            ${[['1', 'Mon'], ['2', 'Tue'], ['3', 'Wed'], ['4', 'Thu'], ['5', 'Fri'], ['6', 'Sat'], ['7', 'Sun']].map(([n, lbl]) =>
-            `<label style="display:inline-flex;align-items:center;gap:.3rem;border:1px solid var(--border-color);border-radius:6px;padding:.3rem .55rem;cursor:pointer;"><input type="checkbox" class="staffDay" value="${n}" ${String(staff?.access_days || '').split(',').includes(n) ? 'checked' : ''} style="width:auto;margin:0;">${lbl}</label>`
-        ).join('')}
+                            ${[['1', 'Mon'], ['2', 'Tue'], ['3', 'Wed'], ['4', 'Thu'], ['5', 'Fri'], ['6', 'Sat'], ['7', 'Sun']].map(([n, lbl]) => {
+            const on = String(staff?.access_days || '').split(',').includes(n);
+            return `<button type="button" class="staffDay" data-day="${n}" aria-pressed="${on ? 'true' : 'false'}" onclick="toggleStaffDay(this)" style="border:1px solid var(--border-color);border-radius:6px;padding:.45rem .75rem;cursor:pointer;font-weight:600;background:${on ? 'var(--brand-gold,#f5c518)' : 'transparent'};color:${on ? '#0d0d0d' : 'inherit'};">${lbl}</button>`;
+        }).join('')}
                         </div>
                     </div>
                     <div style="display:flex;gap:.6rem;">
@@ -3345,6 +3348,16 @@ function closeStaffModal() {
     document.getElementById('staffModal')?.remove();
 }
 
+// Day picker uses plain toggle buttons (not checkboxes) so a single tap always
+// flips the state — nested checkbox+label was inconsistent on touch (some days
+// needed a double tap).
+function toggleStaffDay(btn) {
+    const on = btn.getAttribute('aria-pressed') === 'true';
+    btn.setAttribute('aria-pressed', on ? 'false' : 'true');
+    btn.style.background = on ? 'transparent' : 'var(--brand-gold, #f5c518)';
+    btn.style.color = on ? 'inherit' : '#0d0d0d';
+}
+
 function saveStaff() {
     const id = document.getElementById('staffId')?.value || null;
     const payload = {
@@ -3355,7 +3368,7 @@ function saveStaff() {
         role: document.getElementById('staffRole')?.value || 'staff',
         staff_section: document.getElementById('staffSection')?.value || 'both',
         access_enabled: document.getElementById('staffAccessEnabled')?.checked ? 1 : 0,
-        access_days: Array.from(document.querySelectorAll('.staffDay:checked')).map(c => c.value).join(','),
+        access_days: Array.from(document.querySelectorAll('.staffDay[aria-pressed="true"]')).map(c => c.dataset.day).join(','),
         access_start: document.getElementById('staffAccessStart')?.value || '',
         access_end: document.getElementById('staffAccessEnd')?.value || ''
     };
