@@ -122,6 +122,13 @@ class MemberRegistration {
             VALUES (:gender, :name, :phone, :cnic, :dob, :address, :note, :details, :source_ip, 'pending')";
         $stmt = $this->conn->prepare($sql);
         $dob = trim((string)($data['dob'] ?? ''));
+        // Only accept a real YYYY-MM-DD calendar date; free-text DOB that isn't a
+        // valid date is stored as NULL (prevents strict-mode DATE insert errors
+        // that would otherwise fail the whole registration).
+        $dobValue = null;
+        if (preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $dob, $dm) && checkdate((int)$dm[2], (int)$dm[3], (int)$dm[1])) {
+            $dobValue = $dob;
+        }
         $details = $data['details'] ?? null;
         if (is_array($details)) {
             // keep only non-empty optional fields
@@ -132,7 +139,7 @@ class MemberRegistration {
         $stmt->bindValue(':name', $this->limitString($data['name'] ?? '', 200), PDO::PARAM_STR);
         $stmt->bindValue(':phone', $this->limitString($data['phone'] ?? '', 20), PDO::PARAM_STR);
         $stmt->bindValue(':cnic', $this->nullable($this->limitString($data['cnic'] ?? '', 20)));
-        $stmt->bindValue(':dob', $dob !== '' ? $dob : null);
+        $stmt->bindValue(':dob', $dobValue);
         $stmt->bindValue(':address', $this->nullable($this->limitString($data['address'] ?? '', 255)));
         $stmt->bindValue(':note', $this->nullable($this->limitString($data['note'] ?? '', 500)));
         $stmt->bindValue(':details', $details ?: null);
