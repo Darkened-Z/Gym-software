@@ -53,14 +53,20 @@
                             </div>
                             <div class="form-group">
                                 <label for="adminPassword">Password</label>
-                                <input
-                                    type="password"
-                                    id="adminPassword"
-                                    name="password"
-                                    autocomplete="current-password"
-                                    aria-required="true"
-                                    placeholder="Type password"
-                                    required>
+                                <div class="pw-wrap" style="position:relative;">
+                                    <input
+                                        type="password"
+                                        id="adminPassword"
+                                        name="password"
+                                        autocomplete="current-password"
+                                        aria-required="true"
+                                        placeholder="Type password"
+                                        style="padding-right:2.75rem;"
+                                        required>
+                                    <button type="button" class="pw-toggle" aria-label="Show or hide password"
+                                        onclick="var i=this.parentNode.querySelector('input');var s=i.type==='password';i.type=s?'text':'password';this.textContent=s?'🙈':'👁';"
+                                        style="position:absolute;right:.5rem;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:1.15rem;line-height:1;padding:.15rem;color:inherit;">👁</button>
+                                </div>
                             </div>
                             <small class="form-hint">Only staff and admin should use this side.</small>
                             <button type="submit" class="btn btn-primary" aria-label="Login as Admin">Open Dashboard</button>
@@ -163,7 +169,7 @@
                 <div class="fg"><label for="su_gender">Side</label><select id="su_gender"><option value="">Choose…</option><option value="men">Men (Gents)</option><option value="women">Women (Ladies)</option></select></div>
                 <div class="fg"><label for="su_father">Husband's / Father's name</label><input id="su_father" maxlength="120"></div>
                 <div class="fg"><label for="su_occupation">Occupation / Profession</label><input id="su_occupation" maxlength="120"></div>
-                <div class="fg"><label for="su_dob">Date of birth</label><input id="su_dob" type="date"></div>
+                <div class="fg"><label for="su_dob">Date of birth <span style="color:var(--text-muted,#9aa);font-weight:400;">(DD/MM/YYYY)</span></label><input id="su_dob" type="text" inputmode="numeric" maxlength="10" placeholder="DD/MM/YYYY" autocomplete="bday"></div>
                 <div class="fg"><label for="su_email">Email</label><input id="su_email" type="email" maxlength="120"></div>
                 <div class="fg"><label for="su_address">Residence address</label><input id="su_address" maxlength="255" autocomplete="street-address"></div>
                 <div class="fg"><label for="su_office_address">Office address</label><input id="su_office_address" maxlength="255"></div>
@@ -197,6 +203,20 @@
             var msg = document.getElementById('signupMsg');
             var form = document.getElementById('signupForm');
             function val(id) { var el = document.getElementById(id); return el ? el.value.trim() : ''; }
+            // DOB is entered as DD/MM/YYYY; store it as YYYY-MM-DD for the database.
+            function dobToISO(v) {
+                v = (v || '').trim();
+                var m = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+                return m ? (m[3] + '-' + m[2] + '-' + m[1]) : v;
+            }
+            // Auto-insert the slashes as the user types digits (DDMMYYYY -> DD/MM/YYYY).
+            var dobEl = document.getElementById('su_dob');
+            if (dobEl) dobEl.addEventListener('input', function () {
+                var d = this.value.replace(/\D/g, '').slice(0, 8), out = d;
+                if (d.length > 4) out = d.slice(0, 2) + '/' + d.slice(2, 4) + '/' + d.slice(4);
+                else if (d.length > 2) out = d.slice(0, 2) + '/' + d.slice(2);
+                this.value = out;
+            });
             function setMsg(t, k) { if (msg) { msg.textContent = t; msg.className = 'signup-msg ' + (k || ''); } }
             function openModal() { if (modal) { modal.hidden = false; var n = document.getElementById('su_name'); if (n) n.focus(); } }
             function closeModal() { if (modal) { modal.hidden = true; setMsg('', ''); } }
@@ -211,7 +231,7 @@
                 var btn = document.getElementById('signupSubmitBtn');
                 var payload = {
                     name: val('su_name'), phone: val('su_phone'), cnic: val('su_cnic'), gender: val('su_gender'),
-                    father_name: val('su_father'), occupation: val('su_occupation'), dob: val('su_dob'), email: val('su_email'),
+                    father_name: val('su_father'), occupation: val('su_occupation'), dob: dobToISO(val('su_dob')), email: val('su_email'),
                     address: val('su_address'), office_address: val('su_office_address'), office_phone: val('su_office_phone'),
                     blood_group: val('su_blood'), height: val('su_height'), weight: val('su_weight'), chest: val('su_chest'),
                     waist: val('su_waist'), shoulder: val('su_shoulder'), bicep: val('su_bicep'), forearm: val('su_forearm'),
