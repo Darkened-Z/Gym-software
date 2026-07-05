@@ -8,11 +8,23 @@ function showStaffLockBanner() {
     if (document.getElementById('subLockBanner')) return;
     var b = document.createElement('div');
     b.id = 'subLockBanner';
-    b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#0d0d0d;color:#fff;padding:.85rem 1rem;text-align:center;font-family:-apple-system,Segoe UI,Roboto,sans-serif;border-bottom:3px solid #f5c518;font-size:.95rem;';
-    b.innerHTML = '🔒 <strong>Front-desk access is locked</strong> — this gym\'s subscription has expired. '
-        + 'Members can still sign in below. <span style="opacity:.8">Owner: contact your provider to renew.</span>';
+    b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#0d0d0d;color:#fff;padding:.85rem 1rem;text-align:center;font-family:-apple-system,Segoe UI,Roboto,sans-serif;border-bottom:3px solid #f5c518;font-size:.95rem;display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:.6rem;';
+    b.innerHTML = '🔑 <strong>Reactivate License</strong> — your license has expired. Reactivate it to restore front-desk access. '
+        + '<span style="opacity:.85">Members can still sign in below.</span>'
+        + '<a href="setup.php" style="display:inline-block;background:#f5c518;color:#0d0d0d;padding:.45rem .95rem;border-radius:8px;font-weight:700;text-decoration:none;">Reactivate License</a>';
     document.body.appendChild(b);
-    document.body.style.paddingTop = '64px';
+    document.body.style.paddingTop = '76px';
+}
+
+// Pre-expiry heads-up on the login page (3-day countdown: 3 → 2 → 1 → 0).
+function showLicenseWarnBanner(daysLeft) {
+    if (document.getElementById('licWarnBanner')) return;
+    var b = document.createElement('div');
+    b.id = 'licWarnBanner';
+    b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99998;background:#fde68a;color:#1f2937;padding:.7rem 1rem;text-align:center;font-weight:600;font-size:.9rem;font-family:-apple-system,Segoe UI,Roboto,sans-serif;';
+    b.textContent = '⏳ Your license expires in ' + daysLeft + ' day' + (daysLeft === 1 ? '' : 's') + ' — renew now.';
+    document.body.appendChild(b);
+    document.body.style.paddingTop = '48px';
 }
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -21,7 +33,14 @@ document.addEventListener('DOMContentLoaded', function () {
         && window.Utils && Utils.isOnline && Utils.isOnline()) {
         fetch('api/auth.php?action=license_status')
             .then(function (r) { return r.json(); })
-            .then(function (d) { if (d && d.locked) showStaffLockBanner(); })
+            .then(function (d) {
+                if (!d) return;
+                if (d.locked) {
+                    showStaffLockBanner();
+                } else if (d.activated && !d.expired && d.days_left !== null && d.days_left >= 0 && d.days_left <= 3) {
+                    showLicenseWarnBanner(d.days_left);
+                }
+            })
             .catch(function () { });
     }
 
