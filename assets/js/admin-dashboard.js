@@ -1630,9 +1630,7 @@ function showAddMemberForm() {
                         <div class="form-group">
                             <label>Membership Type</label>
                             <select id="membershipType" name="membership_type">
-                                <option value="Basic">Basic</option>
-                                <option value="Premium">Premium</option>
-                                <option value="VIP">VIP</option>
+                                <option value="">Loading types…</option>
                             </select>
                         </div>
                     </div>
@@ -1644,6 +1642,10 @@ function showAddMemberForm() {
                         <div class="form-group">
                             <label>Monthly Fee *</label>
                             <input type="number" step="0.01" id="monthlyFee" name="monthly_fee" value="0">
+                        </div>
+                        <div class="form-group">
+                            <label>Trainer Fee</label>
+                            <input type="number" step="0.01" id="trainerFee" name="ptf_fee" value="0">
                         </div>
                         <div class="form-group">
                             <label>Locker Fee</label>
@@ -1671,6 +1673,7 @@ function showAddMemberForm() {
         </div>
     `;
     document.body.insertAdjacentHTML('beforeend', html);
+    populateMembershipTypeOptions();
 
     const form = document.getElementById('memberForm');
     form.addEventListener('submit', function (e) {
@@ -1700,6 +1703,50 @@ function showAddMemberForm() {
 function closeMemberModal() {
     const modal = document.getElementById('memberModal');
     if (modal) modal.remove();
+}
+
+// Membership Type options = the owner's ACTIVE Packages (Details > Packages).
+// No built-in tiers. When editing, the member's stored value is injected as an
+// option even if it isn't an active package, so it's never silently dropped.
+let _membershipTypeReqSeq = 0;
+function populateMembershipTypeOptions(selectedValue) {
+    const sel = document.getElementById('membershipType');
+    if (!sel) return;
+    const chosen = (selectedValue == null ? '' : String(selectedValue)).trim();
+    const seq = ++_membershipTypeReqSeq;
+    const render = (names) => {
+        if (seq !== _membershipTypeReqSeq) return; // a newer open superseded this
+        const seen = new Set();
+        const list = [];
+        (names || []).forEach(n => {
+            const name = String(n || '').trim();
+            if (name && !seen.has(name)) { seen.add(name); list.push(name); }
+        });
+        if (chosen && !seen.has(chosen)) list.unshift(chosen);
+        sel.innerHTML = '';
+        if (list.length === 0) {
+            const o = document.createElement('option');
+            o.value = '';
+            o.textContent = 'No membership types yet — add one in Details';
+            sel.appendChild(o);
+            return;
+        }
+        list.forEach(name => {
+            const o = document.createElement('option');
+            o.value = name;
+            o.textContent = name;
+            if (name === chosen) o.selected = true;
+            sel.appendChild(o);
+        });
+        if (chosen) sel.value = chosen;
+    };
+    fetch('api/packages.php?action=list&limit=200')
+        .then(res => res.json())
+        .then(data => {
+            const rows = (data && data.success && Array.isArray(data.data)) ? data.data : [];
+            render(rows.filter(p => p && parseInt(p.is_active) !== 0).map(p => p.name));
+        })
+        .catch(() => render([])); // offline/error: keep at least the current value
 }
 
 function saveMember() {
@@ -1756,6 +1803,7 @@ function saveMemberData(profileImagePath) {
         membership_type: document.getElementById('membershipType').value,
         admission_fee: parseFloat(document.getElementById('admissionFee').value) || 0,
         monthly_fee: parseFloat(document.getElementById('monthlyFee').value) || 0,
+        ptf_fee: parseFloat(document.getElementById('trainerFee').value) || 0,
         locker_fee: parseFloat(document.getElementById('lockerFee').value) || 0,
         next_fee_due_date: document.getElementById('nextFeeDueDate').value || null,
         status: document.getElementById('status').value,
@@ -1888,9 +1936,10 @@ function editMember(id) {
                 document.getElementById('email').value = m.email || '';
                 document.getElementById('address').value = m.address || '';
                 document.getElementById('joinDate').value = m.join_date;
-                document.getElementById('membershipType').value = m.membership_type;
+                populateMembershipTypeOptions(m.membership_type);
                 document.getElementById('admissionFee').value = m.admission_fee;
                 document.getElementById('monthlyFee').value = m.monthly_fee;
+                document.getElementById('trainerFee').value = m.ptf_fee ?? 0;
                 document.getElementById('lockerFee').value = m.locker_fee;
                 document.getElementById('nextFeeDueDate').value = m.next_fee_due_date || '';
                 document.getElementById('status').value = m.status;
@@ -6353,9 +6402,10 @@ function seedMemberResolutionForm(item, liveRecord, base = 'queued') {
     document.getElementById('email').value = baseRecord.email || overlayRecord?.email || '';
     document.getElementById('address').value = baseRecord.address || overlayRecord?.address || '';
     document.getElementById('joinDate').value = baseRecord.join_date || overlayRecord?.join_date || '';
-    document.getElementById('membershipType').value = baseRecord.membership_type || overlayRecord?.membership_type || 'Basic';
+    populateMembershipTypeOptions(baseRecord.membership_type || overlayRecord?.membership_type || '');
     document.getElementById('admissionFee').value = baseRecord.admission_fee ?? overlayRecord?.admission_fee ?? 0;
     document.getElementById('monthlyFee').value = baseRecord.monthly_fee ?? overlayRecord?.monthly_fee ?? 0;
+    document.getElementById('trainerFee').value = baseRecord.ptf_fee ?? overlayRecord?.ptf_fee ?? 0;
     document.getElementById('lockerFee').value = baseRecord.locker_fee ?? overlayRecord?.locker_fee ?? 0;
     document.getElementById('nextFeeDueDate').value = baseRecord.next_fee_due_date || overlayRecord?.next_fee_due_date || '';
     document.getElementById('status').value = baseRecord.status || overlayRecord?.status || 'active';
