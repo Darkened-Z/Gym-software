@@ -62,6 +62,7 @@ function memberPayloadComparableArray(array $data, bool $includeStatus = true): 
         'join_date' => trim((string)($data['join_date'] ?? '')),
         'admission_fee' => normalizeMemberMoneyValue($data['admission_fee'] ?? 0),
         'monthly_fee' => normalizeMemberMoneyValue($data['monthly_fee'] ?? 0),
+        'ptf_fee' => normalizeMemberMoneyValue($data['ptf_fee'] ?? 0),
         'locker_fee' => normalizeMemberMoneyValue($data['locker_fee'] ?? 0),
         'next_fee_due_date' => normalizeMemberComparableValue($data['next_fee_due_date'] ?? null),
         'total_due_amount' => normalizeMemberMoneyValue($data['total_due_amount'] ?? 0)
@@ -87,6 +88,7 @@ function memberRecordComparableArray(array $record, bool $includeStatus = true):
         'join_date' => trim((string)($record['join_date'] ?? '')),
         'admission_fee' => normalizeMemberMoneyValue($record['admission_fee'] ?? 0),
         'monthly_fee' => normalizeMemberMoneyValue($record['monthly_fee'] ?? 0),
+        'ptf_fee' => normalizeMemberMoneyValue($record['ptf_fee'] ?? 0),
         'locker_fee' => normalizeMemberMoneyValue($record['locker_fee'] ?? 0),
         'next_fee_due_date' => normalizeMemberComparableValue($record['next_fee_due_date'] ?? null),
         'total_due_amount' => normalizeMemberMoneyValue($record['total_due_amount'] ?? 0)
@@ -111,6 +113,13 @@ $gender = in_array($gender, ['men', 'women'], true) ? $gender : 'men';
 try {
     $database = new Database();
     $db = $database->getConnection();
+    // Self-heal optional application columns (ptf_fee/cnic/dob/emergency_*) on the
+    // member tables before an admin write, so Add/Edit can persist Trainer Fee even
+    // on installs where no registration was ever approved.
+    if ($action === 'create' || $action === 'update') {
+        require_once __DIR__ . '/../app/models/MemberRegistration.php';
+        try { (new MemberRegistration($db))->ensureMemberExtraColumns($gender); } catch (Throwable $e) { error_log('members.php ensure extra cols: ' . $e->getMessage()); }
+    }
     $member = new Member($db, $gender);
     $adminLogger = new AdminLogger($db);
 
@@ -293,6 +302,7 @@ try {
                     'join_date' => $data['join_date'],
                     'admission_fee' => (float)($data['admission_fee'] ?? 0.00),
                     'monthly_fee' => (float)($data['monthly_fee'] ?? 0.00),
+                    'ptf_fee' => (float)($data['ptf_fee'] ?? 0.00),
                     'locker_fee' => (float)($data['locker_fee'] ?? 0.00),
                     'next_fee_due_date' => $data['next_fee_due_date'] ?? null,
                     'total_due_amount' => max(0, (float)($data['total_due_amount'] ?? 0.00)),
@@ -406,6 +416,7 @@ try {
                     'join_date' => $data['join_date'],
                     'admission_fee' => (float)($data['admission_fee'] ?? 0.00),
                     'monthly_fee' => (float)($data['monthly_fee'] ?? 0.00),
+                    'ptf_fee' => (float)($data['ptf_fee'] ?? 0.00),
                     'locker_fee' => (float)($data['locker_fee'] ?? 0.00),
                     'next_fee_due_date' => $data['next_fee_due_date'] ?? null,
                     'total_due_amount' => max(0, (float)($data['total_due_amount'] ?? 0.00)),
