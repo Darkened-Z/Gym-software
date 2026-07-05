@@ -123,7 +123,7 @@ class AuthHelper {
                 http_response_code(403);
                 echo json_encode([
                     'success' => false,
-                    'message' => 'This gym\'s subscription has expired. Front-desk access is locked — please contact your provider to renew.',
+                    'message' => 'Your license has expired — please reactivate your license to continue.',
                     'error_code' => 'SUBSCRIPTION_EXPIRED'
                 ]);
                 exit;

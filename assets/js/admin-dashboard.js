@@ -216,9 +216,9 @@ function checkLicenseWarning() {
                 urgent = true;
                 msg = '⚠ Your subscription has expired. Front-desk access will lock in '
                     + d.grace_left + ' day' + (d.grace_left === 1 ? '' : 's') + ' — please renew now.';
-            } else if (d.days_left !== null && d.days_left >= 0 && d.days_left <= 7) {
-                msg = '⏳ Your subscription expires in ' + d.days_left + ' day' + (d.days_left === 1 ? '' : 's')
-                    + '. Renew soon to avoid interruption.';
+            } else if (!d.expired && d.days_left !== null && d.days_left >= 0 && d.days_left <= 3) {
+                msg = '⏳ Your license expires in ' + d.days_left + ' day' + (d.days_left === 1 ? '' : 's')
+                    + ' — renew now.';
             }
             if (msg) showLicenseBanner(msg, urgent);
         })
