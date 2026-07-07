@@ -7552,6 +7552,27 @@ function renderDetailsSettings(s) {
             </div>
         </div>
         <div class="form-row">
+            <div class="form-group">
+                <label>Accent colour</label>
+                <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;">
+                    <input type="color" id="set_theme_accent" value="${packageEscHtml(s.theme_accent || '#f5c518')}" ${dis} style="width:52px;height:38px;padding:2px;border:1px solid var(--border-color);border-radius:8px;background:#1a1a1a;cursor:pointer;">
+                    ${admin ? '<button type="button" class="btn btn-secondary" style="padding:.35rem .7rem;" onclick="document.getElementById(\'set_theme_accent\').value=\'#f5c518\'">Reset to gold</button>' : ''}
+                    <span class="form-hint">Buttons, highlights &amp; active items.</span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Font style</label>
+                <select id="set_font_family" ${dis}>
+                    <option value="">Default (Bebas + Hanken)</option>
+                    <option value="inter">Inter — clean</option>
+                    <option value="poppins">Poppins — rounded</option>
+                    <option value="montserrat">Montserrat — modern</option>
+                    <option value="oswald">Oswald + Roboto — condensed</option>
+                    <option value="playfair">Playfair + Lato — elegant</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-row">
             ${field('set_email', 'Email', s.email, 'gym@example.com', 'email')}
             ${field('set_address_url', 'Google Maps Link', s.address_url, 'https://maps.app.goo.gl/…', 'url')}
         </div>
@@ -7569,6 +7590,8 @@ function renderDetailsSettings(s) {
         </div>
         ${admin ? '<button class="btn btn-primary" onclick="saveDetailsSettings()">Save Details</button>' : ''}
       </div>`;
+    const fontSel = document.getElementById('set_font_family');
+    if (fontSel && s.font_family) fontSel.value = s.font_family;
 }
 
 function saveDetailsSettings() {
@@ -7578,6 +7601,8 @@ function saveDetailsSettings() {
         gym_name: val('set_gym_name'),
         location: val('set_location'),
         logo_url: val('set_logo_url'),
+        theme_accent: val('set_theme_accent'),
+        font_family: val('set_font_family'),
         phone: val('set_phone'),
         email: val('set_email'),
         address_url: val('set_address_url'),

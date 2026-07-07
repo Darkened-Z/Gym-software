@@ -16,6 +16,8 @@ class Setting {
         'gym_name',
         'location',
         'logo_url',
+        'theme_accent',
+        'font_family',
         'phone',
         'email',
         'address_url',

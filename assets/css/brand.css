@@ -1,0 +1,828 @@
+/* ============================================================================
+   Bhatti Gym branding overlay (bhatti branch only)
+   Loaded on top of style.css. Keeps per-gym branding isolated from core CSS.
+   Brand colors: yellow #F5C518, ink #0D0D0D.
+   Direction: athletic / bold — condensed display type, black + chrome-yellow,
+   hairline borders instead of shadows.
+   ============================================================================ */
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Hanken+Grotesque:wght@400;500;600;700;800&display=swap');
+
+:root {
+  /* Accent colour + fonts are per-gym and overridable from the dashboard
+     (branding.js injects overrides). These defaults reproduce the original
+     Bhatti gold + type EXACTLY, so nothing changes unless an owner picks new
+     values. --brand-accent-rgb feeds the rgba() accent tints below. */
+  --brand-accent: #f5c518;
+  --brand-accent-rgb: 245, 197, 24;
+  --brand-font-display: 'Bebas Neue', 'Arial Narrow', sans-serif;
+  --brand-font-body: 'Hanken Grotesque', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --brand-yellow: var(--brand-accent);
+  --brand-ink: #0d0d0d;
+}
+
+/* ---- 0.6s loading splash ------------------------------------------------- */
+#brand-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 50% 45%, #1c1c1c 0%, #0d0d0d 70%);
+  transition: opacity .4s ease;
+}
+#brand-splash.brand-hide { opacity: 0; pointer-events: none; }
+#brand-splash .brand-splash-logo {
+  width: 170px;
+  height: 170px;
+  animation: brandPop .6s cubic-bezier(.2, .8, .3, 1.2) both;
+  filter: drop-shadow(0 8px 28px rgba(var(--brand-accent-rgb), .35));
+}
+@keyframes brandPop {
+  0%   { transform: scale(.55); opacity: 0; }
+  60%  { transform: scale(1.06); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #brand-splash .brand-splash-logo { animation: none; }
+}
+
+/* ---- Login page logo + title -------------------------------------------- */
+.brand-login-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .35rem;
+  margin-bottom: .25rem;
+}
+.brand-login-logo {
+  width: 92px;
+  height: 92px;
+  filter: drop-shadow(0 4px 14px rgba(0, 0, 0, .18));
+}
+.brand-login-head h1 {
+  color: var(--brand-ink);
+  letter-spacing: .5px;
+  margin: 0;
+}
+
+/* ---- Sidebar (dashboard) top-left logo ----------------------------------- */
+.sidebar-header.brand-sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+}
+.brand-sidebar-logo {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+}
+.sidebar-header.brand-sidebar-header h2 {
+  margin: 0;
+  font-size: 1.15rem;
+  line-height: 1.1;
+  letter-spacing: .3px;
+}
+
+/* ---- Contact + social footer (login page) -------------------------------- */
+.brand-footer {
+  max-width: 760px;
+  margin: 1.75rem auto 1rem;
+  padding: 1.25rem 1rem 0;
+  border-top: 1px solid rgba(0, 0, 0, .08);
+  text-align: center;
+  color: var(--text-secondary, #5b6b60);
+  font-size: .9rem;
+}
+.brand-contact {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: .5rem 1.4rem;
+  margin-bottom: 1rem;
+}
+.brand-contact a {
+  color: inherit;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+}
+.brand-contact a:hover { color: var(--brand-ink); }
+.brand-contact svg { width: 16px; height: 16px; fill: currentColor; flex: 0 0 auto; }
+
+.brand-social {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: .6rem;
+  margin-bottom: 1rem;
+}
+.brand-social a {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--brand-ink);
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+.brand-social a:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0, 0, 0, .22); }
+.brand-social svg { width: 20px; height: 20px; fill: #fff; }
+/* brand-tinted hovers */
+.brand-social .s-yt:hover     { background: #ff0000; }
+.brand-social .s-wa:hover     { background: #25d366; }
+.brand-social .s-fb:hover     { background: #1877f2; }
+.brand-social .s-ig:hover     { background: #e1306c; }
+.brand-social .s-sc:hover     { background: #fffc00; }
+.brand-social .s-sc:hover svg { fill: #0d0d0d; }
+.brand-social .s-tt:hover     { background: #000; }
+
+.brand-copy { margin: .25rem 0 0; font-size: .8rem; opacity: .8; }
+
+/* ============================================================================
+   DARK THEME — Bhatti Gym: black + gold + white. (PRODUCTION / reviewer-fixed)
+   Replaces the previous light "athletic black" theme section. Loaded LAST in
+   brand.css, so it re-points the shared :root tokens to dark tiers AND
+   overrides every hardcoded light surface from the base stylesheets
+   (style.css, admin-dashboard.css, member-profile.css, pwa.css) plus the
+   structural branding rules above (login head, footer, socials) that assumed a
+   light bg.
+
+   ELEVATION TIERS
+     body / app bg ............ #0a0a0a
+     base surface / page ...... #0d0d0d
+     card / panel / modal ..... #161616
+     raised / inputs / hover .. #1f1f1f  (hover lift #242424)
+     hairline border .......... #2a2a2a
+     gold accent border ....... rgba(var(--brand-accent-rgb),.45)
+   TEXT  primary #ededed · secondary #a8a8a8 · muted #909090 · gold #f5c518
+   Gold is the 10% signal color — buttons, active nav, accents, headings,
+   focus rings, table-head text, key stat values. Surfaces stay charcoal.
+   ============================================================================ */
+
+/* ---- 1. Re-point shared tokens to dark tiers ----------------------------- */
+:root {
+  --primary-color: #0d0d0d;
+  --primary-gradient: linear-gradient(135deg, #1f1f1f 0%, #0d0d0d 100%);
+  --secondary-color: #161616;
+  --secondary-gradient: linear-gradient(135deg, #1f1f1f 0%, #161616 100%);
+
+  --bg-color: #0d0d0d;          /* page canvas */
+  --bg-secondary: #161616;      /* cards / tables / panels */
+  --bg-tertiary: #1f1f1f;       /* raised / paper blocks */
+
+  --text-color: #ededed;
+  --text-primary: #ededed;      /* member-profile.css consumer */
+  --text-secondary: #c8c8c8;    /* brightened from #a8a8a8 — small grey labels were hard to read on black */
+  --text-muted: #aeaeae;        /* brightened from #909090 — ~7:1 on #0d0d0d */
+
+  --border-color: #2a2a2a;      /* neutral hairline on dark */
+
+  /* Re-point status tokens so .simple-note / .warning-note / .activity-badge
+     text (consumed from these vars) is legible on dark tints, not dark-on-dark */
+  --success-color: #4ade80;
+  --warning-color: #fbbf24;
+  --info-color: #5eb0e8;
+
+  --shadow: 0 2px 8px rgba(0, 0, 0, .45);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, .60);
+  --shadow-glow: 0 0 0 4px rgba(var(--brand-accent-rgb), .35);
+
+  --brand-gold: var(--brand-accent);
+  --gold-grad: linear-gradient(180deg, #f8d23c 0%, #efb70c 100%);
+}
+
+/* ---- Type: condensed athletic display, light on dark --------------------- */
+body {
+  font-family: var(--brand-font-body);
+  background: #0a0a0a;
+  color: var(--text-color);
+}
+/* member-profile.css L24 hardcodes body{background:#f3f7f4} with NO class hook;
+   the member <body> has no class. Pin unconditionally with html-body specificity
+   so the member page canvas is dark for real (not just by load-order luck). */
+html body { background: #0a0a0a; }
+
+.brand-login-head h1,
+.sidebar-header.brand-sidebar-header h2,
+#pageTitle,
+.content-header h1,
+.dashboard-recent h2,
+.dashboard-intro-copy h2,
+.modal-header h2 {
+  font-family: var(--brand-font-display);
+  font-weight: 400;
+  letter-spacing: .04em;
+  -webkit-text-fill-color: currentColor;   /* cancel any gradient text-clip */
+  background: none;
+}
+/* Display headings must be LIGHT/GOLD on dark — never --brand-ink (vanishes) */
+.brand-login-head h1 { font-size: 3rem; line-height: 1; color: #ffffff; }
+.content-header h1, #pageTitle { font-size: 2rem; color: #ffffff; }
+.sidebar-header.brand-sidebar-header h2 { font-size: 1.5rem; color: #ffffff; }
+.dashboard-recent h2, .dashboard-intro-copy h2, .modal-header h2 { color: #ededed; }
+
+::selection { background: var(--brand-yellow); color: var(--brand-ink); }
+
+/* ============================================================================
+   2. LOGIN PAGE
+   ============================================================================ */
+.login-container {
+  background:
+    radial-gradient(circle at 12% 12%, rgba(var(--brand-accent-rgb), .12), transparent 42%),
+    radial-gradient(circle at 88% 86%, rgba(var(--brand-accent-rgb), .08), transparent 44%),
+    #0d0d0d;
+  animation: none;
+}
+.login-container::before { display: none; }
+
+.login-box, .login-box-wide {
+  background: #161616;
+  border-radius: 14px;
+  border: 1px solid var(--border-color);
+  border-top: 3px solid var(--brand-gold);
+  box-shadow: var(--shadow-lg);
+}
+.login-access-card {
+  background: linear-gradient(180deg, #181818 0%, #141414 100%);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  box-shadow: none;
+}
+.login-form-panel {
+  background: #161616;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  box-shadow: none;
+}
+.access-intro {
+  background: #1a1a1a;
+  border: 1px solid var(--border-color);
+  border-left: 3px solid var(--brand-gold);
+  border-radius: 8px;
+  color: var(--text-secondary);
+}
+/* Defensively pin paragraph text so no inherited dark --brand-ink leaks in */
+.access-intro, .access-intro p { color: var(--text-secondary); }
+.access-intro strong { color: var(--brand-gold); }
+.login-subtitle, .login-panel-text, .form-hint { color: var(--text-secondary); }
+.login-form-panel label, .form-group label { color: var(--text-secondary); }
+
+/* OR divider chip visible on dark */
+.login-divider span {
+  background: #161616;
+  color: var(--text-muted);
+  box-shadow: none;
+}
+.login-divider::before, .login-divider::after { border-color: var(--border-color); }
+
+/* ---- Badges -------------------------------------------------------------- */
+/* Staff badge: lift off the #161616 card to #1f1f1f so it reads as a real pill */
+.login-panel-badge {
+  background: #1f1f1f;
+  color: var(--brand-yellow);
+  border: 1px solid rgba(var(--brand-accent-rgb), .45);
+  border-radius: 6px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+.login-panel-badge.member-badge,
+.member-badge { background: var(--brand-yellow); color: var(--brand-ink); border-color: transparent; }
+
+/* ============================================================================
+   3. INPUTS — dark field, light text, gold focus ring
+   ============================================================================ */
+.form-group input, .form-group select, .form-group textarea,
+.search-input, .lookup-input, .form-control,
+.dashboard-date-range input {
+  background: #1a1a1a;
+  color: var(--text-color);
+  border: 2px solid #2e2e2e;
+  border-radius: 8px;
+}
+.form-group input::placeholder, .form-group textarea::placeholder,
+.search-input::placeholder, .lookup-input::placeholder,
+.form-control::placeholder { color: #8a8a8a; }   /* bumped from #6f6f6f → ≥3:1 on #1a1a1a */
+/* All selects + native option popups dark (covers bare/un-classed selects too) */
+select, select option, optgroup,
+.form-group select option, .form-control option {
+  background: #1a1a1a; color: var(--text-color);
+}
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus,
+.search-input:focus, .lookup-input:focus, .form-control:focus,
+.dashboard-date-range input:focus {
+  background: #1f1f1f;
+  border-color: var(--brand-gold);
+  box-shadow: 0 0 0 3px rgba(var(--brand-accent-rgb), .45);
+  transform: none;
+}
+.search-input { box-shadow: none; }
+
+/* Autofill (Chrome/Edge) — kill the UA light fill on the login card & lookups */
+.form-group input:-webkit-autofill,
+.form-group input:-webkit-autofill:hover,
+.form-group input:-webkit-autofill:focus,
+.lookup-input:-webkit-autofill,
+.search-input:-webkit-autofill,
+.form-control:-webkit-autofill {
+  -webkit-text-fill-color: var(--text-color);
+  -webkit-box-shadow: 0 0 0 1000px #1a1a1a inset;
+  box-shadow: 0 0 0 1000px #1a1a1a inset;
+  caret-color: var(--text-color);
+  transition: background-color 9999s ease-out 0s;
+}
+
+/* ============================================================================
+   4. BUTTONS — gold primary (dark text), dark neutral secondary
+   ============================================================================ */
+.btn {
+  border-radius: 8px;
+  box-shadow: none;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  font-weight: 700;
+}
+.btn::before { display: none; }
+.btn:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0, 0, 0, .5); }
+.btn-primary { background: var(--gold-grad); color: #0d0d0d; border: 1px solid #d9a407; }
+.btn-primary:hover {
+  background: linear-gradient(180deg, #ffdf52, var(--brand-accent));
+  box-shadow: 0 6px 18px rgba(var(--brand-accent-rgb), .45);
+}
+.btn-secondary, .btn-outline {
+  background: #1f1f1f;
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+}
+.btn-secondary:hover, .btn-outline:hover { background: #242424; }
+.pagination button {
+  background: #1f1f1f;
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+}
+.pagination button:hover:not(:disabled) { background: #242424; }
+
+/* ============================================================================
+   5. TABLES
+   ============================================================================ */
+.data-table {
+  background: var(--bg-secondary);
+  box-shadow: none;
+  border: 1px solid var(--border-color);
+  border-top: 2px solid rgba(var(--brand-accent-rgb), .55);
+  border-radius: 8px;
+}
+.data-table thead {
+  background: var(--brand-ink);
+  color: var(--brand-gold);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  font-size: .82rem;
+}
+.data-table th, .data-table td { color: var(--text-color); border-color: #222; }
+.data-table tbody tr:hover { background: rgba(var(--brand-accent-rgb), .08); transform: none; }
+
+/* ============================================================================
+   6. DASHBOARD SIDEBAR — ink slab, gold active marker (already dark, reinforce)
+   ============================================================================ */
+.sidebar { background: #0d0d0d; box-shadow: none; border-right: 1px solid #1c1c1c; }
+.sidebar-header.brand-sidebar-header {
+  background: #111;
+  border-bottom: 2px solid rgba(var(--brand-accent-rgb), .4);
+}
+.sidebar-nav .nav-item { color: #cccccc; }
+.sidebar-nav .nav-item:hover { color: #fff; }
+.sidebar-nav .nav-item:hover::before,
+.sidebar-nav .nav-item.active::before { background: rgba(var(--brand-accent-rgb), .12); }
+.sidebar-nav .nav-item.active {
+  color: var(--brand-yellow);
+  background: rgba(var(--brand-accent-rgb), .10);
+  box-shadow: inset 3px 0 0 var(--brand-yellow);
+}
+
+/* ============================================================================
+   7. DASHBOARD SURFACES (admin-dashboard.css hardcoded whites)
+   Section/panel fills are OPAQUE #161616 so they read as the same card tier as
+   .stat-card (translucency over #0a0a0a body would sink them a tier darker).
+   Only true sticky/overlay bars keep alpha (show-through is intentional there).
+   ============================================================================ */
+.main-content, .content-body, .dashboard-container { background: var(--bg-color); }
+.content-header, .section-header {
+  background: rgba(13, 13, 13, .94);   /* sticky bar — show-through intentional */
+  box-shadow: none;
+  border-bottom: 2px solid var(--brand-gold);
+}
+#userName, .user-info { color: var(--text-color); }
+
+.stat-card, .dashboard-recent, .dashboard-intro-card {
+  background: #161616;
+  box-shadow: none;
+  border: 1px solid var(--border-color);
+  border-top: 2px solid rgba(var(--brand-accent-rgb), .55);
+  border-radius: 10px;
+}
+.stat-card { background: linear-gradient(135deg, #181818 0%, #141414 100%); }
+.stat-card:hover { box-shadow: 0 12px 35px rgba(0, 0, 0, .55); }
+/* admin-dashboard.css gradient-clips .stat-value to transparent; the dark
+   re-pointed --primary-gradient made it invisible. Reset the clip so gold shows. */
+.stat-value {
+  color: var(--brand-gold);
+  background: none;
+  -webkit-text-fill-color: currentColor;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+}
+
+/* Decorative gradient-fill badges/icons that relied on the old vivid green
+   --primary-gradient now paint charcoal-on-charcoal — restore the gold accent. */
+.stat-card-icon, .report-icon, .stat-icon, .import-icon, .export-icon {
+  background: var(--gold-grad);
+  color: #0d0d0d;
+}
+
+/* Page chip: was var(--primary-color) (now #0d0d0d) on a faint green tint */
+.page-chip { background: rgba(var(--brand-accent-rgb), .12); color: var(--brand-gold); }
+
+.section-guide { background: #161616; border: 1px solid var(--border-color); }
+.empty-state { background: #1a1a1a; color: var(--text-secondary); }
+.download-section, .import-results, .stat-item,
+.activity-meta-item, .activity-json-view { background: #1a1a1a; }
+
+.gender-tabs {
+  background: #161616;
+  box-shadow: none;
+  border: 1px solid var(--border-color);
+}
+.gender-tab:hover { background: rgba(var(--brand-accent-rgb), .08); }
+
+.members-section, .attendance-section, .payments-section,
+.reports-section, .import-section {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+}
+.import-card, .export-card {
+  background: #161616;
+  border: 1px solid var(--border-color);
+}
+.import-card:hover, .export-card:hover { box-shadow: 0 12px 35px rgba(0, 0, 0, .55); }
+
+/* ---- Simple / warning info notes (consumed --info/--warning, now retuned) -- */
+.simple-note {
+  background: rgba(3, 105, 161, .15);
+  color: #5eb0e8;
+  border-color: rgba(3, 105, 161, .4);
+}
+.warning-note {
+  background: rgba(245, 158, 11, .15);
+  color: #fbbf24;
+  border-color: rgba(245, 158, 11, .4);
+}
+
+/* ---- Insight / chart cards ---------------------------------------------- */
+.insight-card {
+  background: #161616;
+  border: 1px solid var(--border-color);
+  box-shadow: none;
+}
+.insight-card-header { border-bottom: 1px solid var(--border-color); }
+.insight-card-header h3 { color: var(--brand-gold); }
+.insight-card-header small { color: var(--text-muted); }
+.insight-table thead tr { border-bottom: 2px solid #2a2a2a; }
+.insight-table th { color: var(--brand-gold); }
+.insight-table td { color: var(--text-color); border-bottom: 1px solid #222; }
+.insight-table tbody tr:hover td { background: rgba(var(--brand-accent-rgb), .06); }
+
+.chart-card { background: #161616; border: 1px solid var(--border-color); }
+.chart-card-pill { background: #1f1f1f; color: var(--brand-gold); }
+.dashboard-intro-card { background: var(--bg-secondary); }
+.dashboard-toolbar { background: rgba(22, 22, 22, .92); }  /* sticky bar — keep alpha */
+.dashboard-shell { background: var(--bg-secondary); }
+.dashboard-chart-tab {
+  background: #1f1f1f;
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+}
+.dashboard-chart-tab.active, .dashboard-chart-tab:hover {
+  border-color: rgba(var(--brand-accent-rgb), .5);
+  color: var(--brand-gold);
+}
+.dashboard-shell .chart-card {
+  border-color: var(--border-color);
+  box-shadow: none;
+}
+.chart-tooltip {
+  background: rgba(20, 20, 20, .98);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, .6);
+}
+.chart-legend-item {
+  background: #1f1f1f;
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+}
+/* Chart lib inline-SVG axis labels / gridlines (hardcoded #666/#ccc in JS) */
+.chart-card svg text, .dashboard-shell svg text { fill: var(--text-secondary); }
+.chart-card .recharts-cartesian-grid line,
+.dashboard-shell .recharts-cartesian-grid line { stroke: #2a2a2a; }
+
+/* ---- Activity feed ------------------------------------------------------- */
+.activity-summary-card {
+  background: linear-gradient(135deg, #181818 0%, #141414 100%);
+  border: 1px solid var(--border-color);
+}
+.activity-bar-track { background: #2a2a2a; }
+.activity-card { background: #161616; border: 1px solid var(--border-color); }
+.activity-card:hover { box-shadow: 0 12px 30px rgba(0, 0, 0, .55); }
+.activity-detail-pill { background: rgba(var(--brand-accent-rgb), .12); color: var(--text-color); }
+/* Full set of activity badges retuned for dark tints (not just .danger) */
+.activity-badge.danger { background: rgba(231, 76, 60, .18); color: #ff6b6b; border-color: rgba(231, 76, 60, .35); }
+.activity-badge.success { background: rgba(39, 174, 96, .18); color: #4ade80; border-color: rgba(39, 174, 96, .35); }
+.activity-badge.warning { background: rgba(245, 158, 11, .18); color: #fbbf24; border-color: rgba(245, 158, 11, .35); }
+.activity-badge.neutral { background: rgba(168, 168, 168, .18); color: var(--text-secondary); border-color: rgba(168, 168, 168, .3); }
+.activity-table-wrap { background: #161616; border: 1px solid var(--border-color); }
+
+/* ---- Reports ------------------------------------------------------------- */
+.report-card { background: var(--bg-secondary); border: 1px solid var(--border-color); }
+.report-card:hover { box-shadow: 0 15px 40px rgba(0, 0, 0, .6); }
+.report-content { background: var(--bg-secondary); }
+
+/* ============================================================================
+   8. MODALS (admin-dashboard.css base — never recolored before)
+   ============================================================================ */
+.modal { background-color: rgba(0, 0, 0, .7); }
+.modal-content {
+  background: #161616;
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-lg);
+}
+.modal-header { background: #1a1a1a; border-bottom: 1px solid var(--border-color); }
+.modal-header h2 { color: #ededed; }
+.modal-body { color: var(--text-color); }
+.modal-footer { background: #1a1a1a; border-top: 1px solid var(--border-color); }
+.modal-close { color: var(--text-secondary); }
+.modal-close:hover { background: rgba(231, 76, 60, .25); color: #ff6b6b; }
+
+/* ============================================================================
+   9. STATUS / BADGES — keep colored tints legible on dark
+   ============================================================================ */
+.status-active, .status-completed, .badge-success {
+  background: rgba(39, 174, 96, .18); color: #4ade80;
+}
+.status-inactive { background: rgba(231, 76, 60, .2); color: #ff6b6b; }
+.status-pending { background: rgba(243, 156, 18, .2); color: #fbbf24; }
+.badge-secondary { background: rgba(168, 168, 168, .18); color: var(--text-secondary); }
+.error {
+  background: rgba(220, 38, 38, .18);
+  color: #ff6b6b;
+  border: 1px solid rgba(220, 38, 38, .35);
+}
+
+/* ============================================================================
+   10. MEMBER PROFILE PAGES (member-profile.css hardcoded light surfaces)
+   ============================================================================ */
+.member-content, .member-container { background: transparent; }
+
+.lookup-bar {
+  background: #0d0d0d;
+  border-bottom: 2px solid var(--brand-gold);
+}
+.lookup-bar .lookup-input, .lookup-input {
+  background: #1a1a1a;
+  color: var(--text-color);
+  border: 2px solid #2e2e2e;
+}
+.lookup-input:focus { box-shadow: 0 0 0 3px rgba(var(--brand-accent-rgb), .45); }
+
+.member-profile {
+  background: rgba(22, 22, 22, .96);
+  border: 1px solid var(--border-color);
+}
+.profile-card {
+  background: linear-gradient(135deg, #181818 0%, #141414 100%);
+  border: 1px solid var(--border-color);
+  color: var(--text-color);
+}
+.profile-card:hover { box-shadow: 0 12px 40px rgba(0, 0, 0, .55); }
+/* Avatar ring: gold-tinted so the deliberate frame survives on a dark card
+   (was 5px #2a2a2a — invisible against #161616/#181818 behind it) */
+.profile-image { border: 4px solid rgba(var(--brand-accent-rgb), .30); box-shadow: 0 8px 25px rgba(0, 0, 0, .55); }
+.profile-placeholder { background-color: #1f1f1f; color: var(--brand-gold); }
+
+.detail-item { border-bottom: 1px solid var(--border-color); }
+.detail-label { color: var(--text-secondary); }
+.detail-value { color: var(--text-color); }
+
+/* ---- Snapshot banners — dark-mode tints, light text --------------------- */
+.snapshot-banner {
+  background: rgba(245, 158, 11, .12);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, .35);
+}
+.snapshot-banner--stale {
+  background: rgba(220, 38, 38, .12);
+  color: #ff8787;
+  border-color: rgba(220, 38, 38, .4);
+}
+.snapshot-notice {
+  background: #161616;
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+}
+.snapshot-notice p { color: var(--text-secondary); }
+
+/* ---- Attendance calendar ------------------------------------------------- */
+.calendar-section { background: #161616; border: 1px solid var(--border-color); }
+.attendance-calendar { background: #1a1a1a; }
+.calendar-day { background: #1f1f1f; border: 2px solid var(--border-color); }
+.calendar-day.future { background: #161616; }
+.calendar-day .day-number { color: var(--text-color); }
+.calendar-day.present { background: rgba(39, 174, 96, .22); border-color: rgba(39, 174, 96, .5); }
+.calendar-day.absent { background: rgba(231, 76, 60, .18); border-color: rgba(231, 76, 60, .45); }
+
+/* default-date / "today" stays gold with intentional dark text — RE-ASSERT the
+   gold fill explicitly so the generic .calendar-day{background:#1f1f1f} above
+   can't leave near-black #1f2933 text on a dark cell (invisible). */
+.calendar-day.default-date {
+  background: var(--brand-yellow);
+  border-color: #d9a407;
+}
+.calendar-day.default-date,
+.calendar-day.default-date .day-number { color: #1f2933; }
+
+/* member-profile.css L503 hardcodes .today = Material-blue !important gradient
+   with a pulsing glow — neutralize to the black+gold palette. */
+.calendar-day.today {
+  background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%) !important;
+  border-color: var(--brand-gold) !important;
+  box-shadow: 0 0 0 2px rgba(var(--brand-accent-rgb), .4) !important;
+  animation: none;
+}
+.calendar-day.today .day-number { color: var(--brand-gold); }
+/* today+present / today+absent also carry !important saturated gradients */
+.calendar-day.today.present {
+  background: rgba(39, 174, 96, .25) !important;
+  border-color: var(--brand-gold) !important;
+}
+.calendar-day.today.absent {
+  background: rgba(231, 76, 60, .22) !important;
+  border-color: var(--brand-gold) !important;
+}
+
+/* ---- Fee history table --------------------------------------------------- */
+.fee-history { background: #1a1a1a; border: 1px solid var(--border-color); }
+.fee-table { background: #161616; }
+.fee-table thead {
+  background: var(--brand-ink);
+  color: var(--brand-gold);
+}
+.fee-table thead th { color: var(--brand-gold); }
+.fee-table th, .fee-table td { color: var(--text-color); border-bottom: 1px solid #222; }
+.fee-table tbody tr:hover { background: rgba(var(--brand-accent-rgb), .08); }
+
+.status-badge.status-active, .status-badge.status-completed { color: #4ade80; }
+.status-badge.status-inactive { color: #ff6b6b; }
+.status-badge.status-pending { color: #fbbf24; }
+.no-data, .loading { color: var(--text-muted); }
+
+/* ============================================================================
+   11. STRUCTURAL OVERRIDES — top-half branding rules that assumed light
+   ============================================================================ */
+/* Footer: light-muted text, visible hairline (was rgba(0,0,0,.08) → invisible) */
+.brand-footer {
+  border-top: 1px solid rgba(255, 255, 255, .10);
+  color: var(--text-secondary);
+}
+.brand-contact a { color: var(--text-secondary); }
+.brand-contact a:hover { color: var(--brand-gold); }
+.brand-copy { color: var(--text-muted); opacity: 1; }
+
+/* Social circles: --brand-ink (#0d0d0d) disappears on dark — give an edge.
+   Glyphs go light; brand-tinted :hover fills (defined earlier in the file)
+   still win on hover. Snapchat keeps its dark glyph-on-yellow hover. */
+.brand-social a {
+  background: #1f1f1f;
+  border: 1px solid #2a2a2a;
+}
+.brand-social a:hover { box-shadow: 0 6px 16px rgba(0, 0, 0, .55); }
+.brand-social svg { fill: #ededed; }
+.brand-social .s-sc:hover svg { fill: #0d0d0d; }  /* re-assert: dark glyph on yellow */
+
+/* Gold underline under display headings (echoes the logo ring) */
+.brand-login-head h1::after,
+#pageTitle::after {
+  content: ''; display: block; height: 3px; width: 56px; border-radius: 2px;
+  background: var(--brand-gold); margin-top: .45rem;
+}
+.brand-login-head h1::after { margin-left: auto; margin-right: auto; }
+
+/* ============================================================================
+   12. PWA STATUS BAR (assets/css/pwa.css — was the last light white-flash band)
+   ============================================================================ */
+.pwa-status-bar.is-online {
+  background: rgba(39, 174, 96, .16);
+  color: #4ade80;
+  border-color: rgba(39, 174, 96, .4);
+}
+.pwa-status-bar.is-offline {
+  background: rgba(245, 158, 11, .16);
+  color: #fbbf24;
+  border-color: rgba(245, 158, 11, .4);
+}
+
+/* ============================================================================
+   13. SCROLLBAR — dark track, gold thumb
+   ============================================================================ */
+* { scrollbar-color: var(--brand-gold) #161616; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: #161616; }
+::-webkit-scrollbar-thumb { background: var(--brand-gold); border-radius: 6px; }
+::-webkit-scrollbar-thumb:hover { background: #ffdf52; }
+::-webkit-scrollbar-corner { background: #161616; }  /* kill UA light corner dot */
+
+/* Spinner track on dark */
+.loading-spinner { border: 3px solid rgba(255, 255, 255, .15); border-top-color: var(--brand-gold); }
+
+/* #brand-splash already dark (radial #1c1c1c → #0d0d0d) — intentionally untouched. */
+
+/* ============================================================================
+   14. --primary-gradient CONSUMERS — the re-pointed dark gradient turned these
+   real accents charcoal-on-charcoal. Restore gold so selected/active states and
+   the mobile menu button read on dark. (Verified in admin-dashboard.css.)
+   ============================================================================ */
+.gender-tab.active {                       /* selected Men/Women segment */
+  background: var(--gold-grad);
+  color: #0d0d0d;
+  box-shadow: 0 4px 12px rgba(var(--brand-accent-rgb), .3);
+}
+.activity-bar-fill { background: var(--gold-grad); }                   /* progress fill (was darker than its track) */
+.mobile-menu-toggle { background: var(--gold-grad); color: #0d0d0d; }  /* hamburger — invisible on dark otherwise */
+.stat-card::before { background: var(--gold-grad); }                   /* animated hover top-stripe */
+.report-card::before { background: rgba(var(--brand-accent-rgb), .08); }          /* faint gold hover wash (was dark gradient) */
+
+/* ============================================================================
+   15. MOBILE LAYOUT FIX — the PWA status bar (pwa.css) and the member page's
+   .lookup-bar were BOTH position:sticky; top:0, so on scroll they piled on top
+   of each other (the green "Online" bar overlapping the member-code box on
+   phones). The status bar is informational; the lookup box is the control —
+   so let the status bar scroll normally and keep the lookup box sticky.
+   ============================================================================ */
+.pwa-status-bar { position: static; }
+
+/* Member lookup header on phones: keep the logo from crowding the field/buttons
+   and make the action buttons full-width so they don't get clipped. */
+@media (max-width: 600px) {
+  .lookup-bar .lookup-container { align-items: stretch; }
+  .lookup-bar .brand-sidebar-logo { width: 38px; height: 38px; align-self: center; }
+  .lookup-bar .lookup-input { width: 100%; }
+  .lookup-bar .btn { width: 100%; }
+}
+
+/* Member-profile fee table: never let columns overlap — scroll horizontally
+   with a min width and no-wrap cells, at EVERY screen size (the cramped
+   landscape view in particular). The fee table does NOT use the card layout. */
+.fee-section, .fee-history { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.fee-table { min-width: 560px; }
+.fee-table th, .fee-table td { white-space: nowrap; }
+.recent-table-wrap, .activity-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* On phones the .data-table switches to a STACKED-CARD layout (admin-dashboard
+   .css turns each row into a card) — and paints that card #ffffff, so our light
+   text became invisible (the "white area" on the Registrations list). Re-skin
+   the cards for the dark theme. NOTE: no min-width here — cards are full-width. */
+@media (max-width: 768px) {
+  .data-table tr {
+    background: #161616;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+  }
+  .data-table td { color: var(--text-color); border-bottom-color: #242424; }
+  .data-table td::before { color: var(--brand-gold); }   /* the field labels */
+  .data-table tbody tr:hover { background: #1b1b1b; }
+}
+
+/* ============================================================================
+   16. "Create profile" CTA — make it read as an on-theme GOLD action, not a
+   muted dark button that blends into the login card.
+   ============================================================================ */
+.member-signup-cta { border-top-color: rgba(var(--brand-accent-rgb), .35); }
+.member-signup-cta .form-hint { color: var(--text-secondary); }
+#openSignupBtn {
+  background: transparent;
+  color: var(--brand-gold);
+  border: 2px solid var(--brand-gold);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  width: 100%;
+  padding: .7rem 1rem;
+  border-radius: 8px;
+}
+#openSignupBtn:hover {
+  background: var(--gold-grad);
+  color: #0d0d0d;
+  box-shadow: 0 6px 18px rgba(var(--brand-accent-rgb), .4);
+}
