@@ -5932,6 +5932,20 @@ function loadImport() {
             <div id="importResults"></div>
                 </div>
 
+                <!-- Import device attendance (ZKTeco F22 / fingerprint export) -->
+                <div class="import-card">
+                    <h2>🕓 Import device attendance</h2>
+                    <p class="form-hint" style="margin:.25rem 0 .75rem;">Upload an attendance export from your ZKTeco / fingerprint device. Each scan is matched to a member (by member code, device PIN, or name) and added to attendance — nothing on the device changes.</p>
+                    <form id="attImportForm" enctype="multipart/form-data">
+                        <div class="form-group">
+                            <label>Attendance file (.xls, .xlsx, .csv) *</label>
+                            <input type="file" id="attImportFile" name="file" accept=".xls,.xlsx,.csv" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Import attendance</button>
+                    </form>
+                    <div id="attImportResults"></div>
+                </div>
+
                 <!-- Export/Download Section -->
                 <div class="export-card">
                     <h2>📤 Download Data</h2>
@@ -6037,6 +6051,12 @@ function loadImport() {
         e.preventDefault();
         handleImport();
     });
+
+    const attForm = document.getElementById('attImportForm');
+    if (attForm) attForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        handleAttendanceImport();
+    });
 }
 
 let isImporting = false;
@@ -6101,6 +6121,47 @@ function handleImport() {
             console.error('Import error:', err);
             Utils.showNotification('Error during import: ' + err.message, 'error');
             resultsDiv.innerHTML = `<div class="error">Import failed: ${err.message}</div>`;
+        });
+}
+
+function handleAttendanceImport() {
+    const form = document.getElementById('attImportForm');
+    const formData = new FormData(form);
+    const btn = form.querySelector('button[type="submit"]');
+    const out = document.getElementById('attImportResults');
+    btn.disabled = true;
+    btn.textContent = 'Importing…';
+    out.innerHTML = '<div class="loading">Reading the file and matching members…</div>';
+    fetch('api/import-attendance.php', { method: 'POST', body: formData })
+        .then(res => res.json())
+        .then(data => {
+            btn.disabled = false;
+            btn.textContent = 'Import attendance';
+            if (data.success) {
+                const r = data.results || {};
+                Utils.showNotification(data.message, 'success');
+                out.innerHTML = `
+                <div class="import-results">
+                    <h3>Attendance import</h3>
+                    <p><strong>Added: ${r.imported || 0}</strong> scan(s) · already there: ${r.duplicates || 0} · unmatched: ${r.unmatched || 0}</p>
+                    ${(r.unmatched_list && r.unmatched_list.length) ? `
+                        <div class="duplicates">
+                            <h4>Not matched to a member (${r.unmatched}):</h4>
+                            <ul>${r.unmatched_list.map(u => `<li>${escapeHtml(u)}</li>`).join('')}</ul>
+                            <p class="form-hint">Tip: match these by giving the device user the member's code, or the same name as in the system.</p>
+                        </div>` : ''}
+                    ${(r.errors && r.errors.length) ? `<div class="errors"><h4>Skipped rows:</h4><ul>${r.errors.slice(0, 20).map(e => `<li>${escapeHtml(e)}</li>`).join('')}</ul></div>` : ''}
+                </div>`;
+            } else {
+                Utils.showNotification(data.message, 'error');
+                out.innerHTML = `<div class="error">${escapeHtml(data.message)}</div>`;
+            }
+        })
+        .catch(err => {
+            btn.disabled = false;
+            btn.textContent = 'Import attendance';
+            Utils.showNotification('Error during import: ' + err.message, 'error');
+            out.innerHTML = `<div class="error">Import failed: ${escapeHtml(err.message)}</div>`;
         });
 }
 
