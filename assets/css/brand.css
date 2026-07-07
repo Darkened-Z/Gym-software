@@ -8,7 +8,15 @@
 @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Hanken+Grotesque:wght@400;500;600;700;800&display=swap');
 
 :root {
-  --brand-yellow: #f5c518;
+  /* Accent colour + fonts are per-gym and overridable from the dashboard
+     (branding.js injects overrides). These defaults reproduce the original
+     Bhatti gold + type EXACTLY, so nothing changes unless an owner picks new
+     values. --brand-accent-rgb feeds the rgba() accent tints below. */
+  --brand-accent: #f5c518;
+  --brand-accent-rgb: 245, 197, 24;
+  --brand-font-display: 'Bebas Neue', 'Arial Narrow', sans-serif;
+  --brand-font-body: 'Hanken Grotesque', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --brand-yellow: var(--brand-accent);
   --brand-ink: #0d0d0d;
 }
 
@@ -28,7 +36,7 @@
   width: 170px;
   height: 170px;
   animation: brandPop .6s cubic-bezier(.2, .8, .3, 1.2) both;
-  filter: drop-shadow(0 8px 28px rgba(245, 197, 24, .35));
+  filter: drop-shadow(0 8px 28px rgba(var(--brand-accent-rgb), .35));
 }
 @keyframes brandPop {
   0%   { transform: scale(.55); opacity: 0; }
@@ -148,7 +156,7 @@
      card / panel / modal ..... #161616
      raised / inputs / hover .. #1f1f1f  (hover lift #242424)
      hairline border .......... #2a2a2a
-     gold accent border ....... rgba(245,197,24,.45)
+     gold accent border ....... rgba(var(--brand-accent-rgb),.45)
    TEXT  primary #ededed · secondary #a8a8a8 · muted #909090 · gold #f5c518
    Gold is the 10% signal color — buttons, active nav, accents, headings,
    focus rings, table-head text, key stat values. Surfaces stay charcoal.
@@ -180,15 +188,15 @@
 
   --shadow: 0 2px 8px rgba(0, 0, 0, .45);
   --shadow-lg: 0 16px 40px rgba(0, 0, 0, .60);
-  --shadow-glow: 0 0 0 4px rgba(245, 197, 24, .35);
+  --shadow-glow: 0 0 0 4px rgba(var(--brand-accent-rgb), .35);
 
-  --brand-gold: #f5c518;
+  --brand-gold: var(--brand-accent);
   --gold-grad: linear-gradient(180deg, #f8d23c 0%, #efb70c 100%);
 }
 
 /* ---- Type: condensed athletic display, light on dark --------------------- */
 body {
-  font-family: 'Hanken Grotesque', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--brand-font-body);
   background: #0a0a0a;
   color: var(--text-color);
 }
@@ -204,7 +212,7 @@ html body { background: #0a0a0a; }
 .dashboard-recent h2,
 .dashboard-intro-copy h2,
 .modal-header h2 {
-  font-family: 'Bebas Neue', 'Arial Narrow', sans-serif;
+  font-family: var(--brand-font-display);
   font-weight: 400;
   letter-spacing: .04em;
   -webkit-text-fill-color: currentColor;   /* cancel any gradient text-clip */
@@ -223,8 +231,8 @@ html body { background: #0a0a0a; }
    ============================================================================ */
 .login-container {
   background:
-    radial-gradient(circle at 12% 12%, rgba(245, 197, 24, .12), transparent 42%),
-    radial-gradient(circle at 88% 86%, rgba(245, 197, 24, .08), transparent 44%),
+    radial-gradient(circle at 12% 12%, rgba(var(--brand-accent-rgb), .12), transparent 42%),
+    radial-gradient(circle at 88% 86%, rgba(var(--brand-accent-rgb), .08), transparent 44%),
     #0d0d0d;
   animation: none;
 }
@@ -275,7 +283,7 @@ html body { background: #0a0a0a; }
 .login-panel-badge {
   background: #1f1f1f;
   color: var(--brand-yellow);
-  border: 1px solid rgba(245, 197, 24, .45);
+  border: 1px solid rgba(var(--brand-accent-rgb), .45);
   border-radius: 6px;
   text-transform: uppercase;
   letter-spacing: .06em;
@@ -307,7 +315,7 @@ select, select option, optgroup,
 .dashboard-date-range input:focus {
   background: #1f1f1f;
   border-color: var(--brand-gold);
-  box-shadow: 0 0 0 3px rgba(245, 197, 24, .45);
+  box-shadow: 0 0 0 3px rgba(var(--brand-accent-rgb), .45);
   transform: none;
 }
 .search-input { box-shadow: none; }
@@ -340,8 +348,8 @@ select, select option, optgroup,
 .btn:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0, 0, 0, .5); }
 .btn-primary { background: var(--gold-grad); color: #0d0d0d; border: 1px solid #d9a407; }
 .btn-primary:hover {
-  background: linear-gradient(180deg, #ffdf52, #f5c518);
-  box-shadow: 0 6px 18px rgba(245, 197, 24, .45);
+  background: linear-gradient(180deg, #ffdf52, var(--brand-accent));
+  box-shadow: 0 6px 18px rgba(var(--brand-accent-rgb), .45);
 }
 .btn-secondary, .btn-outline {
   background: #1f1f1f;
@@ -363,7 +371,7 @@ select, select option, optgroup,
   background: var(--bg-secondary);
   box-shadow: none;
   border: 1px solid var(--border-color);
-  border-top: 2px solid rgba(245, 197, 24, .55);
+  border-top: 2px solid rgba(var(--brand-accent-rgb), .55);
   border-radius: 8px;
 }
 .data-table thead {
@@ -374,7 +382,7 @@ select, select option, optgroup,
   font-size: .82rem;
 }
 .data-table th, .data-table td { color: var(--text-color); border-color: #222; }
-.data-table tbody tr:hover { background: rgba(245, 197, 24, .08); transform: none; }
+.data-table tbody tr:hover { background: rgba(var(--brand-accent-rgb), .08); transform: none; }
 
 /* ============================================================================
    6. DASHBOARD SIDEBAR — ink slab, gold active marker (already dark, reinforce)
@@ -382,15 +390,15 @@ select, select option, optgroup,
 .sidebar { background: #0d0d0d; box-shadow: none; border-right: 1px solid #1c1c1c; }
 .sidebar-header.brand-sidebar-header {
   background: #111;
-  border-bottom: 2px solid rgba(245, 197, 24, .4);
+  border-bottom: 2px solid rgba(var(--brand-accent-rgb), .4);
 }
 .sidebar-nav .nav-item { color: #cccccc; }
 .sidebar-nav .nav-item:hover { color: #fff; }
 .sidebar-nav .nav-item:hover::before,
-.sidebar-nav .nav-item.active::before { background: rgba(245, 197, 24, .12); }
+.sidebar-nav .nav-item.active::before { background: rgba(var(--brand-accent-rgb), .12); }
 .sidebar-nav .nav-item.active {
   color: var(--brand-yellow);
-  background: rgba(245, 197, 24, .10);
+  background: rgba(var(--brand-accent-rgb), .10);
   box-shadow: inset 3px 0 0 var(--brand-yellow);
 }
 
@@ -412,7 +420,7 @@ select, select option, optgroup,
   background: #161616;
   box-shadow: none;
   border: 1px solid var(--border-color);
-  border-top: 2px solid rgba(245, 197, 24, .55);
+  border-top: 2px solid rgba(var(--brand-accent-rgb), .55);
   border-radius: 10px;
 }
 .stat-card { background: linear-gradient(135deg, #181818 0%, #141414 100%); }
@@ -435,7 +443,7 @@ select, select option, optgroup,
 }
 
 /* Page chip: was var(--primary-color) (now #0d0d0d) on a faint green tint */
-.page-chip { background: rgba(245, 197, 24, .12); color: var(--brand-gold); }
+.page-chip { background: rgba(var(--brand-accent-rgb), .12); color: var(--brand-gold); }
 
 .section-guide { background: #161616; border: 1px solid var(--border-color); }
 .empty-state { background: #1a1a1a; color: var(--text-secondary); }
@@ -447,7 +455,7 @@ select, select option, optgroup,
   box-shadow: none;
   border: 1px solid var(--border-color);
 }
-.gender-tab:hover { background: rgba(245, 197, 24, .08); }
+.gender-tab:hover { background: rgba(var(--brand-accent-rgb), .08); }
 
 .members-section, .attendance-section, .payments-section,
 .reports-section, .import-section {
@@ -484,7 +492,7 @@ select, select option, optgroup,
 .insight-table thead tr { border-bottom: 2px solid #2a2a2a; }
 .insight-table th { color: var(--brand-gold); }
 .insight-table td { color: var(--text-color); border-bottom: 1px solid #222; }
-.insight-table tbody tr:hover td { background: rgba(245, 197, 24, .06); }
+.insight-table tbody tr:hover td { background: rgba(var(--brand-accent-rgb), .06); }
 
 .chart-card { background: #161616; border: 1px solid var(--border-color); }
 .chart-card-pill { background: #1f1f1f; color: var(--brand-gold); }
@@ -497,7 +505,7 @@ select, select option, optgroup,
   border: 1px solid var(--border-color);
 }
 .dashboard-chart-tab.active, .dashboard-chart-tab:hover {
-  border-color: rgba(245, 197, 24, .5);
+  border-color: rgba(var(--brand-accent-rgb), .5);
   color: var(--brand-gold);
 }
 .dashboard-shell .chart-card {
@@ -528,7 +536,7 @@ select, select option, optgroup,
 .activity-bar-track { background: #2a2a2a; }
 .activity-card { background: #161616; border: 1px solid var(--border-color); }
 .activity-card:hover { box-shadow: 0 12px 30px rgba(0, 0, 0, .55); }
-.activity-detail-pill { background: rgba(245, 197, 24, .12); color: var(--text-color); }
+.activity-detail-pill { background: rgba(var(--brand-accent-rgb), .12); color: var(--text-color); }
 /* Full set of activity badges retuned for dark tints (not just .danger) */
 .activity-badge.danger { background: rgba(231, 76, 60, .18); color: #ff6b6b; border-color: rgba(231, 76, 60, .35); }
 .activity-badge.success { background: rgba(39, 174, 96, .18); color: #4ade80; border-color: rgba(39, 174, 96, .35); }
@@ -587,7 +595,7 @@ select, select option, optgroup,
   color: var(--text-color);
   border: 2px solid #2e2e2e;
 }
-.lookup-input:focus { box-shadow: 0 0 0 3px rgba(245, 197, 24, .45); }
+.lookup-input:focus { box-shadow: 0 0 0 3px rgba(var(--brand-accent-rgb), .45); }
 
 .member-profile {
   background: rgba(22, 22, 22, .96);
@@ -601,7 +609,7 @@ select, select option, optgroup,
 .profile-card:hover { box-shadow: 0 12px 40px rgba(0, 0, 0, .55); }
 /* Avatar ring: gold-tinted so the deliberate frame survives on a dark card
    (was 5px #2a2a2a — invisible against #161616/#181818 behind it) */
-.profile-image { border: 4px solid rgba(245, 197, 24, .30); box-shadow: 0 8px 25px rgba(0, 0, 0, .55); }
+.profile-image { border: 4px solid rgba(var(--brand-accent-rgb), .30); box-shadow: 0 8px 25px rgba(0, 0, 0, .55); }
 .profile-placeholder { background-color: #1f1f1f; color: var(--brand-gold); }
 
 .detail-item { border-bottom: 1px solid var(--border-color); }
@@ -650,7 +658,7 @@ select, select option, optgroup,
 .calendar-day.today {
   background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%) !important;
   border-color: var(--brand-gold) !important;
-  box-shadow: 0 0 0 2px rgba(245, 197, 24, .4) !important;
+  box-shadow: 0 0 0 2px rgba(var(--brand-accent-rgb), .4) !important;
   animation: none;
 }
 .calendar-day.today .day-number { color: var(--brand-gold); }
@@ -673,7 +681,7 @@ select, select option, optgroup,
 }
 .fee-table thead th { color: var(--brand-gold); }
 .fee-table th, .fee-table td { color: var(--text-color); border-bottom: 1px solid #222; }
-.fee-table tbody tr:hover { background: rgba(245, 197, 24, .08); }
+.fee-table tbody tr:hover { background: rgba(var(--brand-accent-rgb), .08); }
 
 .status-badge.status-active, .status-badge.status-completed { color: #4ade80; }
 .status-badge.status-inactive { color: #ff6b6b; }
@@ -748,12 +756,12 @@ select, select option, optgroup,
 .gender-tab.active {                       /* selected Men/Women segment */
   background: var(--gold-grad);
   color: #0d0d0d;
-  box-shadow: 0 4px 12px rgba(245, 197, 24, .3);
+  box-shadow: 0 4px 12px rgba(var(--brand-accent-rgb), .3);
 }
 .activity-bar-fill { background: var(--gold-grad); }                   /* progress fill (was darker than its track) */
 .mobile-menu-toggle { background: var(--gold-grad); color: #0d0d0d; }  /* hamburger — invisible on dark otherwise */
 .stat-card::before { background: var(--gold-grad); }                   /* animated hover top-stripe */
-.report-card::before { background: rgba(245, 197, 24, .08); }          /* faint gold hover wash (was dark gradient) */
+.report-card::before { background: rgba(var(--brand-accent-rgb), .08); }          /* faint gold hover wash (was dark gradient) */
 
 /* ============================================================================
    15. MOBILE LAYOUT FIX — the PWA status bar (pwa.css) and the member page's
@@ -800,7 +808,7 @@ select, select option, optgroup,
    16. "Create profile" CTA — make it read as an on-theme GOLD action, not a
    muted dark button that blends into the login card.
    ============================================================================ */
-.member-signup-cta { border-top-color: rgba(245, 197, 24, .35); }
+.member-signup-cta { border-top-color: rgba(var(--brand-accent-rgb), .35); }
 .member-signup-cta .form-hint { color: var(--text-secondary); }
 #openSignupBtn {
   background: transparent;
@@ -816,5 +824,5 @@ select, select option, optgroup,
 #openSignupBtn:hover {
   background: var(--gold-grad);
   color: #0d0d0d;
-  box-shadow: 0 6px 18px rgba(245, 197, 24, .4);
+  box-shadow: 0 6px 18px rgba(var(--brand-accent-rgb), .4);
 }
