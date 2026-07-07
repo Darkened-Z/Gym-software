@@ -711,6 +711,19 @@ select, select option, optgroup,
 .brand-social svg { fill: #ededed; }
 .brand-social .s-sc:hover svg { fill: #0d0d0d; }  /* re-assert: dark glyph on yellow */
 
+/* Full brand colours on the social icons (not just on hover). */
+.brand-social .s-yt { background: #ff0000; border-color: #ff0000; }
+.brand-social .s-wa { background: #25d366; border-color: #25d366; }
+.brand-social .s-fb { background: #1877f2; border-color: #1877f2; }
+.brand-social .s-ig {
+  background: radial-gradient(circle at 30% 107%, #fdf497 0%, #fdf497 5%, #fd5949 45%, #d6249f 60%, #285aeb 90%);
+  border-color: #d6249f;
+}
+.brand-social .s-sc { background: #fffc00; border-color: #fffc00; }
+.brand-social .s-tt { background: #010101; border-color: #4a4a4a; }
+.brand-social a svg { fill: #fff; }         /* white glyphs on the colour circles */
+.brand-social .s-sc svg { fill: #0d0d0d; }  /* dark ghost on the yellow circle */
+
 /* Gold underline under display headings (echoes the logo ring) */
 .brand-login-head h1::after,
 #pageTitle::after {

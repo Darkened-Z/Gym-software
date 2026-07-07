@@ -267,6 +267,21 @@
         // Populate the footer (contact + socials) from admin-defined gym details.
         // Falls back to the hardcoded values if the settings API is unreachable.
         (function () {
+            // Installed as a standalone PWA, target="_blank" links to sites with a
+            // native Android app link (YouTube especially) can spawn a blank/broken
+            // window that reads as a "crash". Force external footer links through
+            // the system browser instead. (href is read at click time, so it still
+            // uses whatever the settings fetch below sets.)
+            document.querySelectorAll('.brand-footer a[target="_blank"], .brand-social a').forEach(function (a) {
+                a.setAttribute('rel', 'noopener noreferrer');
+                a.addEventListener('click', function (e) {
+                    var href = a.getAttribute('href') || '';
+                    if (/^https?:\/\//i.test(href)) {
+                        e.preventDefault();
+                        window.open(href, '_blank', 'noopener,noreferrer');
+                    }
+                });
+            });
             fetch('api/settings.php?action=public')
                 .then(function (r) { return r.json(); })
                 .then(function (res) {
