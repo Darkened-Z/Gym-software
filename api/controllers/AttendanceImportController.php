@@ -31,8 +31,8 @@ class AttendanceImportController {
     }
 
     public function importFromFile(string $filePath): array {
-        $result = ['imported' => 0, 'duplicates' => 0, 'unmatched' => 0, 'rows' => 0,
-                   'unmatched_list' => [], 'errors' => []];
+        $result = ['imported' => 0, 'updated' => 0, 'duplicates' => 0, 'unmatched' => 0,
+                   'rows' => 0, 'scans' => 0, 'unmatched_list' => [], 'errors' => []];
 
         $sheet = IOFactory::load($filePath)->getActiveSheet();
         $rows = $sheet->toArray(null, true, false, false);
@@ -49,7 +49,11 @@ class AttendanceImportController {
             throw new Exception('Could not find a user column. Expected "User ID"/"AC-No"/"PIN" or "Name".');
         }
 
+        // Devices export EVERY punch (in/out/in...). Group scans per member per
+        // day into ONE visit — first scan = check-in, last scan = check-out —
+        // so reports count visits, not punches.
         $memberCache = [];
+        $visits = [];
         for ($i = 1; $i < count($rows); $i++) {
             $row = $rows[$i];
             if (empty(array_filter($row, fn($v) => trim((string)$v) !== ''))) continue;
@@ -74,11 +78,19 @@ class AttendanceImportController {
                 continue;
             }
 
-            if ($this->insertAttendance($match['gender'], (int)$match['id'], $when)) {
-                $result['imported']++;
+            $result['scans']++;
+            $vk = $match['gender'] . '|' . $match['id'] . '|' . substr($when, 0, 10);
+            if (!isset($visits[$vk])) {
+                $visits[$vk] = ['gender' => $match['gender'], 'id' => (int)$match['id'],
+                                'date' => substr($when, 0, 10), 'min' => $when, 'max' => $when];
             } else {
-                $result['duplicates']++;
+                if ($when < $visits[$vk]['min']) $visits[$vk]['min'] = $when;
+                if ($when > $visits[$vk]['max']) $visits[$vk]['max'] = $when;
             }
+        }
+
+        foreach ($visits as $v) {
+            $result[$this->upsertVisit($v)]++;
         }
         return $result;
     }
@@ -147,16 +159,51 @@ class AttendanceImportController {
         return null;
     }
 
-    private function insertAttendance(string $gender, int $memberId, string $checkIn): bool {
-        $t = 'attendance_' . $gender;
-        $dup = $this->one("SELECT id FROM {$t} WHERE member_id = ? AND check_in = ? LIMIT 1", [$memberId, $checkIn]);
-        if ($dup) return false;
-        $stmt = $this->db->prepare(
-            "INSERT INTO {$t} (member_id, check_in, is_first_entry_today, entry_gate_id, write_source)
-             VALUES (?, ?, 1, 'f22-import', 'f22-import')"
+    /**
+     * One visit row per member per day (source 'f22-import'). Re-imports are
+     * idempotent; a newer export with a later last-scan EXTENDS the visit's
+     * check-out instead of duplicating. Rows written by other sources (live
+     * gate, member login) are never touched. Deliberately does NOT flip
+     * members.is_checked_in — historical imports must not mark people as
+     * currently inside.
+     * @return 'imported'|'updated'|'duplicates'
+     */
+    private function upsertVisit(array $v): string {
+        $t = 'attendance_' . $v['gender'];
+        $in = $v['min'];
+        $out = ($v['max'] > $v['min']) ? $v['max'] : null;
+
+        $row = $this->one(
+            "SELECT id, check_in, check_out FROM {$t}
+             WHERE member_id = ? AND DATE(check_in) = ? AND write_source = 'f22-import' LIMIT 1",
+            [$v['id'], $v['date']]
         );
-        $stmt->execute([$memberId, $checkIn]);
-        return true;
+
+        if (!$row) {
+            // First-entry flag stays honest if another source already logged today.
+            $other = $this->one("SELECT id FROM {$t} WHERE member_id = ? AND DATE(check_in) = ? LIMIT 1", [$v['id'], $v['date']]);
+            $stmt = $this->db->prepare(
+                "INSERT INTO {$t} (member_id, check_in, check_out, duration_minutes, is_first_entry_today, entry_gate_id, write_source)
+                 VALUES (?, ?, ?, ?, ?, 'f22-import', 'f22-import')"
+            );
+            $stmt->execute([$v['id'], $in, $out, $this->durationMin($in, $out), $other ? 0 : 1]);
+            return 'imported';
+        }
+
+        $newIn = min($row['check_in'], $in);
+        $newOutCand = max($row['check_out'] ?? $row['check_in'], $v['max']);
+        $newOut = ($newOutCand > $newIn) ? $newOutCand : null;
+        if ($newIn === $row['check_in'] && $newOut === ($row['check_out'] ?? null)) {
+            return 'duplicates';
+        }
+        $stmt = $this->db->prepare("UPDATE {$t} SET check_in = ?, check_out = ?, duration_minutes = ? WHERE id = ?");
+        $stmt->execute([$newIn, $newOut, $this->durationMin($newIn, $newOut), $row['id']]);
+        return 'updated';
+    }
+
+    private function durationMin(string $in, ?string $out): ?int {
+        if ($out === null) return null;
+        return max(0, (int)((strtotime($out) - strtotime($in)) / 60));
     }
 
     private function one(string $sql, array $params) {

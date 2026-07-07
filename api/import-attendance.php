@@ -58,7 +58,7 @@ try {
     $r = (new AttendanceImportController($db))->importFromFile($tmp);
     @unlink($tmp);
 
-    $msg = "Imported {$r['imported']} scan(s). Duplicates skipped: {$r['duplicates']}. Unmatched: {$r['unmatched']}.";
+    $msg = "Imported {$r['imported']} visit(s), updated {$r['updated']}, already there: {$r['duplicates']}, unmatched: {$r['unmatched']}.";
     echo json_encode(['success' => true, 'message' => $msg, 'results' => $r]);
 } catch (Exception $e) {
     http_response_code(500);

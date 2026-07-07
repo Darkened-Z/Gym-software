@@ -6143,7 +6143,8 @@ function handleAttendanceImport() {
                 out.innerHTML = `
                 <div class="import-results">
                     <h3>Attendance import</h3>
-                    <p><strong>Added: ${r.imported || 0}</strong> scan(s) · already there: ${r.duplicates || 0} · unmatched: ${r.unmatched || 0}</p>
+                    <p><strong>Added: ${r.imported || 0}</strong> visit(s) · updated: ${r.updated || 0} · already there: ${r.duplicates || 0} · unmatched: ${r.unmatched || 0}</p>
+                    <p class="form-hint">Each member's scans for a day become one visit — first scan is the check-in, last scan the check-out.</p>
                     ${(r.unmatched_list && r.unmatched_list.length) ? `
                         <div class="duplicates">
                             <h4>Not matched to a member (${r.unmatched}):</h4>
