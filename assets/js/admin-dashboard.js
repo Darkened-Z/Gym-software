@@ -7540,6 +7540,18 @@ function renderDetailsSettings(s) {
             ${field('set_phone', 'Phone', s.phone, '0300 1234567', 'tel')}
         </div>
         <div class="form-row">
+            ${field('set_location', 'City / Location', s.location, 'Faisalabad')}
+            <div class="form-group">
+                <label>Logo</label>
+                <div style="display:flex;align-items:center;gap:.75rem;">
+                    <img id="brandLogoPreview" src="${packageEscHtml(s.logo_url || 'assets/images/bhatti-logo.png')}" alt="Gym logo" style="width:46px;height:46px;object-fit:contain;border:1px solid var(--border-color);border-radius:8px;background:#fff;flex:0 0 auto;">
+                    <input type="hidden" id="set_logo_url" value="${packageEscHtml(s.logo_url || '')}">
+                    ${admin ? '<input type="file" id="brandLogoFile" accept="image/png,image/jpeg,image/webp,image/gif" onchange="uploadBrandLogo(this)" style="flex:1;">' : ''}
+                </div>
+                <small class="form-hint" style="display:block;margin-top:.35rem;">Shows on the login page, dashboard, splash screen and browser tab. Then click Save Details.</small>
+            </div>
+        </div>
+        <div class="form-row">
             ${field('set_email', 'Email', s.email, 'gym@example.com', 'email')}
             ${field('set_address_url', 'Google Maps Link', s.address_url, 'https://maps.app.goo.gl/…', 'url')}
         </div>
@@ -7564,6 +7576,8 @@ function saveDetailsSettings() {
     const val = id => { const e = document.getElementById(id); return e ? e.value.trim() : ''; };
     const payload = {
         gym_name: val('set_gym_name'),
+        location: val('set_location'),
+        logo_url: val('set_logo_url'),
         phone: val('set_phone'),
         email: val('set_email'),
         address_url: val('set_address_url'),
@@ -7589,6 +7603,33 @@ function saveDetailsSettings() {
         .catch(err => {
             console.error('Details save error:', err);
             Utils.showNotification('Error saving details', 'error');
+        });
+}
+
+// Upload a gym logo, then stash its URL for the Details save (branding.js
+// applies it across the app once saved).
+function uploadBrandLogo(input) {
+    if (!requireAdminAccess('change gym details')) return;
+    const f = input.files && input.files[0];
+    if (!f) return;
+    const fd = new FormData();
+    fd.append('image', f);
+    fetch('api/upload-branding.php', { method: 'POST', body: fd })
+        .then(res => res.json())
+        .then(d => {
+            if (d.success) {
+                const url = document.getElementById('set_logo_url');
+                const prev = document.getElementById('brandLogoPreview');
+                if (url) url.value = d.path;
+                if (prev) prev.src = d.path;
+                Utils.showNotification('Logo uploaded — click Save Details to apply it.', 'success');
+            } else {
+                Utils.showNotification(d.message || 'Logo upload failed', 'error');
+            }
+        })
+        .catch(err => {
+            console.error('Logo upload error:', err);
+            Utils.showNotification('Error uploading logo', 'error');
         });
 }
 

@@ -14,6 +14,8 @@ class Setting {
     /** Keys that are safe to expose publicly (contact + socials). */
     public static $publicKeys = [
         'gym_name',
+        'location',
+        'logo_url',
         'phone',
         'email',
         'address_url',
