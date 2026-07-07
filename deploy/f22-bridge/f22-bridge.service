@@ -1,0 +1,15 @@
+[Unit]
+Description=Gym ZKTeco F22 bridge
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/opt/f22-bridge
+ExecStart=/usr/bin/python3 /opt/f22-bridge/f22_bridge.py /opt/f22-bridge/config.ini
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
