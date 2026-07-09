@@ -7655,10 +7655,32 @@ function renderDetailsSettings(s) {
             ${field('set_social_snapchat', 'Snapchat Link', s.social_snapchat, 'https://snapchat.com/add/…', 'url')}
             ${field('set_social_tiktok', 'TikTok Link', s.social_tiktok, 'https://tiktok.com/@…', 'url')}
         </div>
+        <div class="form-group" style="margin-top:.25rem;">
+            <label>Other social links <span style="color:var(--text-secondary);font-weight:400;">(LinkedIn, X, Telegram, website…)</span></label>
+            <div id="customSocialList" style="margin:.4rem 0;"></div>
+            ${admin ? `
+            <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:flex-end;">
+                <div style="flex:0 0 auto;">
+                    <small class="form-hint" style="display:block;">Icon</small>
+                    <select id="newSocialIcon" style="padding:.5rem;"></select>
+                </div>
+                <div style="flex:1 1 120px;">
+                    <small class="form-hint" style="display:block;">Label</small>
+                    <input type="text" id="newSocialLabel" maxlength="40" placeholder="LinkedIn">
+                </div>
+                <div style="flex:2 1 220px;">
+                    <small class="form-hint" style="display:block;">URL</small>
+                    <input type="url" id="newSocialUrl" placeholder="https://linkedin.com/company/…">
+                </div>
+                <button type="button" class="btn btn-secondary" onclick="addCustomSocialLink()">+ Add</button>
+            </div>
+            <small class="form-hint" style="display:block;margin-top:.35rem;">Added links show in your gym’s footer. Remember to click Save Details.</small>` : ''}
+        </div>
         ${admin ? '<button class="btn btn-primary" onclick="saveDetailsSettings()">Save Details</button>' : ''}
       </div>`;
     const fontSel = document.getElementById('set_font_family');
     if (fontSel && s.font_family) fontSel.value = s.font_family;
+    initCustomSocialLinks(s.social_custom);
 }
 
 function saveDetailsSettings() {
@@ -7678,7 +7700,8 @@ function saveDetailsSettings() {
         social_facebook: val('set_social_facebook'),
         social_instagram: val('set_social_instagram'),
         social_snapchat: val('set_social_snapchat'),
-        social_tiktok: val('set_social_tiktok')
+        social_tiktok: val('set_social_tiktok'),
+        social_custom: JSON.stringify(window._customSocialLinks || [])
     };
     fetch('api/settings.php?action=save', {
         method: 'POST',
@@ -7696,6 +7719,65 @@ function saveDetailsSettings() {
             console.error('Details save error:', err);
             Utils.showNotification('Error saving details', 'error');
         });
+}
+
+// ---- Owner-added custom social links (Details section) ----
+// Held as an array of {icon,label,url}; persisted as JSON in the social_custom
+// setting and rendered in the public footer next to the fixed platforms.
+window._customSocialLinks = [];
+
+function initCustomSocialLinks(raw) {
+    let arr = [];
+    try { arr = JSON.parse(raw || '[]'); } catch (e) { arr = []; }
+    window._customSocialLinks = Array.isArray(arr) ? arr.filter(x => x && x.url) : [];
+    const sel = document.getElementById('newSocialIcon');
+    if (sel && window.SOCIAL_ICON_CHOICES) {
+        sel.innerHTML = window.SOCIAL_ICON_CHOICES.map(c => `<option value="${c.key}">${c.label}</option>`).join('');
+    }
+    renderCustomSocialList();
+}
+
+function renderCustomSocialList() {
+    const box = document.getElementById('customSocialList');
+    if (!box) return;
+    const list = window._customSocialLinks || [];
+    if (!list.length) {
+        box.innerHTML = '<small class="form-hint" style="opacity:.75;">No extra links yet.</small>';
+        return;
+    }
+    const admin = isAdminUser();
+    box.innerHTML = list.map((it, i) => {
+        const color = (window.SOCIAL_ICON_COLORS && window.SOCIAL_ICON_COLORS[it.icon]) || '#6b7280';
+        const ic = window.socialIconSvg ? window.socialIconSvg(it.icon, color) : '';
+        return `<div style="display:flex;align-items:center;gap:.55rem;padding:.4rem 0;border-bottom:1px solid var(--border-color);">
+            <span style="width:26px;height:26px;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;">${ic}</span>
+            <span style="flex:1 1 auto;min-width:0;"><strong>${packageEscHtml(it.label || '')}</strong>
+            <br><small style="color:var(--text-secondary);word-break:break-all;">${packageEscHtml(it.url || '')}</small></span>
+            ${admin ? `<button type="button" class="btn btn-sm btn-danger" onclick="removeCustomSocialLink(${i})">Remove</button>` : ''}
+        </div>`;
+    }).join('');
+}
+
+function addCustomSocialLink() {
+    if (!requireAdminAccess('change gym details')) return;
+    const icon = (document.getElementById('newSocialIcon') || {}).value || 'link';
+    const label = ((document.getElementById('newSocialLabel') || {}).value || '').trim();
+    const url = ((document.getElementById('newSocialUrl') || {}).value || '').trim();
+    if (!url) { Utils.showNotification('Enter the link URL.', 'error'); return; }
+    if (!/^https?:\/\//i.test(url)) { Utils.showNotification('URL must start with http:// or https://', 'error'); return; }
+    window._customSocialLinks = window._customSocialLinks || [];
+    window._customSocialLinks.push({ icon, label: (label || icon).slice(0, 40), url: url.slice(0, 300) });
+    const lab = document.getElementById('newSocialLabel'); if (lab) lab.value = '';
+    const u = document.getElementById('newSocialUrl'); if (u) u.value = '';
+    renderCustomSocialList();
+    Utils.showNotification('Link added. Click Save Details to keep it.', 'success');
+}
+
+function removeCustomSocialLink(i) {
+    if (!requireAdminAccess('change gym details')) return;
+    if (!window._customSocialLinks) return;
+    window._customSocialLinks.splice(i, 1);
+    renderCustomSocialList();
 }
 
 // Upload a gym logo, then stash its URL for the Details save (branding.js

@@ -14,7 +14,7 @@
     <link rel="apple-touch-icon" href="assets/icons/bhatti-icon-192.png">
     <link rel="stylesheet" href="assets/css/style.css?v=7">
     <link rel="stylesheet" href="assets/css/pwa.css">
-    <link rel="stylesheet" href="assets/css/brand.css?v=7">
+    <link rel="stylesheet" href="assets/css/brand.css?v=8">
 </head>
 <body>
     <div id="brand-splash" aria-hidden="true">
@@ -304,10 +304,32 @@
                         var v = (s[pr[1]] || '').trim();
                         if (v) { el.href = v; el.style.display = ''; } else { el.style.display = 'none'; }
                     });
+                    // Owner-added custom links (LinkedIn, X, …), each with its icon.
+                    try {
+                        var custom = JSON.parse(s.social_custom || '[]');
+                        var wrap = document.querySelector('.brand-social');
+                        if (wrap && Array.isArray(custom)) {
+                            custom.forEach(function (it) {
+                                if (!it || !it.url) return;
+                                var a = document.createElement('a');
+                                a.className = 's-custom';
+                                a.href = it.url;
+                                a.target = '_blank';
+                                a.rel = 'noopener noreferrer';
+                                a.setAttribute('aria-label', it.label || 'Link');
+                                if (it.label) a.title = it.label;
+                                if (window.socialIconSvg) a.innerHTML = window.socialIconSvg(it.icon);
+                                var col = (window.SOCIAL_ICON_COLORS && window.SOCIAL_ICON_COLORS[it.icon]) || '';
+                                if (col) { a.style.background = col; a.style.borderColor = col; }
+                                wrap.appendChild(a);
+                            });
+                        }
+                    } catch (e) { }
                 })
                 .catch(function () { /* keep hardcoded footer on failure */ });
         })();
     </script>
+    <script src="assets/js/social-icons.js?v=1"></script>
     <script src="assets/js/branding.js?v=2"></script>
     <script src="assets/js/utils.js?v=6"></script>
     <script src="assets/js/offline-state.js?v=2"></script>
