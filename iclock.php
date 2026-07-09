@@ -55,6 +55,14 @@ if (!iclock_allowed($db, $sn)) {
     exit;
 }
 
+// Capture POST body early (php://input is read-once).
+$rawBody = ($method === 'POST') ? (file_get_contents('php://input') ?: '') : '';
+
+// Debug: log every request to a file.
+$logLine = date('Y-m-d H:i:s') . " {$method} route={$route} SN={$sn} table={$table} qs=" . ($_SERVER['QUERY_STRING'] ?? '');
+if ($method === 'POST') $logLine .= " body=" . substr($rawBody, 0, 500);
+@file_put_contents(__DIR__ . '/iclock-debug.log', $logLine . "\n", FILE_APPEND);
+
 // Log heartbeat: last-seen per SN into gym_settings.
 $hb = $db->prepare("INSERT INTO gym_settings (setting_key, setting_value) VALUES (?, ?)
                     ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
@@ -67,25 +75,29 @@ if ($route === 'cdata') {
         // Handshake — MUST start with "GET OPTION FROM: <SN>\n" or the device
         // refuses. Realtime=1 makes it push scans immediately.
         echo "GET OPTION FROM: {$sn}\n";
-        echo "ATTLOGStamp=9999\n";
-        echo "OPERLOGStamp=9999\n";
-        echo "ATTPHOTOStamp=9999\n";
+        echo "Stamp=0\n";
+        echo "ATTLOGStamp=0\n";
+        echo "OPERLOGStamp=0\n";
+        echo "ATTPHOTOStamp=0\n";
         echo "ErrorDelay=30\n";
-        echo "Delay=15\n";
-        echo "TransTimes=00:00;14:05\n";
+        echo "Delay=10\n";
+        echo "TransTimes=00:00;23:59\n";
         echo "TransInterval=1\n";
         echo "TransFlag=1111000000\n";
         echo "Realtime=1\n";
         echo "Encrypt=0\n";
+        echo "ServerVer=2.0.33\n";
+        echo "PushOptionsFlag=1\n";
         exit;
     }
     if ($method === 'POST') {
-        $body = file_get_contents('php://input') ?: '';
         if ($table === 'ATTLOG') {
-            iclock_process_attlog($db, $body);
+            iclock_process_attlog($db, $rawBody);
+        } elseif ($table === 'RTLOG') {
+            iclock_process_rtlog($db, $rawBody);
+        } elseif ($table === 'TABLEDATA' && ($_GET['tablename'] ?? '') === 'user') {
+            iclock_sync_users($db, $rawBody);
         }
-        // OPERLOG / other tables: acknowledged but not processed (user
-        // enrollment sync belongs in the parked control layer).
         echo "OK\n";
         exit;
     }
@@ -97,7 +109,12 @@ if ($route === 'getrequest') {
     exit;
 }
 
-if ($route === 'devicecmd' || $route === 'ping' || $route === 'fdata' || $route === 'registry') {
+if ($route === 'registry') {
+    echo "RegistryCode=200\n";
+    exit;
+}
+
+if ($route === 'devicecmd' || $route === 'ping' || $route === 'fdata') {
     echo "OK\n";
     exit;
 }
@@ -188,4 +205,65 @@ function iclock_upsert_visit(PDO $db, string $gender, int $memberId, string $whe
     $dur = $newOut ? max(0, (int)((strtotime($newOut) - strtotime($newIn)) / 60)) : null;
     $upd = $db->prepare("UPDATE {$t} SET check_in = ?, check_out = ?, duration_minutes = ? WHERE id = ?");
     $upd->execute([$newIn, $newOut, $dur, $row['id']]);
+}
+
+function iclock_process_rtlog(PDO $db, string $body): void {
+    foreach (preg_split('/\r?\n/', $body) as $line) {
+        $line = trim($line);
+        if ($line === '') continue;
+        $fields = [];
+        foreach (preg_split('/\t/', $line) as $kv) {
+            $eq = strpos($kv, '=');
+            if ($eq !== false) $fields[trim(substr($kv, 0, $eq))] = trim(substr($kv, $eq + 1));
+        }
+        $pin = (string)($fields['pin'] ?? '0');
+        $event = (int)($fields['event'] ?? -1);
+        $ts = strtotime($fields['time'] ?? '');
+        if (!$ts || $pin === '0' || $pin === '') continue;
+        // Events that indicate a verified access (fingerprint/card/password).
+        if (!in_array($event, [0, 1, 2, 3, 4, 5, 6, 27], true)) continue;
+        $when = date('Y-m-d H:i:s', $ts);
+        $match = iclock_resolve_pin($db, $pin);
+        if (!$match) {
+            @file_put_contents(__DIR__ . '/iclock-debug.log',
+                date('Y-m-d H:i:s') . " RTLOG unmatched pin={$pin} event={$event} at {$when}\n", FILE_APPEND);
+            continue;
+        }
+        iclock_upsert_visit($db, $match['gender'], (int)$match['id'], $when);
+        @file_put_contents(__DIR__ . '/iclock-debug.log',
+            date('Y-m-d H:i:s') . " RTLOG VISIT pin={$pin} → {$match['gender']} id={$match['id']} at {$when}\n", FILE_APPEND);
+    }
+}
+
+function iclock_sync_users(PDO $db, string $body): void {
+    foreach (preg_split('/\r?\n/', $body) as $line) {
+        $line = trim($line);
+        if ($line === '' || strpos($line, 'user ') !== 0) continue;
+        $line = substr($line, 5);
+        $fields = [];
+        foreach (preg_split('/\t/', $line) as $kv) {
+            $eq = strpos($kv, '=');
+            if ($eq !== false) $fields[trim(substr($kv, 0, $eq))] = trim(substr($kv, $eq + 1));
+        }
+        $pin = trim($fields['pin'] ?? '');
+        $name = trim($fields['name'] ?? '');
+        if ($pin === '' || $pin === '0') continue;
+        if ($name === '') $name = 'F22-User-' . $pin;
+
+        $exists = iclock_resolve_pin($db, $pin);
+        if ($exists) continue;
+
+        $phone = '00000' . str_pad($pin, 5, '0', STR_PAD_LEFT);
+        $code = $pin;
+        $today = date('Y-m-d');
+        $due = date('Y-m-d', strtotime('+30 days'));
+
+        $ins = $db->prepare("INSERT INTO members_men
+            (member_code, name, phone, join_date, next_fee_due_date, status)
+            VALUES (?, ?, ?, ?, ?, 'active')");
+        $ins->execute([$code, $name, $phone, $today, $due]);
+
+        @file_put_contents(__DIR__ . '/iclock-debug.log',
+            date('Y-m-d H:i:s') . " SYNC NEW MEMBER pin={$pin} name={$name} → members_men\n", FILE_APPEND);
+    }
 }

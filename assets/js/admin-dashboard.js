@@ -982,8 +982,12 @@ function renderDashboardRecentViewport(tabKey = window.dashboardUiState?.recentT
     `;
 }
 
+function isMobileView() {
+    return window.innerWidth <= 768;
+}
+
 function renderDashboardChartHub(chartTabs = [], activeTab = '') {
-    if (!chartTabs.length) return '';
+    if (!chartTabs.length || isMobileView()) return '';
 
     window.dashboardChartTabs = chartTabs;
 
@@ -1017,6 +1021,7 @@ function renderDashboardChartHub(chartTabs = [], activeTab = '') {
 }
 
 function renderDashboardRecentMembers(men = { recent: [] }, women = { recent: [] }, activeTab = 'men') {
+    if (isMobileView()) return '';
     window.dashboardRecentData = { men, women };
 
     return `
