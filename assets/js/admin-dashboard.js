@@ -1634,9 +1634,8 @@ function showAddMemberForm() {
                         </div>
                         <div class="form-group">
                             <label>Membership Type</label>
-                            <select id="membershipType" name="membership_type">
-                                <option value="">Loading types…</option>
-                            </select>
+                            <input type="text" id="membershipType" name="membership_type" list="membershipTypeOptions" placeholder="e.g. Monthly, Student, VIP…" autocomplete="off">
+                            <datalist id="membershipTypeOptions"></datalist>
                         </div>
                     </div>
                     <div class="form-row">
@@ -1710,48 +1709,29 @@ function closeMemberModal() {
     if (modal) modal.remove();
 }
 
-// Membership Type options = the owner's ACTIVE Packages (Details > Packages).
-// No built-in tiers. When editing, the member's stored value is injected as an
-// option even if it isn't an active package, so it's never silently dropped.
-let _membershipTypeReqSeq = 0;
+// Membership Type is a free-text field: staff can type ANY type on the spot.
+// The owner's active Packages are offered as autocomplete suggestions (datalist)
+// but nothing is forced — any value is accepted (DB stores it as a free string).
 function populateMembershipTypeOptions(selectedValue) {
-    const sel = document.getElementById('membershipType');
-    if (!sel) return;
-    const chosen = (selectedValue == null ? '' : String(selectedValue)).trim();
-    const seq = ++_membershipTypeReqSeq;
-    const render = (names) => {
-        if (seq !== _membershipTypeReqSeq) return; // a newer open superseded this
-        const seen = new Set();
-        const list = [];
-        (names || []).forEach(n => {
-            const name = String(n || '').trim();
-            if (name && !seen.has(name)) { seen.add(name); list.push(name); }
-        });
-        if (chosen && !seen.has(chosen)) list.unshift(chosen);
-        sel.innerHTML = '';
-        if (list.length === 0) {
-            const o = document.createElement('option');
-            o.value = '';
-            o.textContent = 'No membership types yet — add one in Details';
-            sel.appendChild(o);
-            return;
-        }
-        list.forEach(name => {
-            const o = document.createElement('option');
-            o.value = name;
-            o.textContent = name;
-            if (name === chosen) o.selected = true;
-            sel.appendChild(o);
-        });
-        if (chosen) sel.value = chosen;
-    };
+    const input = document.getElementById('membershipType');
+    if (input && selectedValue != null && String(selectedValue).trim() !== '') {
+        input.value = String(selectedValue);
+    }
+    const dl = document.getElementById('membershipTypeOptions');
+    if (!dl) return;
     fetch('api/packages.php?action=list&limit=200')
         .then(res => res.json())
         .then(data => {
             const rows = (data && data.success && Array.isArray(data.data)) ? data.data : [];
-            render(rows.filter(p => p && parseInt(p.is_active) !== 0).map(p => p.name));
+            const seen = new Set();
+            dl.innerHTML = '';
+            rows.forEach(p => {
+                if (!p || !p.name || parseInt(p.is_active) === 0) return;
+                const n = String(p.name).trim();
+                if (n && !seen.has(n)) { seen.add(n); const o = document.createElement('option'); o.value = n; dl.appendChild(o); }
+            });
         })
-        .catch(() => render([])); // offline/error: keep at least the current value
+        .catch(() => { /* offline: plain free-text box, no suggestions */ });
 }
 
 function saveMember() {
