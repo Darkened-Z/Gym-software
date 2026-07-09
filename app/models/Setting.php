@@ -27,6 +27,7 @@ class Setting {
         'social_instagram',
         'social_snapchat',
         'social_tiktok',
+        'social_custom', // JSON array of {icon,label,url} for owner-added platforms
     ];
 
     /** Admin-only settings (editable in the dashboard, never exposed publicly). */
