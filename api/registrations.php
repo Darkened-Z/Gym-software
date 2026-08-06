@@ -101,6 +101,7 @@ try {
                         if (!is_dir(PROFILE_IMAGES_DIR)) { @mkdir(PROFILE_IMAGES_DIR, 0755, true); }
                         $fname = 'reg_' . bin2hex(random_bytes(8)) . '.' . $ext;
                         if (@rename($tmp, PROFILE_IMAGES_DIR . $fname) || @copy($tmp, PROFILE_IMAGES_DIR . $fname)) {
+                            @chmod(PROFILE_IMAGES_DIR . $fname, 0644);
                             $details['photo'] = 'uploads/profiles/' . $fname;
                         }
                     }
