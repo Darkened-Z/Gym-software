@@ -6,6 +6,7 @@
 class User {
     private $conn;
     private $table = 'users';
+    private $hasStaffLevel = false;
 
     private function normalizePositiveInt($value, int $default, int $max = 100): int {
         $value = filter_var($value, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) ?: $default;
@@ -23,6 +24,17 @@ class User {
     public function __construct($db) {
         $this->conn = $db;
         $this->ensureSchema();
+        $this->hasStaffLevel = $this->columnExists('staff_level');
+    }
+
+    /** Read-only column check — the app DB user may lack ALTER, so self-heal can fail. */
+    private function columnExists(string $col): bool {
+        try {
+            $c = $this->conn->query("SHOW COLUMNS FROM {$this->table} LIKE " . $this->conn->quote($col));
+            return $c && $c->rowCount() > 0;
+        } catch (Throwable $e) {
+            return false;
+        }
     }
 
     /** Self-heal: add the staff_section + per-staff access columns on older installs. */
@@ -87,7 +99,8 @@ class User {
     }
 
     public function authenticate($username, $password) {
-        $query = "SELECT id, username, password, role, name, staff_section, staff_level, access_enabled, access_days, access_start, access_end FROM " . $this->table . " WHERE username = :username LIMIT 1";
+        $lvlCol = $this->hasStaffLevel ? ', staff_level' : '';
+        $query = "SELECT id, username, password, role, name, staff_section{$lvlCol}, access_enabled, access_days, access_start, access_end FROM " . $this->table . " WHERE username = :username LIMIT 1";
         $stmt = $this->conn->prepare($query);
         $stmt->bindValue(':username', $username, PDO::PARAM_STR);
         $stmt->execute();
@@ -131,7 +144,8 @@ class User {
             $where = 'WHERE username LIKE :search_username OR name LIKE :search_name OR role LIKE :search_role';
         }
 
-        $query = "SELECT id, username, role, name, staff_section, staff_level, access_enabled, access_days, access_start, access_end, created_at FROM {$this->table} {$where} ORDER BY id DESC LIMIT :limit OFFSET :offset";
+        $lvlCol = $this->hasStaffLevel ? 'staff_level, ' : '';
+        $query = "SELECT id, username, role, name, staff_section, {$lvlCol}access_enabled, access_days, access_start, access_end, created_at FROM {$this->table} {$where} ORDER BY id DESC LIMIT :limit OFFSET :offset";
         $stmt = $this->conn->prepare($query);
         if ($search !== '') {
             $stmt->bindValue(':search_username', '%' . $search . '%', PDO::PARAM_STR);
@@ -164,14 +178,18 @@ class User {
     }
 
     public function create(array $data) {
-        $query = "INSERT INTO {$this->table} (username, password, role, name, staff_section, staff_level, access_enabled, access_days, access_start, access_end) VALUES (:username, :password, :role, :name, :staff_section, :staff_level, :access_enabled, :access_days, :access_start, :access_end)";
+        $lvlCol = $this->hasStaffLevel ? 'staff_level, ' : '';
+        $lvlVal = $this->hasStaffLevel ? ':staff_level, ' : '';
+        $query = "INSERT INTO {$this->table} (username, password, role, name, staff_section, {$lvlCol}access_enabled, access_days, access_start, access_end) VALUES (:username, :password, :role, :name, :staff_section, {$lvlVal}:access_enabled, :access_days, :access_start, :access_end)";
         $stmt = $this->conn->prepare($query);
         $stmt->bindValue(':username', $this->limitString($data['username'] ?? '', 50), PDO::PARAM_STR);
         $stmt->bindValue(':password', password_hash((string)$data['password'], PASSWORD_DEFAULT), PDO::PARAM_STR);
         $stmt->bindValue(':role', $this->limitString($data['role'] ?? 'staff', 50), PDO::PARAM_STR);
         $stmt->bindValue(':name', $this->limitString($data['name'] ?? '', 100), PDO::PARAM_STR);
         $stmt->bindValue(':staff_section', $this->normalizeSection($data['staff_section'] ?? 'both'), PDO::PARAM_STR);
-        $stmt->bindValue(':staff_level', $this->normalizeLevel($data['staff_level'] ?? 1), PDO::PARAM_INT);
+        if ($this->hasStaffLevel) {
+            $stmt->bindValue(':staff_level', $this->normalizeLevel($data['staff_level'] ?? 1), PDO::PARAM_INT);
+        }
         $this->bindAccess($stmt, $data);
         $stmt->execute();
         return $this->conn->lastInsertId();
@@ -183,12 +201,14 @@ class User {
             'role = :role',
             'name = :name',
             'staff_section = :staff_section',
-            'staff_level = :staff_level',
             'access_enabled = :access_enabled',
             'access_days = :access_days',
             'access_start = :access_start',
             'access_end = :access_end'
         ];
+        if ($this->hasStaffLevel) {
+            $fields[] = 'staff_level = :staff_level';
+        }
         $query = "UPDATE {$this->table} SET " . implode(', ', $fields);
 
         if (!empty($data['password'])) {
@@ -202,7 +222,9 @@ class User {
         $stmt->bindValue(':role', $this->limitString($data['role'] ?? 'staff', 50), PDO::PARAM_STR);
         $stmt->bindValue(':name', $this->limitString($data['name'] ?? '', 100), PDO::PARAM_STR);
         $stmt->bindValue(':staff_section', $this->normalizeSection($data['staff_section'] ?? 'both'), PDO::PARAM_STR);
-        $stmt->bindValue(':staff_level', $this->normalizeLevel($data['staff_level'] ?? 1), PDO::PARAM_INT);
+        if ($this->hasStaffLevel) {
+            $stmt->bindValue(':staff_level', $this->normalizeLevel($data['staff_level'] ?? 1), PDO::PARAM_INT);
+        }
         $this->bindAccess($stmt, $data);
         if (!empty($data['password'])) {
             $stmt->bindValue(':password', password_hash((string)$data['password'], PASSWORD_DEFAULT), PDO::PARAM_STR);
