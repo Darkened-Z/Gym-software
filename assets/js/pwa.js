@@ -314,8 +314,26 @@
             return;
         }
 
+        // When a NEW service worker takes control (i.e. an update activated),
+        // reload once so the fresh CSS/JS applies immediately — otherwise the
+        // installed app keeps showing the OLD UI until the user reopens it a
+        // second time. Only attach when a worker already controls this page, so
+        // the very first install doesn't trigger a needless reload.
+        if (navigator.serviceWorker.controller) {
+            let reloaded = false;
+            navigator.serviceWorker.addEventListener('controllerchange', function () {
+                if (reloaded) return;
+                reloaded = true;
+                window.location.reload();
+            });
+        }
+
         try {
-            await navigator.serviceWorker.register(SW_PATH, { scope: '/' });
+            const reg = await navigator.serviceWorker.register(SW_PATH, { scope: '/', updateViaCache: 'none' });
+            // Force an update check on every load so a new version is picked up promptly.
+            if (reg && typeof reg.update === 'function') {
+                try { await reg.update(); } catch (e) { /* ignore */ }
+            }
         } catch (err) {
             console.warn('Service worker registration failed:', err);
         }
