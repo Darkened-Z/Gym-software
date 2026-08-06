@@ -794,6 +794,12 @@ function renderMemberProfile(data) {
                                 <span class="detail-value">${member.address}</span>
                             </div>
                             ` : ''}
+                            ${!isSnapshot && member.notes ? `
+                            <div class="detail-item">
+                                <span class="detail-label">Comment:</span>
+                                <span class="detail-value">${String(member.notes).replace(/[<>&]/g, function (c) { return { '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]; })}</span>
+                            </div>
+                            ` : ''}
                             <div class="detail-item">
                                 <span class="detail-label">Membership Type:</span>
                                 <span class="detail-value">${member.membership_type}</span>

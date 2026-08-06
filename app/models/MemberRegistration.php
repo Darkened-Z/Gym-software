@@ -70,6 +70,7 @@ class MemberRegistration {
             'emergency_name' => 'VARCHAR(120) NULL',
             'emergency_phone' => 'VARCHAR(20) NULL',
             'ptf_fee' => 'DECIMAL(10,2) NULL DEFAULT 0',
+            'notes' => 'VARCHAR(500) NULL',
         ];
         foreach ($cols as $col => $def) {
             try {

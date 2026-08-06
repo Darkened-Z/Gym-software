@@ -7924,6 +7924,8 @@ function showRegistrationDetails(id) {
                 <div class="modal-header"><h2>Request details</h2><button class="modal-close" onclick="document.getElementById('regDetailModal').remove()">&times;</button></div>
                 <div class="modal-body">
                     ${row('Name', r.name)}${row('Phone (Cell)', r.phone)}${row('CNIC', r.cnic)}
+                    ${row('Comment', r.note)}
+                    ${d.photo ? `<div class="detail-item" style="padding:.5rem 0;"><img src="${escapeHtml(d.photo)}" alt="Photo" style="max-width:130px;border-radius:8px;border:1px solid var(--border-color);"></div>` : ''}
                     ${row('Side', r.gender === 'women' ? 'Women' : 'Men')}
                     ${row("Husband's / Father's name", d.father_name)}${row('Occupation', d.occupation)}
                     ${row('Date of birth', r.dob)}${row('Email', d.email)}

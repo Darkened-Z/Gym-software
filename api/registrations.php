@@ -89,6 +89,25 @@ try {
                 }
             }
 
+            // Optional profile photo (data URI from the sign-up form): validate + save to disk.
+            $photoData = (string)($data['photo'] ?? '');
+            if ($photoData !== '' && preg_match('#^data:image/(jpeg|jpg|png|webp|gif);base64,#i', $photoData, $pm)) {
+                $bin = base64_decode(substr($photoData, strpos($photoData, ',') + 1), true);
+                if ($bin !== false && strlen($bin) <= 5 * 1024 * 1024) {
+                    $tmp = @tempnam(sys_get_temp_dir(), 'reg');
+                    if ($tmp && @file_put_contents($tmp, $bin) !== false && @getimagesize($tmp) !== false) {
+                        $e = strtolower($pm[1]);
+                        $ext = $e === 'png' ? 'png' : ($e === 'webp' ? 'webp' : ($e === 'gif' ? 'gif' : 'jpg'));
+                        if (!is_dir(PROFILE_IMAGES_DIR)) { @mkdir(PROFILE_IMAGES_DIR, 0755, true); }
+                        $fname = 'reg_' . bin2hex(random_bytes(8)) . '.' . $ext;
+                        if (@rename($tmp, PROFILE_IMAGES_DIR . $fname) || @copy($tmp, PROFILE_IMAGES_DIR . $fname)) {
+                            $details['photo'] = 'uploads/profiles/' . $fname;
+                        }
+                    }
+                    if ($tmp && is_file($tmp)) { @unlink($tmp); }
+                }
+            }
+
             $registrations->create([
                 'gender' => $gender,
                 'name' => $name,
@@ -216,6 +235,7 @@ try {
                     'phone' => $reg['phone'],
                     'address' => $reg['address'],
                     'email' => $regDetails['email'] ?? null,
+                    'profile_image' => $regDetails['photo'] ?? null,
                     'membership_type' => $membershipType,
                     'join_date' => $joinDate,
                     'admission_fee' => $admissionFee,
@@ -238,6 +258,20 @@ try {
                 $upd->bindValue(':ptf', $ptfFee);
                 $upd->bindValue(':id', (int)$memberId, PDO::PARAM_INT);
                 $upd->execute();
+
+                // Carry the sign-up comment onto the member (only if a notes column exists;
+                // the app DB user can't ALTER, so the column is added by root / the schema).
+                try {
+                    $hasNotes = $db->query("SHOW COLUMNS FROM members_{$gender} LIKE 'notes'");
+                    if ($hasNotes && $hasNotes->rowCount() > 0 && trim((string)($reg['note'] ?? '')) !== '') {
+                        $un = $db->prepare("UPDATE members_{$gender} SET notes = :note WHERE id = :id");
+                        $un->bindValue(':note', mb_substr(trim((string)$reg['note']), 0, 500));
+                        $un->bindValue(':id', (int)$memberId, PDO::PARAM_INT);
+                        $un->execute();
+                    }
+                } catch (Throwable $e) {
+                    error_log('registrations approve notes: ' . $e->getMessage());
+                }
 
                 // Record the first payment (if any was taken at approval).
                 $paymentId = null;
