@@ -184,7 +184,7 @@ try {
             break;
 
         case 'create':
-            AuthHelper::ensureAdminAction('Only admin can create payments');
+            AuthHelper::requireStaffMaxLevel(2, 'Only admin and Level 1-2 staff can take payments.');
             if ($method === 'POST') {
                 $data = json_decode(file_get_contents('php://input'), true);
                 if (!is_array($data)) {

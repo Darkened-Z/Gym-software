@@ -183,4 +183,29 @@ class AuthHelper {
             exit;
         }
     }
+
+    /** Current staff level: admin -> 0 (unrestricted), staff -> 1|2|3 (default 1). */
+    public static function currentLevel(): int {
+        self::ensureSession();
+        if (($_SESSION['role'] ?? null) === 'admin') {
+            return 0;
+        }
+        $lvl = (int)($_SESSION['staff_level'] ?? 1);
+        return in_array($lvl, [1, 2, 3], true) ? $lvl : 1;
+    }
+
+    /**
+     * Require the current staff to be at most $maxLevel (lower level = more access;
+     * level 1 = full). Admin always passes. Higher-numbered levels are blocked.
+     */
+    public static function requireStaffMaxLevel(int $maxLevel, string $message = 'You do not have access to this action.'): void {
+        if (self::currentRole() === 'admin') {
+            return;
+        }
+        if (self::currentLevel() > $maxLevel) {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'message' => $message]);
+            exit;
+        }
+    }
 }

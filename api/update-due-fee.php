@@ -19,7 +19,8 @@ ob_clean();
 
 header('Content-Type: application/json');
 
-AuthHelper::requireAdmin();
+AuthHelper::requireAdminOrStaff();
+AuthHelper::requireStaffMaxLevel(2, 'Only admin and Level 1-2 staff can take fees.');
 
 $method = $_SERVER['REQUEST_METHOD'];
 

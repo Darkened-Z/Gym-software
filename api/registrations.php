@@ -139,8 +139,7 @@ try {
                 echo json_encode(['success' => false, 'message' => 'Method not allowed']);
                 exit;
             }
-            AuthHelper::requireAdminOrStaff();
-            AuthHelper::ensureAdminAction('Only admin can approve members');
+            AuthHelper::requireAdminOrStaff(); // any staff level may accept requests
 
             $data = reg_input();
             $id = filter_var($data['id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
@@ -308,8 +307,7 @@ try {
                 echo json_encode(['success' => false, 'message' => 'Method not allowed']);
                 exit;
             }
-            AuthHelper::requireAdminOrStaff();
-            AuthHelper::ensureAdminAction('Only admin can reject members');
+            AuthHelper::requireAdminOrStaff(); // any staff level may reject requests
 
             $data = reg_input();
             $id = filter_var($data['id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);

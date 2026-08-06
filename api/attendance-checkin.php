@@ -6,8 +6,12 @@
 require_once __DIR__ . '/../config/config.php';
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../app/services/AttendanceWriteService.php';
+require_once __DIR__ . '/../app/helpers/AuthHelper.php';
 
 header('Content-Type: application/json');
+
+// All staff levels + admin may check members in/out; block unauthenticated callers.
+AuthHelper::requireAdminOrStaff();
 
 $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? '';

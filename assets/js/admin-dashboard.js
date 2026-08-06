@@ -6,6 +6,7 @@ let currentSection = 'dashboard';
 let currentGender = 'men';
 let currentUserRole = null;
 let staffSection = 'both'; // 'men' | 'women' | 'both' — this staff member's section access
+let staffLevel = 1; // staff only: 1 = full, 2/3 = progressively restricted
 let activeRequests = {}; // Track active fetch requests to cancel them if needed
 let isLoadingDashboard = false; // Prevent multiple simultaneous dashboard loads
 let memberStatusFilter = null; // 'active', 'inactive', or null for all
@@ -123,19 +124,27 @@ function setupMobileMenu() {
     }
 }
 
-function applyRolePermissions() {
-    const hiddenSectionsByRole = {
-        staff: ['staff', 'registrations', 'activity-log', 'import', 'sync', 'reminders']
+// Sections each staff level may use. Admin = no restriction. Level 1 is the full
+// front desk; Level 2 and 3 are progressively limited (order = landing priority).
+function allowedSectionsForUser() {
+    if (currentUserRole !== 'staff') return null; // admin / unknown -> everything
+    const byLevel = {
+        1: ['dashboard', 'members', 'registrations', 'attendance', 'payments', 'due-fees', 'expenses', 'details', 'reports'],
+        2: ['attendance', 'registrations', 'due-fees'],
+        3: ['attendance', 'registrations']
     };
+    return byLevel[staffLevel] || byLevel[1];
+}
 
-    const hiddenSections = hiddenSectionsByRole[currentUserRole] || [];
+function applyRolePermissions() {
+    const allowed = allowedSectionsForUser();
     document.querySelectorAll('.nav-item[data-section]').forEach(item => {
         const section = item.dataset.section;
-        item.style.display = hiddenSections.includes(section) ? 'none' : '';
+        item.style.display = (allowed && !allowed.includes(section)) ? 'none' : '';
     });
 
-    if (hiddenSections.includes(currentSection)) {
-        switchSection('dashboard');
+    if (allowed && !allowed.includes(currentSection)) {
+        switchSection(allowed[0]); // land on their first allowed section
     }
 
     // Section access: a men- or women-only staff is locked to their side.
@@ -168,6 +177,7 @@ function checkAuth() {
         if (['admin', 'staff'].includes(storedRole)) {
             currentUserRole = storedRole;
             staffSection = sessionStorage.getItem('gym_last_section') || 'both';
+            staffLevel = parseInt(sessionStorage.getItem('gym_last_level'), 10) || 1;
             const userName = document.getElementById('userName');
             if (userName) {
                 userName.textContent = storedName || (storedRole === 'staff' ? 'Staff' : 'Admin');
@@ -185,8 +195,10 @@ function checkAuth() {
             } else {
                 currentUserRole = data.role;
                 staffSection = data.staff_section || 'both';
+                staffLevel = parseInt(data.staff_level, 10) || 1;
                 sessionStorage.setItem('gym_last_role', data.role);
                 sessionStorage.setItem('gym_last_section', staffSection);
+                sessionStorage.setItem('gym_last_level', staffLevel);
                 sessionStorage.setItem('gym_last_username', data.username || data.name || (data.role === 'staff' ? 'Staff' : 'Admin'));
                 const userName = document.getElementById('userName');
                 if (userName) {
@@ -251,6 +263,17 @@ function isAdminUser() {
     return currentUserRole === 'admin';
 }
 
+// Admin + staff Level 1/2 may collect fees/payments; Level 3 cannot.
+function canTakePayment() {
+    return isAdminUser() || (currentUserRole === 'staff' && staffLevel <= 2);
+}
+
+function requirePaymentAccess(actionText = 'take payments') {
+    if (canTakePayment()) return true;
+    Utils.showNotification(`Only admin and Level 1–2 staff can ${actionText}.`, 'error');
+    return false;
+}
+
 function requireAdminAccess(actionText = 'perform this action') {
     if (isAdminUser()) return true;
     Utils.showNotification(`Only admin can ${actionText}.`, 'error');
@@ -302,11 +325,9 @@ function startSectionAutoRefresh() {
 }
 
 function switchSection(section) {
-    const blockedSectionsByRole = {
-        staff: ['staff', 'registrations', 'activity-log', 'import', 'sync', 'reminders']
-    };
-    if ((blockedSectionsByRole[currentUserRole] || []).includes(section)) {
-        Utils.showNotification('This section is available for admin only.', 'error');
+    const allowed = allowedSectionsForUser();
+    if (allowed && !allowed.includes(section)) {
+        Utils.showNotification('You do not have access to this section.', 'error');
         return;
     }
 
@@ -2352,7 +2373,7 @@ function loadPayments() {
                     <button class="btn ${paymentsDefaultersFilter ? 'btn-warning' : 'btn-secondary'}" id="showDefaultersBtn">Show Late Payers</button>
                     <button class="btn ${memberStatusFilter === 'inactive' ? 'btn-primary' : 'btn-secondary'}" id="showInactivePaymentsBtn">Inactive Members</button>
                     <button class="btn ${memberStatusFilter === 'active' ? 'btn-primary' : 'btn-secondary'}" id="showActivePaymentsBtn">Active Members</button>
-                    ${isAdminUser() ? '<button class="btn btn-primary" id="addPaymentBtn">Take Payment</button>' : ''}
+                    ${canTakePayment() ? '<button class="btn btn-primary" id="addPaymentBtn">Take Payment</button>' : ''}
                 </div>
             </div>
             <div id="paymentsAnalyticsContainer" style="margin-bottom:1.5rem;"></div>
@@ -2498,7 +2519,7 @@ function loadPaymentsAnalytics() {
 }
 
 function showAddPaymentForm() {
-    if (!requireAdminAccess('record payments')) return;
+    if (!requirePaymentAccess('record payments')) return;
 
     const html = `
         <div class="modal" id="paymentModal">
@@ -2894,7 +2915,7 @@ function loadPaymentsTable(page = 1) {
 }
 
 function updateFee(memberId, memberCode) {
-    if (!requireAdminAccess('take fees')) return;
+    if (!requirePaymentAccess('take fees')) return;
 
     // Get member details first
     fetch(`api/members.php?action=get&id=${memberId}&gender=${currentGender}`)
@@ -3287,7 +3308,7 @@ function loadStaffTable(page = 1) {
                 <table class="data-table">
                     <thead>
                         <tr>
-                            <th>#</th><th>Name</th><th>Username</th><th>Role</th><th>Section</th><th>Access</th><th>Created</th><th>Actions</th>
+                            <th>#</th><th>Name</th><th>Username</th><th>Role</th><th>Level</th><th>Section</th><th>Access</th><th>Created</th><th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -3297,6 +3318,7 @@ function loadStaffTable(page = 1) {
                                 <td data-label="Name">${row.name || '-'}</td>
                                 <td data-label="Username">${row.username}</td>
                                 <td data-label="Role"><span class="status-badge status-active">${row.role}</span></td>
+                                <td data-label="Level">${row.role === 'admin' ? '—' : 'Level ' + (Number(row.staff_level) || 1)}</td>
                                 <td data-label="Section">${row.role === 'admin' ? 'Both' : ({ men: 'Men', women: 'Women', both: 'Both' }[row.staff_section] || 'Both')}</td>
                                 <td data-label="Access">${escapeHtml(formatStaffAccess(row))}</td>
                                 <td data-label="Created">${Utils.formatDate(row.created_at)}</td>
@@ -3305,7 +3327,7 @@ function loadStaffTable(page = 1) {
                                     <button class="btn btn-sm btn-danger" onclick="deleteStaff(${row.id})">Delete</button>
                                 </td>
                             </tr>
-                        `).join('') : '<tr><td colspan="8"><div class="empty-state"><strong>No staff found</strong>Add your first staff user here.</div></td></tr>'}
+                        `).join('') : '<tr><td colspan="9"><div class="empty-state"><strong>No staff found</strong>Add your first staff user here.</div></td></tr>'}
                     </tbody>
                 </table>
                 ${pagination.pages > 1 ? `
@@ -3343,6 +3365,11 @@ function showStaffForm(staff = null) {
                         <option value="both" ${(!staff || staff?.staff_section === 'both') ? 'selected' : ''}>Both (combined)</option>
                         <option value="men" ${staff?.staff_section === 'men' ? 'selected' : ''}>Men only</option>
                         <option value="women" ${staff?.staff_section === 'women' ? 'selected' : ''}>Women only</option>
+                    </select></div>
+                    <div class="form-group"><label>Staff access level <span style="color:var(--text-muted);font-weight:400;">(applies to the Staff role)</span></label><select id="staffLevel">
+                        <option value="1" ${(!staff || Number(staff?.staff_level || 1) === 1) ? 'selected' : ''}>Level 1 — full front desk</option>
+                        <option value="2" ${Number(staff?.staff_level) === 2 ? 'selected' : ''}>Level 2 — requests, check in/out, need payment</option>
+                        <option value="3" ${Number(staff?.staff_level) === 3 ? 'selected' : ''}>Level 3 — requests + check in/out only</option>
                     </select></div>
                     <div class="form-group" style="border-top:1px solid var(--border-color);padding-top:.85rem;">
                         <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;">
@@ -3401,6 +3428,7 @@ function saveStaff() {
         password: document.getElementById('staffPassword')?.value || '',
         role: document.getElementById('staffRole')?.value || 'staff',
         staff_section: document.getElementById('staffSection')?.value || 'both',
+        staff_level: parseInt(document.getElementById('staffLevel')?.value, 10) || 1,
         access_enabled: document.getElementById('staffAccessEnabled')?.checked ? 1 : 0,
         access_days: Array.from(document.querySelectorAll('.staffDay[aria-pressed="true"]')).map(c => c.dataset.day).join(','),
         access_start: document.getElementById('staffAccessStart')?.value || '',
@@ -5740,7 +5768,7 @@ function renderReport(data, type) {
                                             <td><span style="color: ${d.days_overdue > 0 ? 'red' : '#f39c12'}; font-weight: bold;">${d.days_overdue || 0} days</span></td>
                                             <td><strong style="color: #e74c3c;">${Utils.formatCurrency(d.total_due_amount || 0)}</strong></td>
                                             <td>
-                                                ${isAdminUser() ? `<button class="btn btn-sm btn-primary" onclick="currentGender='${d.gender}'; updateFee(${d.id}, '${d.member_code}')">Take Fee</button>` : '<span style="color:#6b7280;">Read only</span>'}
+                                                ${canTakePayment() ? `<button class="btn btn-sm btn-primary" onclick="currentGender='${d.gender}'; updateFee(${d.id}, '${d.member_code}')">Take Fee</button>` : '<span style="color:#6b7280;">Read only</span>'}
                                             </td>
                                         </tr>
                                     `).join('')}
