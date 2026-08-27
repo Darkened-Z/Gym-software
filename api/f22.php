@@ -95,7 +95,7 @@ try {
                     $res = $model->getAll($page, 500, '', null, []);
                     $rows = $res['data'] ?? [];
                     foreach ($rows as $m) {
-                        $dec = AccessDecision::evaluate($m);
+                        $dec = AccessDecision::evaluate($m, $db);
                         $members[] = [
                             'pin' => memberToPin($g, $m['id']),
                             'name' => $m['name'] ?? '',
@@ -136,7 +136,7 @@ try {
                 break;
             }
 
-            $dec = AccessDecision::evaluate($member);
+            $dec = AccessDecision::evaluate($member, $db);
             $doorOpened = false;
             if ($dec['allowed']) {
                 try {
