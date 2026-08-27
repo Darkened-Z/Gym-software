@@ -21,6 +21,7 @@
 
 require_once __DIR__ . '/config/config.php';
 require_once __DIR__ . '/config/database.php';
+require_once __DIR__ . '/app/helpers/LicenseHelper.php';
 
 header('Content-Type: text/plain');
 
@@ -82,7 +83,19 @@ if ($route === 'cdata') {
     if ($method === 'POST') {
         $body = file_get_contents('php://input') ?: '';
         if ($table === 'ATTLOG') {
-            iclock_process_attlog($db, $body);
+            // Gym-subscription gate: once the panel marks the gym past-grace
+            // (locked = past expiry + 3-day grace), stop recording device
+            // punches. The device is autonomous in ADMS Push mode — it will
+            // still physically open the door — but the software stops logging
+            // "successful check-ins" that misrepresent a locked gym as
+            // operating normally. When the panel renews the licence, the
+            // next punch is recorded again (no re-enrolment, no data touched).
+            if (!(new LicenseHelper($db))->isLicenseValid()) {
+                $lines = substr_count($body, "\n") + ($body === '' ? 0 : 1);
+                error_log("[iclock] gym locked (past grace) — dropping {$lines} punch line(s) from SN='{$sn}'");
+            } else {
+                iclock_process_attlog($db, $body);
+            }
         }
         // OPERLOG / other tables: acknowledged but not processed (user
         // enrollment sync belongs in the parked control layer).
