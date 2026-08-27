@@ -293,10 +293,10 @@ function iclock_setting_set(PDO $db, string $key, string $val): void {
 }
 
 /**
- * Build DISABLE/ENABLE commands for overdue/paid members.
+ * Build BLOCK/UNBLOCK commands for overdue/paid members.
  * Throttled: runs the scan at most once per 30 minutes UNLESS the gym-lock
  * state just flipped, in which case we run immediately so the device gets
- * the disable/enable batch on its next poll.
+ * the block/unblock batch on its next poll.
  *
  * Gym-subscription lock (from the operator panel):
  *   locked  → every active member PIN is treated as "overdue" → the whole
@@ -305,7 +305,16 @@ function iclock_setting_set(PDO $db, string $key, string $val): void {
  *             before. Any PINs disabled during the lock get re-enabled
  *             automatically because they'll no longer be in the effective
  *             overdue set (unless they were also individually overdue).
- * Fingerprints stay enrolled either way — Enable=0/1 is fully reversible.
+ *
+ * Blocking strategy: set the user's ADMS `EndDatetime` in the past (block)
+ * or the far future (unblock). Fingerprints stay enrolled either way — this
+ * is fully reversible.
+ *
+ * History: earlier iterations sent `Enable=0`, which the F22 firmware
+ * silently rejected with Return=-629 (unknown field). Cross-check of
+ * attendance vs. f22_disabled_pins on 2026-08-27 confirmed disabled
+ * members were still checking in. `EndDatetime` is a standard ADMS
+ * USERINFO field that ZKTeco designed for exactly this use case.
  *
  * Returns array of "C:<id>:<command>" strings ready to echo.
  */
@@ -353,27 +362,47 @@ function iclock_build_block_commands(PDO $db): array {
         }
     }
 
+    // Names for unblock commands — DATA UPDATE USERINFO needs the Name field.
+    $nameByPin = [];
+    foreach (['men', 'women'] as $g) {
+        $stmt = $db->prepare("SELECT member_code, name FROM members_{$g}
+                              WHERE member_code IN (" . (empty($disabled) ? "''" : implode(',', array_fill(0, count($disabled), '?'))) . ")");
+        if (!empty($disabled)) {
+            $stmt->execute($disabled);
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $nameByPin[$r['member_code']] = $r['name'];
+            }
+        }
+    }
+
     $counter = (int)iclock_setting_get($db, 'f22_cmd_counter');
     $commands = [];
 
-    // New overdue → DISABLE
+    // Past validity date (any pre-epoch-ish date the F22 will accept as expired).
+    $blockDate   = '2000-01-01 00:00:00';
+    $unblockDate = '2099-12-31 23:59:59';
+
+    // New overdue → BLOCK (set EndDatetime in the past)
     foreach ($overduePins as $pin => $name) {
         if (isset($disabledSet[$pin])) continue; // already disabled
         $counter++;
-        $commands[] = "C:{$counter}:DATA UPDATE USERINFO PIN={$pin}\tEnable=0";
+        $safeName = str_replace(["\t", "\r", "\n"], ' ', (string)$name);
+        $commands[] = "C:{$counter}:DATA UPDATE USERINFO PIN={$pin}\tName={$safeName}\tEndDatetime={$blockDate}";
         $disabledSet[$pin] = true;
         @file_put_contents(__DIR__ . '/iclock-debug.log',
-            date('Y-m-d H:i:s') . " BLOCK pin={$pin} name={$name} (overdue)\n", FILE_APPEND);
+            date('Y-m-d H:i:s') . " BLOCK pin={$pin} name={$safeName} (overdue) — EndDatetime={$blockDate}\n", FILE_APPEND);
     }
 
-    // Previously disabled but now paid → ENABLE
+    // Previously disabled but now paid → UNBLOCK (set EndDatetime in the future)
     foreach ($disabled as $pin) {
         if (isset($overduePins[$pin])) continue; // still overdue
         $counter++;
-        $commands[] = "C:{$counter}:DATA UPDATE USERINFO PIN={$pin}\tEnable=1";
+        $name = $nameByPin[$pin] ?? ('PIN-' . $pin);
+        $safeName = str_replace(["\t", "\r", "\n"], ' ', $name);
+        $commands[] = "C:{$counter}:DATA UPDATE USERINFO PIN={$pin}\tName={$safeName}\tEndDatetime={$unblockDate}";
         unset($disabledSet[$pin]);
         @file_put_contents(__DIR__ . '/iclock-debug.log',
-            date('Y-m-d H:i:s') . " UNBLOCK pin={$pin} (paid up)\n", FILE_APPEND);
+            date('Y-m-d H:i:s') . " UNBLOCK pin={$pin} name={$safeName} (paid up) — EndDatetime={$unblockDate}\n", FILE_APPEND);
     }
 
     // Persist state
