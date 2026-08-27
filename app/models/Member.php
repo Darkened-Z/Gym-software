@@ -13,6 +13,7 @@ class Member {
     private $attendanceTable;
     private $hasStatusForceActive;
     private $hasPtfFee;
+    private $hasAssignedTrainerId;
 
     public static function getStatusCaseExpression(string $joinDateExpression = 'join_date', string $attendanceTable = '', string $memberIdExpression = 'id', string $statusExpression = 'status', string $forceActiveExpression = 'status_force_active'): string {
         $attendanceRule = '';
@@ -42,6 +43,7 @@ class Member {
         $this->attendanceTable = 'attendance_' . $this->gender;
         $this->hasStatusForceActive = table_has_column($this->conn, $this->table, 'status_force_active');
         $this->hasPtfFee = table_has_column($this->conn, $this->table, 'ptf_fee');
+        $this->hasAssignedTrainerId = table_has_column($this->conn, $this->table, 'assigned_trainer_id');
     }
 
     private function statusForceActiveExpression(): string {
@@ -208,6 +210,10 @@ class Member {
             $columns[] = 'ptf_fee';
             $placeholders[] = ':ptf_fee';
         }
+        if ($this->hasAssignedTrainerId) {
+            $columns[] = 'assigned_trainer_id';
+            $placeholders[] = ':assigned_trainer_id';
+        }
         if ($this->hasStatusForceActive) {
             $columns[] = 'status_force_active';
             $placeholders[] = ':status_force_active';
@@ -235,6 +241,15 @@ class Member {
         $stmt->bindValue(':status', $data['status'] ?? 'active', PDO::PARAM_STR);
         if ($this->hasPtfFee) {
             $stmt->bindValue(':ptf_fee', $data['ptf_fee'] ?? 0.00, PDO::PARAM_STR);
+        }
+        if ($this->hasAssignedTrainerId) {
+            $trainerId = $data['assigned_trainer_id'] ?? null;
+            if ($trainerId === '' || $trainerId === 0 || $trainerId === '0') $trainerId = null;
+            if ($trainerId === null) {
+                $stmt->bindValue(':assigned_trainer_id', null, PDO::PARAM_NULL);
+            } else {
+                $stmt->bindValue(':assigned_trainer_id', (int)$trainerId, PDO::PARAM_INT);
+            }
         }
         if ($this->hasStatusForceActive) {
             $stmt->bindValue(':status_force_active', (int)($data['status_force_active'] ?? 0), PDO::PARAM_INT);
@@ -272,6 +287,9 @@ class Member {
         ];
         if ($this->hasPtfFee) {
             $setParts[] = 'ptf_fee = :ptf_fee';
+        }
+        if ($this->hasAssignedTrainerId) {
+            $setParts[] = 'assigned_trainer_id = :assigned_trainer_id';
         }
         if ($this->hasStatusForceActive) {
             $setParts[] = 'status_force_active = :status_force_active';
@@ -329,6 +347,15 @@ class Member {
         $stmt->bindValue(':status', $incomingStatus, PDO::PARAM_STR);
         if ($this->hasPtfFee) {
             $stmt->bindValue(':ptf_fee', $data['ptf_fee'] ?? 0.00, PDO::PARAM_STR);
+        }
+        if ($this->hasAssignedTrainerId) {
+            $trainerId = $data['assigned_trainer_id'] ?? null;
+            if ($trainerId === '' || $trainerId === 0 || $trainerId === '0') $trainerId = null;
+            if ($trainerId === null) {
+                $stmt->bindValue(':assigned_trainer_id', null, PDO::PARAM_NULL);
+            } else {
+                $stmt->bindValue(':assigned_trainer_id', (int)$trainerId, PDO::PARAM_INT);
+            }
         }
         if ($this->hasStatusForceActive) {
             $stmt->bindValue(':status_force_active', $statusForceActive, PDO::PARAM_INT);

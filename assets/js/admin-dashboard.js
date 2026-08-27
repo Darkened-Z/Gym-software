@@ -348,6 +348,7 @@ function switchSection(section) {
         'details': 'Details',
         'reports': 'Reports',
         'staff': 'Staff',
+        'trainers': 'Trainers',
         'activity-log': 'Activity Log',
         'import': 'Import / Download',
         'sync': 'Sync / Backup',
@@ -414,6 +415,9 @@ function loadSection(section) {
             break;
         case 'staff':
             loadStaff();
+            break;
+        case 'trainers':
+            loadTrainers();
             break;
         case 'activity-log':
             loadActivityLog();
@@ -1647,6 +1651,10 @@ function showAddMemberForm() {
                             <input type="number" step="0.01" id="trainerFee" name="ptf_fee" value="0">
                         </div>
                         <div class="form-group">
+                            <label>Assigned Trainer</label>
+                            <select id="assignedTrainerId" name="assigned_trainer_id"><option value="">— None —</option></select>
+                        </div>
+                        <div class="form-group">
                             <label>Locker Fee</label>
                             <input type="number" step="0.01" id="lockerFee" name="locker_fee" value="0">
                         </div>
@@ -1673,6 +1681,7 @@ function showAddMemberForm() {
     `;
     document.body.insertAdjacentHTML('beforeend', html);
     populateMembershipTypeOptions();
+    populateAssignedTrainerSelect('', '');
 
     const form = document.getElementById('memberForm');
     form.addEventListener('submit', function (e) {
@@ -1784,6 +1793,10 @@ function saveMemberData(profileImagePath) {
         admission_fee: parseFloat(document.getElementById('admissionFee').value) || 0,
         monthly_fee: parseFloat(document.getElementById('monthlyFee').value) || 0,
         ptf_fee: parseFloat(document.getElementById('trainerFee').value) || 0,
+        assigned_trainer_id: (function () {
+            const v = document.getElementById('assignedTrainerId')?.value;
+            return v ? parseInt(v, 10) : null;
+        })(),
         locker_fee: parseFloat(document.getElementById('lockerFee').value) || 0,
         next_fee_due_date: document.getElementById('nextFeeDueDate').value || null,
         status: document.getElementById('status').value,
@@ -1920,6 +1933,7 @@ function editMember(id) {
                 document.getElementById('admissionFee').value = m.admission_fee;
                 document.getElementById('monthlyFee').value = m.monthly_fee;
                 document.getElementById('trainerFee').value = m.ptf_fee ?? 0;
+                populateAssignedTrainerSelect(m.assigned_trainer_id ?? '', m.gender || '');
                 document.getElementById('lockerFee').value = m.locker_fee;
                 document.getElementById('nextFeeDueDate').value = m.next_fee_due_date || '';
                 document.getElementById('status').value = m.status;
@@ -3439,6 +3453,260 @@ function deleteStaff(id) {
             loadStaffTable(1);
         })
         .catch(err => Utils.showNotification(err.message, 'error'));
+}
+
+// -----------------------------------------------------------------------------
+// TRAINERS — CRUD screen + assignment dropdown for the member form
+// -----------------------------------------------------------------------------
+function loadTrainers() {
+    const html = `
+        <div class="members-section">
+            ${renderSectionGuideCard({
+                chip: 'Trainers Help',
+                title: 'Manage personal trainers',
+                description: 'Add trainers, set their salary/commission, and assign members to them on the member form.',
+                steps: [
+                    'Add a trainer with name, phone, and section (men/women/both).',
+                    'Set monthly salary and commission % (used later for payroll reporting).',
+                    'Assign a trainer to a member from the member add/edit form.'
+                ]
+            })}
+            <div class="section-header">
+                <div class="section-actions">
+                    <input type="text" id="trainerSearch" placeholder="Search by name, code, phone, or CNIC" class="search-input">
+                    <select id="trainerSectionFilter" class="filter-select">
+                        <option value="">All sections</option>
+                        <option value="men">Men only</option>
+                        <option value="women">Women only</option>
+                        <option value="both">Both</option>
+                    </select>
+                    <select id="trainerStatusFilter" class="filter-select">
+                        <option value="">All statuses</option>
+                        <option value="active" selected>Active</option>
+                        <option value="inactive">Inactive</option>
+                    </select>
+                    <button class="btn btn-primary" id="addTrainerBtn">Add Trainer</button>
+                </div>
+            </div>
+            <div id="trainersTableContainer"></div>
+        </div>
+    `;
+    document.getElementById('contentBody').innerHTML = html;
+
+    document.getElementById('addTrainerBtn').addEventListener('click', () => showTrainerForm());
+    const debounced = Utils.debounce(() => loadTrainersTable(1), 250);
+    document.getElementById('trainerSearch').addEventListener('input', debounced);
+    document.getElementById('trainerSectionFilter').addEventListener('change', () => loadTrainersTable(1));
+    document.getElementById('trainerStatusFilter').addEventListener('change', () => loadTrainersTable(1));
+
+    loadTrainersTable(1);
+}
+
+function loadTrainersTable(page = 1) {
+    const search = document.getElementById('trainerSearch')?.value.trim() || '';
+    const section = document.getElementById('trainerSectionFilter')?.value || '';
+    const status = document.getElementById('trainerStatusFilter')?.value || '';
+    const params = new URLSearchParams({ action: 'list', page, limit: 20 });
+    if (search) params.set('search', search);
+    if (section) params.set('section', section);
+    if (status) params.set('status', status);
+
+    fetch(`api/trainers.php?${params.toString()}`)
+        .then(res => res.json())
+        .then(data => {
+            if (!data.success) throw new Error(data.message || 'Failed to load trainers');
+            renderTrainersTable(data);
+        })
+        .catch(err => {
+            const c = document.getElementById('trainersTableContainer');
+            if (c) c.innerHTML = `<div class="error">${Utils.escapeHtml(err.message)}</div>`;
+        });
+}
+
+function renderTrainersTable(data) {
+    const rows = (data.data || []).map(t => `
+        <tr>
+            <td>${Utils.escapeHtml(t.trainer_code)}</td>
+            <td>${Utils.escapeHtml(t.name)}</td>
+            <td>${Utils.escapeHtml(t.phone)}</td>
+            <td>${Utils.escapeHtml(t.section)}</td>
+            <td>${Number(t.monthly_salary || 0).toFixed(2)}</td>
+            <td>${Number(t.commission_pct || 0).toFixed(2)}%</td>
+            <td>${Number(t.assigned_count || 0)}</td>
+            <td><span class="badge ${t.status === 'active' ? 'badge-success' : 'badge-muted'}">${Utils.escapeHtml(t.status)}</span></td>
+            <td>
+                <button class="btn btn-sm btn-secondary" onclick="editTrainer(${t.id})">Edit</button>
+                ${t.status === 'active'
+                    ? `<button class="btn btn-sm btn-danger" onclick="deactivateTrainer(${t.id})">Deactivate</button>`
+                    : `<button class="btn btn-sm btn-primary" onclick="activateTrainer(${t.id})">Reactivate</button>`}
+            </td>
+        </tr>
+    `).join('');
+
+    const c = document.getElementById('trainersTableContainer');
+    if (!c) return;
+    c.innerHTML = `
+        <div class="table-container">
+            <table class="data-table">
+                <thead><tr>
+                    <th>Code</th><th>Name</th><th>Phone</th><th>Section</th>
+                    <th>Salary</th><th>Commission</th><th>Assigned</th>
+                    <th>Status</th><th>Actions</th>
+                </tr></thead>
+                <tbody>${rows || `<tr><td colspan="9" class="text-center">No trainers yet — click "Add Trainer" to create the first one.</td></tr>`}</tbody>
+            </table>
+        </div>
+    `;
+}
+
+function showTrainerForm(trainer = null) {
+    const isEdit = !!trainer;
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.id = 'trainerModal';
+    modal.innerHTML = `
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>${isEdit ? 'Edit' : 'Add'} Trainer</h2>
+                <button class="modal-close" onclick="document.getElementById('trainerModal').remove()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="trainerForm" onsubmit="event.preventDefault(); saveTrainer(${trainer ? trainer.id : 'null'});">
+                    <div class="form-row">
+                        <div class="form-group"><label>Trainer Code</label><input id="trnCode" value="${Utils.escapeHtml(trainer?.trainer_code || '')}" placeholder="Auto"></div>
+                        <div class="form-group"><label>Name *</label><input id="trnName" value="${Utils.escapeHtml(trainer?.name || '')}" required></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label>Phone *</label><input id="trnPhone" value="${Utils.escapeHtml(trainer?.phone || '')}" required></div>
+                        <div class="form-group"><label>CNIC</label><input id="trnCnic" value="${Utils.escapeHtml(trainer?.cnic || '')}"></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label>Section *</label>
+                            <select id="trnSection">
+                                <option value="both" ${(trainer?.section || 'both') === 'both' ? 'selected' : ''}>Both</option>
+                                <option value="men" ${trainer?.section === 'men' ? 'selected' : ''}>Men only</option>
+                                <option value="women" ${trainer?.section === 'women' ? 'selected' : ''}>Women only</option>
+                            </select>
+                        </div>
+                        <div class="form-group"><label>Hire Date *</label><input type="date" id="trnHire" value="${Utils.escapeHtml(trainer?.hire_date || new Date().toISOString().slice(0,10))}" required></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label>Monthly Salary</label><input type="number" step="0.01" id="trnSalary" value="${trainer?.monthly_salary || 0}"></div>
+                        <div class="form-group"><label>Commission %</label><input type="number" step="0.01" min="0" max="100" id="trnCommission" value="${trainer?.commission_pct || 0}"></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label>Date of Birth</label><input type="date" id="trnDob" value="${Utils.escapeHtml(trainer?.dob || '')}"></div>
+                        <div class="form-group"><label>Emergency Contact</label><input id="trnEmergency" value="${Utils.escapeHtml(trainer?.emergency_contact || '')}"></div>
+                    </div>
+                    <div class="form-group"><label>Address</label><input id="trnAddress" value="${Utils.escapeHtml(trainer?.address || '')}"></div>
+                    <div class="form-group"><label>Notes</label><textarea id="trnNotes" rows="2">${Utils.escapeHtml(trainer?.notes || '')}</textarea></div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" onclick="document.getElementById('trainerModal').remove()">Cancel</button>
+                        <button type="submit" class="btn btn-primary">${isEdit ? 'Update' : 'Create'}</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+}
+
+function saveTrainer(id) {
+    const payload = {
+        trainer_code: document.getElementById('trnCode').value.trim(),
+        name: document.getElementById('trnName').value.trim(),
+        phone: document.getElementById('trnPhone').value.trim(),
+        cnic: document.getElementById('trnCnic').value.trim() || null,
+        section: document.getElementById('trnSection').value,
+        hire_date: document.getElementById('trnHire').value,
+        monthly_salary: parseFloat(document.getElementById('trnSalary').value) || 0,
+        commission_pct: parseFloat(document.getElementById('trnCommission').value) || 0,
+        dob: document.getElementById('trnDob').value || null,
+        emergency_contact: document.getElementById('trnEmergency').value.trim() || null,
+        address: document.getElementById('trnAddress').value.trim() || null,
+        notes: document.getElementById('trnNotes').value.trim() || null,
+    };
+    if (id) payload.id = id;
+
+    fetch(`api/trainers.php?action=${id ? 'update' : 'create'}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    })
+        .then(res => res.json())
+        .then(data => {
+            if (!data.success) throw new Error(data.message || 'Save failed');
+            Utils.showNotification(id ? 'Trainer updated' : 'Trainer added', 'success');
+            document.getElementById('trainerModal').remove();
+            loadTrainersTable(1);
+        })
+        .catch(err => Utils.showNotification(err.message, 'error'));
+}
+
+function editTrainer(id) {
+    fetch(`api/trainers.php?action=get&id=${id}`)
+        .then(res => res.json())
+        .then(data => {
+            if (!data.success) throw new Error(data.message || 'Failed to load trainer');
+            showTrainerForm(data.data);
+        })
+        .catch(err => Utils.showNotification(err.message, 'error'));
+}
+
+function deactivateTrainer(id) {
+    if (!confirm('Deactivate this trainer? Existing member assignments stay for history — they just stop appearing in the assign dropdown.')) return;
+    fetch(`api/trainers.php?action=deactivate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id })
+    })
+        .then(res => res.json())
+        .then(data => {
+            if (!data.success) throw new Error(data.message || 'Failed');
+            Utils.showNotification('Trainer deactivated', 'success');
+            loadTrainersTable(1);
+        })
+        .catch(err => Utils.showNotification(err.message, 'error'));
+}
+
+function activateTrainer(id) {
+    fetch(`api/trainers.php?action=activate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id })
+    })
+        .then(res => res.json())
+        .then(data => {
+            if (!data.success) throw new Error(data.message || 'Failed');
+            Utils.showNotification('Trainer reactivated', 'success');
+            loadTrainersTable(1);
+        })
+        .catch(err => Utils.showNotification(err.message, 'error'));
+}
+
+/** Cache the trainer select list — pulled fresh whenever a member form opens. */
+let _trainerSelectCache = null;
+function fetchTrainerOptions(section) {
+    const q = new URLSearchParams({ action: 'select' });
+    if (section === 'men' || section === 'women') q.set('section', section);
+    return fetch(`api/trainers.php?${q.toString()}`)
+        .then(res => res.json())
+        .then(data => (data.success && Array.isArray(data.data)) ? data.data : []);
+}
+
+/** Populate the assigned-trainer <select> on the member form. */
+function populateAssignedTrainerSelect(currentId = '', section = '') {
+    const sel = document.getElementById('assignedTrainerId');
+    if (!sel) return;
+    sel.innerHTML = `<option value="">— None —</option><option disabled>Loading…</option>`;
+    fetchTrainerOptions(section)
+        .then(list => {
+            sel.innerHTML = `<option value="">— None —</option>` +
+                list.map(t => `<option value="${t.id}" ${String(t.id) === String(currentId) ? 'selected' : ''}>${Utils.escapeHtml(t.name)} (${Utils.escapeHtml(t.section)})</option>`).join('');
+        })
+        .catch(() => {
+            sel.innerHTML = `<option value="">— None —</option>`;
+        });
 }
 
 function getActivityActionLabel(action) {
@@ -6448,6 +6716,7 @@ function seedMemberResolutionForm(item, liveRecord, base = 'queued') {
     document.getElementById('admissionFee').value = baseRecord.admission_fee ?? overlayRecord?.admission_fee ?? 0;
     document.getElementById('monthlyFee').value = baseRecord.monthly_fee ?? overlayRecord?.monthly_fee ?? 0;
     document.getElementById('trainerFee').value = baseRecord.ptf_fee ?? overlayRecord?.ptf_fee ?? 0;
+    populateAssignedTrainerSelect(baseRecord.assigned_trainer_id ?? overlayRecord?.assigned_trainer_id ?? '', baseRecord.gender || overlayRecord?.gender || '');
     document.getElementById('lockerFee').value = baseRecord.locker_fee ?? overlayRecord?.locker_fee ?? 0;
     document.getElementById('nextFeeDueDate').value = baseRecord.next_fee_due_date || overlayRecord?.next_fee_due_date || '';
     document.getElementById('status').value = baseRecord.status || overlayRecord?.status || 'active';
