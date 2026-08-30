@@ -101,6 +101,13 @@ if ($route === 'cdata') {
                 iclock_process_rtlog($db, $rawBody);
             } elseif ($table === 'TABLEDATA' && ($_GET['tablename'] ?? '') === 'user') {
                 iclock_sync_users($db, $rawBody);
+            } elseif ($table === 'FINGERTMP' || ($table === 'TABLEDATA' && ($_GET['tablename'] ?? '') === 'fingertmp')) {
+                // Template upload from device in response to DATA QUERY FINGERTMP.
+                // Format: one line per template — "PIN\tFID\tSize\tValid\tTMP"
+                // where TMP is base64-ish encoded template blob. We cache the
+                // whole raw line per (PIN, FID) so we can replay it back to the
+                // device with DATA UPDATE FINGERTMP later.
+                iclock_cache_fingertmp($db, $rawBody);
             }
         }
         echo "OK\n";
@@ -293,28 +300,71 @@ function iclock_setting_set(PDO $db, string $key, string $val): void {
 }
 
 /**
+ * Cache a fingerprint template upload from the device. Called when the F22
+ * POSTs to /iclock/cdata after we asked it to QUERY FINGERTMP for a PIN.
+ * Stores per (PIN, FID) in gym_settings as f22_tmp_<PIN>_<FID>. Also updates
+ * the cached-PINs index f22_tmp_cached_pins.
+ *
+ * Line format (varies by firmware): PIN\tFID\tSize\tValid\tTMP\n
+ * We store the entire raw line (minus trailing newline) so we can replay it
+ * back verbatim with DATA UPDATE FINGERTMP.
+ */
+function iclock_cache_fingertmp(PDO $db, string $body): void {
+    $cached = 0;
+    $indexRaw = iclock_setting_get($db, 'f22_tmp_cached_pins');
+    $index = array_filter(array_map('trim', explode(',', $indexRaw)));
+    $indexSet = array_flip($index);
+
+    foreach (preg_split('/\r?\n/', $body) as $line) {
+        $line = trim($line);
+        if ($line === '') continue;
+        $parts = preg_split('/\t/', $line);
+        if (count($parts) < 2) continue;
+        $pin = trim($parts[0]);
+        $fid = trim($parts[1] ?? '0');
+        if ($pin === '') continue;
+
+        iclock_setting_set($db, "f22_tmp_{$pin}_{$fid}", $line);
+        $cached++;
+        if (!isset($indexSet[$pin])) { $index[] = $pin; $indexSet[$pin] = true; }
+        @file_put_contents(__DIR__ . '/iclock-debug.log',
+            date('Y-m-d H:i:s') . " FINGERTMP cached pin={$pin} fid={$fid} size=" . strlen($line) . " bytes\n", FILE_APPEND);
+    }
+    iclock_setting_set($db, 'f22_tmp_cached_pins', implode(',', array_values(array_unique($index))));
+    // Clear any query-pending markers for cached PINs
+    if ($cached > 0) {
+        $pendingRaw = iclock_setting_get($db, 'f22_query_pending');
+        if ($pendingRaw) {
+            $pending = array_filter(array_map('trim', explode(',', $pendingRaw)));
+            $stillPending = array_diff($pending, $index);
+            iclock_setting_set($db, 'f22_query_pending', implode(',', $stillPending));
+        }
+    }
+}
+
+/**
  * Build BLOCK/UNBLOCK commands for overdue/paid members.
- * Throttled: runs the scan at most once per 30 minutes UNLESS the gym-lock
- * state just flipped, in which case we run immediately so the device gets
- * the block/unblock batch on its next poll.
  *
- * Gym-subscription lock (from the operator panel):
- *   locked  → every active member PIN is treated as "overdue" → the whole
- *             gym is disabled at the device (door refuses everyone).
- *   valid   → per-member overdue logic (individual fee due dates), same as
- *             before. Any PINs disabled during the lock get re-enabled
- *             automatically because they'll no longer be in the effective
- *             overdue set (unless they were also individually overdue).
+ * Strategy — DATA DELETE FINGERTMP + template cache.
  *
- * Blocking strategy: set the user's ADMS `EndDatetime` in the past (block)
- * or the far future (unblock). Fingerprints stay enrolled either way — this
- * is fully reversible.
+ * Why: this F22 firmware rejects DATA UPDATE USERINFO with Return=-629 for
+ * every field we tried (Enable, EndDatetime). Cross-check on 2026-08-29
+ * showed 15 disabled members still checking in over 2 days. DELETE
+ * commands are much more universally accepted than UPDATE across firmwares,
+ * so we switch to deleting the fingerprint template directly — no template,
+ * no thumb match, no door open.
  *
- * History: earlier iterations sent `Enable=0`, which the F22 firmware
- * silently rejected with Return=-629 (unknown field). Cross-check of
- * attendance vs. f22_disabled_pins on 2026-08-27 confirmed disabled
- * members were still checking in. `EndDatetime` is a standard ADMS
- * USERINFO field that ZKTeco designed for exactly this use case.
+ * Restore-on-payment problem: DELETE is destructive unless we can put the
+ * template back. So before we delete any PIN, we first send a
+ * DATA QUERY FINGERTMP to make the device upload the template. Templates
+ * come back via POST /iclock/cdata table=FINGERTMP and we cache them per
+ * (PIN,FID) in gym_settings. Only after the template is cached do we
+ * actually send the DELETE. On payment, we replay the cached line back
+ * with DATA UPDATE FINGERTMP — that command usually works even on
+ * firmwares that reject USERINFO updates.
+ *
+ * Throttled: runs at most once per 30 minutes UNLESS gym-lock state just
+ * flipped. Fingertmp cache never expires.
  *
  * Returns array of "C:<id>:<command>" strings ready to echo.
  */
@@ -362,47 +412,72 @@ function iclock_build_block_commands(PDO $db): array {
         }
     }
 
-    // Names for unblock commands — DATA UPDATE USERINFO needs the Name field.
-    $nameByPin = [];
-    foreach (['men', 'women'] as $g) {
-        $stmt = $db->prepare("SELECT member_code, name FROM members_{$g}
-                              WHERE member_code IN (" . (empty($disabled) ? "''" : implode(',', array_fill(0, count($disabled), '?'))) . ")");
-        if (!empty($disabled)) {
-            $stmt->execute($disabled);
-            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
-                $nameByPin[$r['member_code']] = $r['name'];
-            }
-        }
-    }
+    // Load template cache — we only DELETE fingerprints we can restore later.
+    $cachedRaw = iclock_setting_get($db, 'f22_tmp_cached_pins');
+    $cachedPins = array_flip(array_filter(array_map('trim', explode(',', $cachedRaw))));
+
+    $pendingRaw = iclock_setting_get($db, 'f22_query_pending');
+    $pendingPins = array_flip(array_filter(array_map('trim', explode(',', $pendingRaw))));
+    $newPending = [];
 
     $counter = (int)iclock_setting_get($db, 'f22_cmd_counter');
     $commands = [];
 
-    // Past validity date (any pre-epoch-ish date the F22 will accept as expired).
-    $blockDate   = '2000-01-01 00:00:00';
-    $unblockDate = '2099-12-31 23:59:59';
-
-    // New overdue → BLOCK (set EndDatetime in the past)
+    // ── BLOCK path ──
+    // For each newly-overdue PIN:
+    //   - No template cached yet → ask device to upload it (QUERY FINGERTMP)
+    //     and mark PIN as pending. Delete happens on the next poll cycle.
+    //   - Template cached → send DELETE FINGERTMP for FID 0-9 (all fingers).
     foreach ($overduePins as $pin => $name) {
-        if (isset($disabledSet[$pin])) continue; // already disabled
-        $counter++;
+        if (isset($disabledSet[$pin])) continue; // already deleted
         $safeName = str_replace(["\t", "\r", "\n"], ' ', (string)$name);
-        $commands[] = "C:{$counter}:DATA UPDATE USERINFO PIN={$pin}\tName={$safeName}\tEndDatetime={$blockDate}";
+
+        if (!isset($cachedPins[$pin])) {
+            // No cached template — request one now. Don't delete yet.
+            if (!isset($pendingPins[$pin]) && !in_array($pin, $newPending, true)) {
+                $counter++;
+                $commands[] = "C:{$counter}:DATA QUERY FINGERTMP PIN={$pin} FID=0";
+                $newPending[] = $pin;
+                @file_put_contents(__DIR__ . '/iclock-debug.log',
+                    date('Y-m-d H:i:s') . " QUERY-FINGERTMP pin={$pin} name={$safeName} — will delete once cached\n", FILE_APPEND);
+            }
+            continue; // don't add to disabledSet yet — wait for cache
+        }
+
+        // Template cached — safe to delete. Send DELETE for FID 0-9 to cover
+        // members who registered multiple fingers.
+        for ($fid = 0; $fid <= 9; $fid++) {
+            $counter++;
+            $commands[] = "C:{$counter}:DATA DELETE FINGERTMP PIN={$pin} FID={$fid}";
+        }
         $disabledSet[$pin] = true;
         @file_put_contents(__DIR__ . '/iclock-debug.log',
-            date('Y-m-d H:i:s') . " BLOCK pin={$pin} name={$safeName} (overdue) — EndDatetime={$blockDate}\n", FILE_APPEND);
+            date('Y-m-d H:i:s') . " BLOCK pin={$pin} name={$safeName} (overdue) — DELETE FINGERTMP FID=0-9 (cached)\n", FILE_APPEND);
     }
 
-    // Previously disabled but now paid → UNBLOCK (set EndDatetime in the future)
+    // Merge new pending PINs into pending index for next cycle
+    if (!empty($newPending)) {
+        $allPending = array_unique(array_merge(array_keys($pendingPins), $newPending));
+        iclock_setting_set($db, 'f22_query_pending', implode(',', $allPending));
+    }
+
+    // ── UNBLOCK path ──
+    // Previously disabled but now paid → restore cached template via UPDATE.
+    // UPDATE FINGERTMP tends to work on firmwares that reject UPDATE USERINFO.
     foreach ($disabled as $pin) {
         if (isset($overduePins[$pin])) continue; // still overdue
-        $counter++;
-        $name = $nameByPin[$pin] ?? ('PIN-' . $pin);
-        $safeName = str_replace(["\t", "\r", "\n"], ' ', $name);
-        $commands[] = "C:{$counter}:DATA UPDATE USERINFO PIN={$pin}\tName={$safeName}\tEndDatetime={$unblockDate}";
+        // Look up all cached FIDs for this PIN and restore each
+        $restored = 0;
+        for ($fid = 0; $fid <= 9; $fid++) {
+            $cached = iclock_setting_get($db, "f22_tmp_{$pin}_{$fid}");
+            if ($cached === '') continue;
+            $counter++;
+            $commands[] = "C:{$counter}:DATA UPDATE FINGERTMP {$cached}";
+            $restored++;
+        }
         unset($disabledSet[$pin]);
         @file_put_contents(__DIR__ . '/iclock-debug.log',
-            date('Y-m-d H:i:s') . " UNBLOCK pin={$pin} name={$safeName} (paid up) — EndDatetime={$unblockDate}\n", FILE_APPEND);
+            date('Y-m-d H:i:s') . " UNBLOCK pin={$pin} (paid up) — restored {$restored} FID(s)" . ($restored === 0 ? ' — WARNING: no cache found, member must re-enroll' : '') . "\n", FILE_APPEND);
     }
 
     // Persist state
