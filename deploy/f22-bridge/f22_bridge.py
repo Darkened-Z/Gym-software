@@ -56,6 +56,20 @@ class Bridge:
         self.cache_dir = cfg.get("bridge", "template_cache_dir", fallback="./cache")
         self.state_file = cfg.get("bridge", "state_file", fallback="./state.json")
 
+        # SAFETY:
+        # mode = "monitor" -> connect, cache templates, log what it WOULD block,
+        #                     but never delete/restore. Safe for the first run.
+        #        "enforce" -> actually remove unpaid fingerprints + restore paid.
+        # max_block_pct   -> refuse to block if MORE than this % of the roster
+        #                    would be blocked (protects against a bad/stale roster
+        #                    wiping the whole gym's fingerprints by mistake).
+        # report_scans    -> also POST each scan to the cloud. Default OFF because
+        #                    the F22's own cloud link already records attendance;
+        #                    turning this on would double-count.
+        self.mode = cfg.get("bridge", "mode", fallback="monitor").strip().lower()
+        self.max_block_pct = cfg.getint("bridge", "max_block_pct", fallback=60)
+        self.report_scans = cfg.getboolean("bridge", "report_scans", fallback=False)
+
         os.makedirs(self.cache_dir, exist_ok=True)
         self.zk = ZK(self.ip, port=self.port, timeout=5, password=self.password,
                      force_udp=self.force_udp, ommit_ping=self.ommit_ping)
@@ -137,32 +151,65 @@ class Bridge:
                 roster[str(m["member_code"])] = m
 
         users = {str(u.user_id): u for u in self.conn.get_users()}
-        # First, make sure everything currently enrolled has a cached template.
+        # First, make sure everything currently enrolled has a cached template
+        # (always safe — reading templates never changes anything on the device).
         for pin, user in users.items():
             if pin in roster:
                 self.cache_template(user)
 
-        self.conn.disable_device()  # freeze the device while we mutate its DB
+        # --- DRY PASS: work out what WOULD change, before touching anything ---
+        to_block, to_restore = [], []
+        for pin, m in roster.items():
+            allowed = bool(m.get("allowed"))
+            on_device = pin in users
+            has_cache = os.path.exists(self._cache_path(pin))
+            if not has_cache and not on_device:
+                continue  # never enrolled here -> ignore until enrolled physically
+            if allowed and not on_device and has_cache:
+                to_restore.append((pin, m))
+            elif not allowed and on_device:
+                to_block.append((pin, m))
+
+        # --- SAFETY CAP: refuse a mass-wipe from a bad/stale roster ---
+        enrolled = len(users)
+        if to_block and enrolled > 0:
+            pct = len(to_block) * 100 // enrolled
+            if pct > self.max_block_pct:
+                log.error(
+                    "ABORT: would block %d of %d enrolled (%d%%), over the %d%% safety cap. "
+                    "Roster may be stale — NOT touching the device. Check payment data.",
+                    len(to_block), enrolled, pct, self.max_block_pct)
+                return
+
+        # --- MONITOR MODE: report only, change nothing ---
+        if self.mode != "enforce":
+            log.info("[MONITOR] would BLOCK %d, would RESTORE %d (no changes made).",
+                     len(to_block), len(to_restore))
+            for pin, m in to_block[:20]:
+                log.info("[MONITOR]   would block PIN %s (%s)", pin, m.get("name"))
+            for pin, m in to_restore[:20]:
+                log.info("[MONITOR]   would restore PIN %s (%s)", pin, m.get("name"))
+            log.info("[MONITOR] set mode=enforce in config.ini when you're ready to actually lock.")
+            return
+
+        # --- ENFORCE: apply the changes, device frozen during mutation ---
+        self.conn.disable_device()
         try:
-            for pin, m in roster.items():
-                allowed = bool(m.get("allowed"))
-                on_device = pin in users
-                has_cache = os.path.exists(self._cache_path(pin))
-                if not has_cache and not on_device:
-                    continue  # never enrolled here -> ignore until enrolled physically
-                if allowed and not on_device:
-                    if self.restore_user(pin):
-                        self.state[pin] = "allowed"
-                elif not allowed and on_device:
-                    self.cache_template(users[pin])  # ensure we can restore later
-                    try:
-                        self.conn.delete_user(user_id=pin)
-                        self.state[pin] = "blocked"
-                        log.info("BLOCKED unpaid PIN %s (%s)", pin, m.get("name"))
-                    except Exception as e:
-                        log.warning("block PIN %s failed: %s", pin, e)
-                else:
-                    self.state[pin] = "allowed" if allowed else "blocked"
+            for pin, m in to_restore:
+                if self.restore_user(pin):
+                    self.state[pin] = "allowed"
+            for pin, m in to_block:
+                self.cache_template(users[pin])  # last-chance cache before delete
+                if not os.path.exists(self._cache_path(pin)):
+                    log.warning("SKIP block PIN %s — no cached template, refusing to delete "
+                                "(would need physical re-enrol to restore).", pin)
+                    continue
+                try:
+                    self.conn.delete_user(user_id=pin)
+                    self.state[pin] = "blocked"
+                    log.info("BLOCKED unpaid PIN %s (%s)", pin, m.get("name"))
+                except Exception as e:
+                    log.warning("block PIN %s failed: %s", pin, e)
         finally:
             self.conn.enable_device()
             self._save_state()
@@ -176,6 +223,8 @@ class Bridge:
                         break
                     if att is None:
                         continue  # timeout tick / heartbeat
+                    if not self.report_scans:
+                        continue  # cloud link already records attendance; don't double-count
                     try:
                         self._api("POST", "report_scan", json={
                             "pin": att.user_id,
@@ -204,6 +253,14 @@ class Bridge:
 
     # ---- run --------------------------------------------------------------
     def run(self):
+        banner = "MONITOR (no changes — safe)" if self.mode != "enforce" else "ENFORCE (will lock unpaid members)"
+        log.info("=" * 58)
+        log.info(" Apex Gym F22 Bridge")
+        log.info("   device : %s:%s", self.ip, self.port)
+        log.info("   cloud  : %s", self.base_url)
+        log.info("   MODE   : %s", banner)
+        log.info("   safety : abort if >%d%% of members would be blocked", self.max_block_pct)
+        log.info("=" * 58)
         self.connect()
         threading.Thread(target=self.live_loop, daemon=True).start()
         threading.Thread(target=self.beat_loop, daemon=True).start()

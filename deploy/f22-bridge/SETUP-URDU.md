@@ -1,95 +1,84 @@
 # F22 Lock Setup — Gym Owner ke liye (Roman Urdu)
 
-Yeh guide reception laptop pe chalane ke liye hai. Isse aap ke gym ka F22
-fingerprint device aise ho jayega ke **jis member ne fee nahi di, us ka thumb
-gate nahi kholega** — aur jab woh fee de dega, uska thumb dobara chal jayega
-(dobara finger lagane ki zaroorat nahi).
+Yeh reception laptop pe chalega. Isse jis member ne fee nahi di, us ka thumb
+gate nahi kholega — aur fee dene par khud wapas chal jayega (dobara finger
+lagane ki zaroorat nahi).
+
+**Zaroori:** laptop aur F22 device **same WiFi** pe hone chahiye.
 
 ---
 
-## Zaroori baatein pehle
-
-- Yeh sirf **reception ke laptop** pe chalega jo gym khulne ke doran ON rehta hai.
-- Laptop aur F22 device **same WiFi** pe hone chahiye.
-- Pehla test **bilkul safe hai — kuch delete nahi hota, sirf check karta hai.**
-
----
-
-## Step 1 — Python install karein (ek dafa, 3 minute)
+## Step 1 — Python install karein (ek dafa)
 
 1. Browser mein jayein: **python.org/downloads**
-2. Python download kar ke installer chalayein.
-3. **Bohot zaroori:** neeche jo box likha hai **"Add Python to PATH"** — us pe
-   tick zaroor lagayein. Phir "Install Now" dabayein.
+2. Installer download kar ke chalayein.
+3. **Sab se zaroori:** neeche box **"Add Python to PATH"** pe tick lagayein,
+   phir "Install Now".
 
 ---
 
 ## Step 2 — Bridge folder laptop pe copy karein
 
-Jo `f22-bridge` folder maine bheja hai, usse laptop pe copy karein — yahan:
-```
-C:\f22-bridge\
-```
-(USB, email ya WhatsApp se bhej ke.)
+`f22-bridge` folder ko laptop pe rakhein, yahan: `C:\f22-bridge\`
 
-Phir Command Prompt kholein:
-- Keyboard pe `Windows` button dabayein
-- `cmd` type karein, Enter dabayein
-- Yeh command likhein aur Enter:
-```
-pip install pyzk requests
-```
+Us folder mein aap ko yeh files dikhengi — inhe number ke hisaab se chalana hai:
+- `1-install.bat`
+- `2-test-connection.bat`
+- `3-run-bridge.bat`
 
 ---
 
-## Step 3 — CONNECTION TEST (sab se pehle yeh karein)
+## Step 3 — `1-install.bat` pe DOUBLE-CLICK karein
 
-**Yeh 100% safe hai — koi fingerprint delete nahi hoga. Sirf check hai.**
+Ek dafa ka kaam hai. Yeh zaroori cheezein install karega. Jab "Done" likha aaye,
+window band kar dein.
 
-Command Prompt mein:
-```
-cd C:\f22-bridge
-python test_connection.py 192.168.18.16
-```
-
-**Result parhein:**
-
-- ✅ Agar likha aaye **`[SUCCESS] The bridge CAN control this device`**
-  → Bohot achha! System chal sakta hai. Screenshot bhej dein, main aage bata deta hun.
-
-- ❌ Agar likha aaye **`[FAIL] Could not reach the F22`**
-  → Laptop device se baat nahi kar pa raha. Check karein:
-    - Laptop aur F22 **same WiFi** pe hain?
-    - F22 ka IP `192.168.18.16` hi hai? (Device pe: Menu → Comm → Ethernet dekhein)
-  → Phir bhi na chale to mujhe screenshot bhej dein.
-
-**Har haal mein screenshot bhej dein — main dekh ke agla step bata dunga.**
+(Agar error aaye ke Python nahi mila — matlab Step 1 theek se nahi hua. Python
+dobara install karein, "Add to PATH" tick zaroor karein.)
 
 ---
 
-## Step 4 — Baaki setup
+## Step 4 — `2-test-connection.bat` pe DOUBLE-CLICK karein
 
-Jab Step 3 SUCCESS aa jaye, main aap ko baaki 2 step (config + auto-start)
-guide kar dunga — woh 5 minute ka kaam hai. Ek dafa set ho jaye to laptop on
-karne pe khud chalu ho jayega, har roz kholne ki zaroorat nahi.
+**Yeh 100% safe hai — kuch delete nahi hota, sirf check karta hai.**
+
+- ✅ Agar **`[SUCCESS]`** likha aaye → bohot achha, system chal sakta hai.
+- ❌ Agar **`[FAIL]`** aaye → laptop device se baat nahi kar pa raha (shayad
+  alag WiFi pe hai, ya device ka IP badal gaya).
+
+**Screenshot le kar Zeeshan ko bhej dein — chahe SUCCESS ho ya FAIL.**
 
 ---
 
-## System kaise kaam karega (samajhne ke liye)
+## Step 5 — Baaki setup
+
+Jab test SUCCESS aa jaye, `3-run-bridge.bat` chalana hai. Yeh **pehle sirf
+"monitor" mode** mein chalega — matlab yeh sirf batayega ke kaun kaun se member
+block honge, lekin **abhi kisi ka fingerprint nahi hatayega.** Screenshot bhej
+dein, Zeeshan check karega ke sahi log block ho rahe hain. **Uski confirmation ke
+baad** hi asal blocking chalu hogi.
+
+Ek dafa set ho jaye to laptop on karne pe khud chalu ho jayega.
+
+---
+
+## System kaise kaam karega
 
 - **Fee nahi di** → member ka fingerprint device se hat jayega → thumb lagane pe
   gate nahi khulega.
-- **Fee de di** (aap dashboard pe renew karenge) → 45 second mein uska fingerprint
-  wapas aa jayega → thumb dobara chal jayega. **Dobara finger lagane ki zaroorat nahi.**
-- **Jin logon ne fee di hai** → un ko kuch nahi hoga, normal chalte rahenge.
-- **Laptop band ho jaye** → F22 phir bhi normal chalta rahega (jo log abhi device
-  mein hain un ke liye gate khulta rahega). Sirf blocking ruk jayegi jab tak laptop
-  wapas on na ho — koi cheez kharab nahi hoti.
+- **Fee de di** (aap dashboard pe renew karenge) → 45 second mein fingerprint
+  wapas → thumb dobara chalega. **Dobara finger lagane ki zaroorat nahi.**
+- **Jinhone fee di hai** → un ko kuch nahi hoga.
+- **Laptop band** → F22 normal chalta rahega, sirf blocking ruk jayegi. Kuch
+  kharab nahi hota.
 
 ---
 
-## Ek zaroori baat
+## Do zaroori baatein
 
-Laptop pe `C:\f22-bridge\cache\` folder banega — **isse delete na karein.** Yeh
-woh jagah hai jahan members ke fingerprint mehfooz rehte hain, taake fee dene par
-un ka thumb wapas chal jaye. Ise safe rakhein.
+1. `C:\f22-bridge\cache\` folder ko **delete na karein** — yahan members ke
+   fingerprint mehfooz rehte hain (fee dene par wapas lagane ke liye).
+
+2. Setup se pehle Zeeshan ek sawal poochega: **"Jin members ki due date nikal
+   gayi, kya unhone cash mein fee di jo system mein update nahi hui?"** — kyunke
+   agar aisa hai to woh log ghalti se block ho sakte hain. Pehle confirm kar lein.
