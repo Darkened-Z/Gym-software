@@ -171,6 +171,7 @@ function iclock_process_attlog(PDO $db, string $body): void {
             continue;
         }
         iclock_upsert_visit($db, $match['gender'], (int)$match['id'], $when);
+        iclock_alert_if_unpaid($db, $match['gender'], (int)$match['id'], $when);
     }
 }
 
@@ -249,6 +250,7 @@ function iclock_process_rtlog(PDO $db, string $body): void {
             continue;
         }
         iclock_upsert_visit($db, $match['gender'], (int)$match['id'], $when);
+        iclock_alert_if_unpaid($db, $match['gender'], (int)$match['id'], $when);
         @file_put_contents(__DIR__ . '/iclock-debug.log',
             date('Y-m-d H:i:s') . " RTLOG VISIT pin={$pin} → {$match['gender']} id={$match['id']} at {$when}\n", FILE_APPEND);
     }
@@ -485,4 +487,84 @@ function iclock_build_block_commands(PDO $db): array {
     iclock_setting_set($db, 'f22_disabled_pins', implode(',', array_keys($disabledSet)));
 
     return $commands;
+}
+
+
+// ==========================================================================
+//  REAL-TIME UNPAID-ENTRY ALERTS
+//  When a member scans in whose fee due date has passed, record an alert so
+//  the front desk + owner get a live notification. Independent of the door
+//  policy: even in lenient mode (door opens for them) the owner still gets
+//  told "an unpaid member just walked in." Deduped to one alert per member
+//  per day so re-scans don't spam.
+// ==========================================================================
+
+function iclock_ensure_alerts_table(PDO $db): void {
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    try {
+        $db->exec(
+            "CREATE TABLE IF NOT EXISTS access_alerts (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                member_id INT NOT NULL,
+                gender ENUM('men','women') NOT NULL,
+                member_code VARCHAR(50) NULL,
+                name VARCHAR(200) NULL,
+                phone VARCHAR(20) NULL,
+                due_date DATE NULL,
+                days_overdue INT NULL,
+                due_amount DECIMAL(10,2) DEFAULT 0.00,
+                entered_at DATETIME NOT NULL,
+                seen TINYINT(1) NOT NULL DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_seen (seen),
+                INDEX idx_entered (entered_at),
+                INDEX idx_member_day (member_id, gender, entered_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+        );
+    } catch (Throwable $e) {
+        error_log('access_alerts ensure: ' . $e->getMessage());
+    }
+}
+
+function iclock_alert_if_unpaid(PDO $db, string $gender, int $memberId, string $when): void {
+    if (!in_array($gender, ['men', 'women'], true) || $memberId <= 0) return;
+    try {
+        $t = 'members_' . $gender;
+        $stmt = $db->prepare("SELECT member_code, name, phone, next_fee_due_date, total_due_amount, status
+                              FROM {$t} WHERE id = ? LIMIT 1");
+        $stmt->execute([$memberId]);
+        $m = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$m) return;
+
+        // Alert trigger: fee due date is in the past. (Inactive members or those
+        // with a recorded debt also qualify.)
+        $dueDate = $m['next_fee_due_date'] ?? null;
+        $due = (float)($m['total_due_amount'] ?? 0);
+        $pastDue = $dueDate && $dueDate < date('Y-m-d');
+        $inactive = ($m['status'] ?? 'active') !== 'active';
+        if (!$pastDue && $due <= 0 && !$inactive) return; // paid + current -> no alert
+
+        iclock_ensure_alerts_table($db);
+
+        // Dedupe: one alert per member per calendar day.
+        $day = substr($when, 0, 10);
+        $dup = $db->prepare("SELECT 1 FROM access_alerts
+                             WHERE member_id = ? AND gender = ? AND DATE(entered_at) = ? LIMIT 1");
+        $dup->execute([$memberId, $gender, $day]);
+        if ($dup->fetchColumn()) return;
+
+        $daysOverdue = $dueDate ? (int)floor((strtotime($day) - strtotime($dueDate)) / 86400) : null;
+
+        $ins = $db->prepare("INSERT INTO access_alerts
+            (member_id, gender, member_code, name, phone, due_date, days_overdue, due_amount, entered_at, seen)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)");
+        $ins->execute([
+            $memberId, $gender, $m['member_code'] ?? null, $m['name'] ?? null, $m['phone'] ?? null,
+            $dueDate, $daysOverdue, $due, $when,
+        ]);
+    } catch (Throwable $e) {
+        error_log('iclock_alert_if_unpaid: ' . $e->getMessage());
+    }
 }

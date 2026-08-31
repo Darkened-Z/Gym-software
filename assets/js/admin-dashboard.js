@@ -22,6 +22,7 @@ document.addEventListener('DOMContentLoaded', function () {
     startSectionAutoRefresh();
     startAutoSync(); // Start auto-sync timer
     bindOfflineOutboxRefresh();
+    startEntryAlerts(); // Real-time unpaid-entry alerts (browser notification + live feed)
 
     window.addEventListener('online', () => {
         if (currentSection === 'dashboard') {
@@ -8172,3 +8173,144 @@ function rejectRegistration(id) {
         })
         .catch(err => Utils.showNotification(err.message, 'error'));
 }
+
+// =============================================================================
+// REAL-TIME UNPAID-ENTRY ALERTS
+// Polls api/alerts.php; when an unpaid/overdue member scans in, fires a browser
+// notification (works on the front-desk laptop AND the owner's phone browser),
+// beeps, and shows a live feed panel. No hardware needed — the F22 already
+// pushes scans to the cloud, iclock.php records the alert, this surfaces it.
+// =============================================================================
+(function () {
+    var POLL_MS = 12000;
+    var seenIds = {};
+    var timer = null;
+    var panelOpen = false;
+
+    window.startEntryAlerts = function () {
+        try {
+            if ('Notification' in window && Notification.permission === 'default') {
+                setTimeout(function () { Notification.requestPermission(); }, 3000);
+            }
+        } catch (e) {}
+        injectAlertUI();
+        pollEntryAlerts();
+        if (timer) clearInterval(timer);
+        timer = setInterval(pollEntryAlerts, POLL_MS);
+    };
+
+    function injectAlertUI() {
+        if (document.getElementById('entryAlertBell')) return;
+        var css = document.createElement('style');
+        css.textContent =
+            '#entryAlertBell{position:fixed;bottom:18px;right:18px;width:56px;height:56px;border-radius:50%;background:#1f2937;color:#fff;border:2px solid #374151;display:flex;align-items:center;justify-content:center;font-size:24px;cursor:pointer;z-index:9998;box-shadow:0 4px 16px rgba(0,0,0,.3);transition:transform .15s}' +
+            '#entryAlertBell:hover{transform:scale(1.06)}' +
+            '#entryAlertBell.alarm{background:#dc2626;border-color:#ef4444;animation:eaPulse 1s infinite}' +
+            '@keyframes eaPulse{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.5)}50%{box-shadow:0 0 0 12px rgba(220,38,38,0)}}' +
+            '#entryAlertBadge{position:absolute;top:-4px;right:-4px;min-width:20px;height:20px;padding:0 5px;border-radius:10px;background:#ef4444;color:#fff;font-size:12px;font-weight:700;display:none;align-items:center;justify-content:center}' +
+            '#entryAlertPanel{position:fixed;bottom:84px;right:18px;width:340px;max-width:calc(100vw - 36px);max-height:60vh;overflow-y:auto;background:#111827;border:1px solid #374151;border-radius:12px;z-index:9998;display:none;box-shadow:0 8px 32px rgba(0,0,0,.5)}' +
+            '#entryAlertPanel .eah{padding:12px 16px;border-bottom:1px solid #374151;display:flex;align-items:center;gap:8px;position:sticky;top:0;background:#111827}' +
+            '#entryAlertPanel .eah b{font-size:15px;color:#f9fafb;flex:1}' +
+            '#entryAlertPanel .eah button{background:transparent;border:1px solid #374151;color:#9ca3af;font-size:11px;padding:4px 8px;border-radius:6px;cursor:pointer}' +
+            '.eaItem{padding:12px 16px;border-bottom:1px solid #1f2937}' +
+            '.eaItem .nm{font-weight:600;color:#f9fafb;font-size:14px}' +
+            '.eaItem .meta{color:#9ca3af;font-size:12px;margin-top:2px}' +
+            '.eaItem .amt{color:#f87171;font-weight:700}' +
+            '.eaEmpty{padding:28px 16px;text-align:center;color:#6b7280;font-size:13px}';
+        document.head.appendChild(css);
+
+        var bell = document.createElement('div');
+        bell.id = 'entryAlertBell';
+        bell.title = 'Unpaid-entry alerts';
+        bell.innerHTML = '🔔<span id="entryAlertBadge">0</span>';
+        bell.onclick = function () {
+            panelOpen = !panelOpen;
+            document.getElementById('entryAlertPanel').style.display = panelOpen ? 'block' : 'none';
+            if (panelOpen) markAllSeen();
+        };
+        document.body.appendChild(bell);
+
+        var panel = document.createElement('div');
+        panel.id = 'entryAlertPanel';
+        panel.innerHTML = '<div class="eah"><b>Unpaid entries today</b>' +
+            '<button onclick="__markAlertsSeen()">Clear</button></div>' +
+            '<div id="entryAlertList"><div class="eaEmpty">No unpaid entries yet today.</div></div>';
+        document.body.appendChild(panel);
+    }
+
+    function pollEntryAlerts() {
+        if (typeof Utils !== 'undefined' && Utils.isOnline && !Utils.isOnline()) return;
+        fetch('api/alerts.php?action=recent', { headers: { 'Accept': 'application/json' } })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (data) {
+                if (!data || !data.success) return;
+                renderAlertList(data.alerts || []);
+                var fresh = (data.alerts || []).filter(function (a) { return Number(a.seen) === 0 && !seenIds[a.id]; });
+                var bell = document.getElementById('entryAlertBell');
+                var badge = document.getElementById('entryAlertBadge');
+                if (data.unseen > 0) {
+                    if (bell) bell.classList.add('alarm');
+                    if (badge) { badge.style.display = 'flex'; badge.textContent = data.unseen; }
+                } else {
+                    if (bell) bell.classList.remove('alarm');
+                    if (badge) badge.style.display = 'none';
+                }
+                fresh.forEach(function (a) { seenIds[a.id] = true; fireNotification(a); });
+                if (fresh.length) beep();
+            })
+            .catch(function () {});
+    }
+
+    function renderAlertList(alerts) {
+        var el = document.getElementById('entryAlertList');
+        if (!el) return;
+        if (!alerts.length) { el.innerHTML = '<div class="eaEmpty">No unpaid entries yet today.</div>'; return; }
+        el.innerHTML = alerts.map(function (a) {
+            var when = (a.entered_at || '').substr(11, 5);
+            var od = a.days_overdue != null ? (a.days_overdue + 'd overdue') : 'overdue';
+            var amt = Number(a.due_amount) > 0 ? ' · <span class="amt">Rs ' + Number(a.due_amount).toLocaleString() + '</span>' : '';
+            var dot = Number(a.seen) === 0 ? ' 🔴' : '';
+            return '<div class="eaItem"><div class="nm">' + esc(a.name || 'Member') + dot + '</div>' +
+                '<div class="meta">' + esc(a.member_code || '') + ' · ' + esc(od) + amt + ' · entered ' + when + '</div></div>';
+        }).join('');
+    }
+
+    function fireNotification(a) {
+        try {
+            if (!('Notification' in window) || Notification.permission !== 'granted') return;
+            var body = (a.member_code ? a.member_code + ' · ' : '') +
+                (a.days_overdue != null ? a.days_overdue + ' days overdue' : 'fee overdue') +
+                (Number(a.due_amount) > 0 ? ' · Rs ' + Number(a.due_amount).toLocaleString() : '');
+            var n = new Notification('⚠️ Unpaid member entered: ' + (a.name || 'Member'), {
+                body: body, tag: 'entry-' + a.id, requireInteraction: false
+            });
+            setTimeout(function () { try { n.close(); } catch (e) {} }, 8000);
+        } catch (e) {}
+    }
+
+    var audioCtx = null;
+    function beep() {
+        try {
+            audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+            var o = audioCtx.createOscillator(), g = audioCtx.createGain();
+            o.connect(g); g.connect(audioCtx.destination);
+            o.type = 'sine'; o.frequency.value = 880;
+            g.gain.setValueAtTime(0.15, audioCtx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+            o.start(); o.stop(audioCtx.currentTime + 0.4);
+        } catch (e) {}
+    }
+
+    function markAllSeen() {
+        fetch('api/alerts.php?action=mark_seen', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+            .then(function () {
+                var bell = document.getElementById('entryAlertBell');
+                var badge = document.getElementById('entryAlertBadge');
+                if (bell) bell.classList.remove('alarm');
+                if (badge) badge.style.display = 'none';
+            }).catch(function () {});
+    }
+    window.__markAlertsSeen = markAllSeen;
+
+    function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]; }); }
+})();
