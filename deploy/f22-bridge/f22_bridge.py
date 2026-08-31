@@ -123,7 +123,18 @@ class Bridge:
     def sync(self):
         r = self._api("GET", "sync_list")
         r.raise_for_status()
-        roster = {str(m["pin"]): m for m in r.json().get("members", [])}
+        # Match by BOTH the offset pin AND the member_code, because different
+        # gyms enrol members under different id schemes on the device (some use
+        # the 10,000,000+id offset, some use the small member_code). Keying the
+        # roster on every id a member could appear under makes blocking match
+        # the right person regardless of how they were enrolled. Offset pins are
+        # 10M+ and member_codes are small, so they never collide.
+        roster = {}
+        for m in r.json().get("members", []):
+            if m.get("pin") is not None:
+                roster[str(m["pin"])] = m
+            if m.get("member_code"):
+                roster[str(m["member_code"])] = m
 
         users = {str(u.user_id): u for u in self.conn.get_users()}
         # First, make sure everything currently enrolled has a cached template.
