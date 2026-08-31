@@ -8335,11 +8335,21 @@ function loadEntryAlertsSection() {
     });
 }
 
-function eaWaLink(phone, text) {
+// Normalise to a valid Pakistani mobile in wa.me form (923XXXXXXXXX), or null.
+// Rejects the fake auto-generated numbers (e.g. 0000000002) that the F22
+// user-sync created for members enrolled directly on the device.
+function eaNormalisePhone(phone) {
     var p = String(phone || '').replace(/[^0-9]/g, '');
-    if (p.indexOf('0') === 0) p = '92' + p.slice(1);      // 03xx -> 923xx
-    else if (p.indexOf('92') !== 0 && p.length === 10) p = '92' + p; // 3xx -> 923xx
-    return 'https://wa.me/' + p + '?text=' + encodeURIComponent(text);
+    if (p.indexOf('92') === 0) p = p.slice(2);            // strip country code
+    else if (p.indexOf('0') === 0) p = p.slice(1);        // strip leading 0
+    // A real PK mobile is now 10 digits starting with 3 (e.g. 3001112201).
+    if (p.length !== 10 || p[0] !== '3') return null;
+    return '92' + p;
+}
+function eaWaLink(phone, text) {
+    var n = eaNormalisePhone(phone);
+    if (!n) return null;
+    return 'https://wa.me/' + n + '?text=' + encodeURIComponent(text);
 }
 
 function eaReminderText(name, daysOverdue, amount) {
@@ -8369,7 +8379,7 @@ function renderEntryAlertsSection(recent, stats) {
         var od = a.days_overdue != null ? (a.days_overdue + ' days overdue') : 'overdue';
         var amt = Number(a.due_amount) > 0 ? ('Rs ' + Number(a.due_amount).toLocaleString()) : '—';
         var wa = eaWaLink(a.phone, eaReminderText(a.name, a.days_overdue, a.due_amount));
-        var hasPhone = String(a.phone || '').replace(/[^0-9]/g, '').length >= 7;
+        var hasPhone = !!wa;
         return '<tr>' +
             '<td><strong>' + esc(a.name || 'Member') + '</strong><br><small style="color:#888">' + esc(a.member_code || '') + '</small></td>' +
             '<td>' + esc(od) + '</td>' +
@@ -8420,8 +8430,8 @@ function renderEntryAlertsSection(recent, stats) {
                     '<h3 style="margin:0 0 .5rem;">Repeat offenders this month</h3>' +
                     '<table class="data-table"><thead><tr><th>Member</th><th>Entries</th><th>Days overdue</th><th>Amount</th><th>Action</th></tr></thead><tbody>' +
                     offenders.map(function (o) {
-                        var hasPhone = String(o.phone || '').replace(/[^0-9]/g, '').length >= 7;
                         var wa = eaWaLink(o.phone, eaReminderText(o.name, o.days_overdue, o.due_amount));
+                        var hasPhone = !!wa;
                         return '<tr><td><strong>' + esc(o.name || 'Member') + '</strong><br><small style="color:#888">' + esc(o.member_code || '') + '</small></td>' +
                             '<td><span style="color:#f59e0b;font-weight:700;">' + o.entries + '×</span></td>' +
                             '<td>' + (o.days_overdue != null ? o.days_overdue + 'd' : '—') + '</td>' +
