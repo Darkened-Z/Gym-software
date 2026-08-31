@@ -22,6 +22,7 @@ document.addEventListener('DOMContentLoaded', function () {
     startSectionAutoRefresh();
     startAutoSync(); // Start auto-sync timer
     bindOfflineOutboxRefresh();
+    startEntryAlerts(); // Real-time unpaid-entry alerts (browser notification + live feed)
 
     window.addEventListener('online', () => {
         if (currentSection === 'dashboard') {
@@ -216,9 +217,9 @@ function checkLicenseWarning() {
                 urgent = true;
                 msg = '⚠ Your subscription has expired. Front-desk access will lock in '
                     + d.grace_left + ' day' + (d.grace_left === 1 ? '' : 's') + ' — please renew now.';
-            } else if (d.days_left !== null && d.days_left >= 0 && d.days_left <= 7) {
-                msg = '⏳ Your subscription expires in ' + d.days_left + ' day' + (d.days_left === 1 ? '' : 's')
-                    + '. Renew soon to avoid interruption.';
+            } else if (!d.expired && d.days_left !== null && d.days_left >= 0 && d.days_left <= 3) {
+                msg = '⏳ Your license expires in ' + d.days_left + ' day' + (d.days_left === 1 ? '' : 's')
+                    + ' — renew now.';
             }
             if (msg) showLicenseBanner(msg, urgent);
         })
@@ -348,6 +349,7 @@ function switchSection(section) {
         'details': 'Details',
         'reports': 'Reports',
         'staff': 'Staff',
+        'trainers': 'Trainers',
         'activity-log': 'Activity Log',
         'import': 'Import / Download',
         'sync': 'Sync / Backup',
@@ -414,6 +416,9 @@ function loadSection(section) {
             break;
         case 'staff':
             loadStaff();
+            break;
+        case 'trainers':
+            loadTrainers();
             break;
         case 'activity-log':
             loadActivityLog();
@@ -854,7 +859,7 @@ function renderDashboard(data) {
         modalEl.id = 'changePasswordModal';
         modalEl.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(243,247,244,0.92);z-index:9999;align-items:center;justify-content:center;';
         modalEl.innerHTML = `
-            <div style="background:#fff;border-radius:12px;padding:2rem;width:100%;max-width:420px;box-shadow:0 8px 32px rgba(20,41,28,0.12);border:1px solid #d1fae5;">
+            <div style="background:var(--bg-secondary);border-radius:12px;padding:2rem;width:100%;max-width:420px;box-shadow:0 8px 32px rgba(20,41,28,0.12);border:1px solid #d1fae5;">
                 <h2 style="margin-top:0;">🔑 Change Password</h2>
                 <div id="changePwError" style="display:none;color:#dc2626;margin-bottom:1rem;padding:0.5rem;background:#fef2f2;border-radius:6px;"></div>
                 <label style="display:block;margin-bottom:0.4rem;font-weight:600;">Current Password</label>
@@ -1285,7 +1290,7 @@ function loadMembers() {
             </div>
             <div style="margin-bottom:1rem;">
                 <input type="text" id="crossGenderSearch" placeholder="🔍 Search across ALL members (both genders)…" class="search-input" style="width:100%;max-width:480px;">
-                <div id="crossGenderResults" style="display:none;margin-top:0.5rem;background:#fff;border:1px solid #d1fae5;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(20,41,28,0.08);"></div>
+                <div id="crossGenderResults" style="display:none;margin-top:0.5rem;background:var(--bg-secondary);border:1px solid #d1fae5;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(20,41,28,0.08);"></div>
             </div>
             <div id="membersAnalyticsContainer" style="margin-bottom:1.5rem;"></div>
             <div id="membersTableContainer"></div>
@@ -1629,11 +1634,8 @@ function showAddMemberForm() {
                         </div>
                         <div class="form-group">
                             <label>Membership Type</label>
-                            <select id="membershipType" name="membership_type">
-                                <option value="Basic">Basic</option>
-                                <option value="Premium">Premium</option>
-                                <option value="VIP">VIP</option>
-                            </select>
+                            <input type="text" id="membershipType" name="membership_type" list="membershipTypeOptions" placeholder="e.g. Monthly, Student, VIP…" autocomplete="off">
+                            <datalist id="membershipTypeOptions"></datalist>
                         </div>
                     </div>
                     <div class="form-row">
@@ -1644,6 +1646,14 @@ function showAddMemberForm() {
                         <div class="form-group">
                             <label>Monthly Fee *</label>
                             <input type="number" step="0.01" id="monthlyFee" name="monthly_fee" value="0">
+                        </div>
+                        <div class="form-group">
+                            <label>Trainer Fee</label>
+                            <input type="number" step="0.01" id="trainerFee" name="ptf_fee" value="0">
+                        </div>
+                        <div class="form-group">
+                            <label>Assigned Trainer</label>
+                            <select id="assignedTrainerId" name="assigned_trainer_id"><option value="">— None —</option></select>
                         </div>
                         <div class="form-group">
                             <label>Locker Fee</label>
@@ -1671,6 +1681,8 @@ function showAddMemberForm() {
         </div>
     `;
     document.body.insertAdjacentHTML('beforeend', html);
+    populateMembershipTypeOptions();
+    populateAssignedTrainerSelect('', '');
 
     const form = document.getElementById('memberForm');
     form.addEventListener('submit', function (e) {
@@ -1700,6 +1712,31 @@ function showAddMemberForm() {
 function closeMemberModal() {
     const modal = document.getElementById('memberModal');
     if (modal) modal.remove();
+}
+
+// Membership Type is a free-text field: staff can type ANY type on the spot.
+// The owner's active Packages are offered as autocomplete suggestions (datalist)
+// but nothing is forced — any value is accepted (DB stores it as a free string).
+function populateMembershipTypeOptions(selectedValue) {
+    const input = document.getElementById('membershipType');
+    if (input && selectedValue != null && String(selectedValue).trim() !== '') {
+        input.value = String(selectedValue);
+    }
+    const dl = document.getElementById('membershipTypeOptions');
+    if (!dl) return;
+    fetch('api/packages.php?action=list&limit=200')
+        .then(res => res.json())
+        .then(data => {
+            const rows = (data && data.success && Array.isArray(data.data)) ? data.data : [];
+            const seen = new Set();
+            dl.innerHTML = '';
+            rows.forEach(p => {
+                if (!p || !p.name || parseInt(p.is_active) === 0) return;
+                const n = String(p.name).trim();
+                if (n && !seen.has(n)) { seen.add(n); const o = document.createElement('option'); o.value = n; dl.appendChild(o); }
+            });
+        })
+        .catch(() => { /* offline: plain free-text box, no suggestions */ });
 }
 
 function saveMember() {
@@ -1756,6 +1793,11 @@ function saveMemberData(profileImagePath) {
         membership_type: document.getElementById('membershipType').value,
         admission_fee: parseFloat(document.getElementById('admissionFee').value) || 0,
         monthly_fee: parseFloat(document.getElementById('monthlyFee').value) || 0,
+        ptf_fee: parseFloat(document.getElementById('trainerFee').value) || 0,
+        assigned_trainer_id: (function () {
+            const v = document.getElementById('assignedTrainerId')?.value;
+            return v ? parseInt(v, 10) : null;
+        })(),
         locker_fee: parseFloat(document.getElementById('lockerFee').value) || 0,
         next_fee_due_date: document.getElementById('nextFeeDueDate').value || null,
         status: document.getElementById('status').value,
@@ -1888,9 +1930,11 @@ function editMember(id) {
                 document.getElementById('email').value = m.email || '';
                 document.getElementById('address').value = m.address || '';
                 document.getElementById('joinDate').value = m.join_date;
-                document.getElementById('membershipType').value = m.membership_type;
+                populateMembershipTypeOptions(m.membership_type);
                 document.getElementById('admissionFee').value = m.admission_fee;
                 document.getElementById('monthlyFee').value = m.monthly_fee;
+                document.getElementById('trainerFee').value = m.ptf_fee ?? 0;
+                populateAssignedTrainerSelect(m.assigned_trainer_id ?? '', m.gender || '');
                 document.getElementById('lockerFee').value = m.locker_fee;
                 document.getElementById('nextFeeDueDate').value = m.next_fee_due_date || '';
                 document.getElementById('status').value = m.status;
@@ -2918,9 +2962,9 @@ function showUpdateFeeForm(member) {
             'Enter how much money you received. The default value is the monthly fee.'}
                         </small>
                     </div>
-                    <div id="paymentCalculation" style="background: #f8fffb; color: #14291c; padding: 0.75rem; border-radius: 5px; margin-top: 0.5rem; font-size: 0.9rem; border: 1px solid var(--border-color);">
+                    <div id="paymentCalculation" style="background: var(--bg-secondary); color: var(--text-color); padding: 0.75rem; border-radius: 5px; margin-top: 0.5rem; font-size: 0.9rem; border: 1px solid var(--border-color);">
                         <strong>Payment Summary:</strong>
-                        <div id="calcDetails" style="margin-top: 0.25rem; color: #4b7a5e;">
+                        <div id="calcDetails" style="margin-top: 0.25rem; color: var(--text-secondary);">
                             ${member.total_due_amount > 0 ?
             `Previous Due: ${Utils.formatCurrency(member.total_due_amount)}<br>
                                  Monthly Fee: ${Utils.formatCurrency(member.monthly_fee)}<br>
@@ -3230,6 +3274,16 @@ function loadStaff() {
     loadStaffTable(1);
 }
 
+function formatStaffAccess(row) {
+    if (row.role === 'admin') return 'Full';
+    if (!Number(row.access_enabled)) return '24/7';
+    const names = { 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat', 7: 'Sun' };
+    const days = String(row.access_days || '').split(',').map(Number).filter(n => n >= 1 && n <= 7).sort((a, b) => a - b);
+    const dayStr = (!days.length || days.length === 7) ? 'Every day' : days.map(d => names[d]).join(' ');
+    const hourStr = (row.access_start && row.access_end) ? `${row.access_start}–${row.access_end}` : 'all hours';
+    return `${dayStr} · ${hourStr}`;
+}
+
 function loadStaffTable(page = 1) {
     const search = document.getElementById('staffSearch')?.value || '';
     fetch(`api/staff.php?action=list&page=${page}&search=${encodeURIComponent(search)}`)
@@ -3243,7 +3297,7 @@ function loadStaffTable(page = 1) {
                 <table class="data-table">
                     <thead>
                         <tr>
-                            <th>#</th><th>Name</th><th>Username</th><th>Role</th><th>Section</th><th>Created</th><th>Actions</th>
+                            <th>#</th><th>Name</th><th>Username</th><th>Role</th><th>Section</th><th>Access</th><th>Created</th><th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -3254,13 +3308,14 @@ function loadStaffTable(page = 1) {
                                 <td data-label="Username">${row.username}</td>
                                 <td data-label="Role"><span class="status-badge status-active">${row.role}</span></td>
                                 <td data-label="Section">${row.role === 'admin' ? 'Both' : ({ men: 'Men', women: 'Women', both: 'Both' }[row.staff_section] || 'Both')}</td>
+                                <td data-label="Access">${escapeHtml(formatStaffAccess(row))}</td>
                                 <td data-label="Created">${Utils.formatDate(row.created_at)}</td>
                                 <td data-label="Actions">
                                     <button class="btn btn-sm btn-primary" onclick="editStaff(${row.id})">Edit</button>
                                     <button class="btn btn-sm btn-danger" onclick="deleteStaff(${row.id})">Delete</button>
                                 </td>
                             </tr>
-                        `).join('') : '<tr><td colspan="7"><div class="empty-state"><strong>No staff found</strong>Add your first staff user here.</div></td></tr>'}
+                        `).join('') : '<tr><td colspan="8"><div class="empty-state"><strong>No staff found</strong>Add your first staff user here.</div></td></tr>'}
                     </tbody>
                 </table>
                 ${pagination.pages > 1 ? `
@@ -3290,13 +3345,34 @@ function showStaffForm(staff = null) {
                     <input type="hidden" id="staffId" value="${staff?.id || ''}">
                     <div class="form-group"><label>Name *</label><input type="text" id="staffName" value="${staff?.name || ''}" required></div>
                     <div class="form-group"><label>Username *</label><input type="text" id="staffUsername" value="${staff?.username || ''}" required></div>
-                    <div class="form-group"><label>Password ${isEdit ? '(leave empty to keep old password)' : '*'}</label><input type="password" id="staffPassword" ${isEdit ? '' : 'required'}></div>
+                    <div class="form-group"><label>Password ${isEdit ? '(leave empty to keep old password)' : '*'}</label>
+                        <div class="pw-wrap" style="position:relative;"><input type="password" id="staffPassword" ${isEdit ? '' : 'required'} style="padding-right:2.75rem;"><button type="button" class="pw-toggle" aria-label="Show or hide password" onclick="var i=this.parentNode.querySelector('input');var s=i.type==='password';i.type=s?'text':'password';this.textContent=s?'🙈':'👁';" style="position:absolute;right:.5rem;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:1.15rem;line-height:1;padding:.15rem;color:inherit;">👁</button></div>
+                    </div>
                     <div class="form-group"><label>Role</label><select id="staffRole"><option value="staff" ${staff?.role === 'staff' ? 'selected' : ''}>Staff</option><option value="admin" ${staff?.role === 'admin' ? 'selected' : ''}>Admin</option></select></div>
                     <div class="form-group"><label>Section (which side they manage)</label><select id="staffSection">
                         <option value="both" ${(!staff || staff?.staff_section === 'both') ? 'selected' : ''}>Both (combined)</option>
                         <option value="men" ${staff?.staff_section === 'men' ? 'selected' : ''}>Men only</option>
                         <option value="women" ${staff?.staff_section === 'women' ? 'selected' : ''}>Women only</option>
                     </select></div>
+                    <div class="form-group" style="border-top:1px solid var(--border-color);padding-top:.85rem;">
+                        <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;">
+                            <input type="checkbox" id="staffAccessEnabled" ${staff?.access_enabled ? 'checked' : ''} style="width:auto;margin:0;">
+                            Limit this staff's access to set days &amp; hours
+                        </label>
+                        <small class="form-hint" style="display:block;margin-top:.35rem;">Off = 24/7 access. Admins are never limited.</small>
+                    </div>
+                    <div class="form-group"><label>Allowed days <span style="color:var(--text-muted);font-weight:400;">(none ticked = every day)</span></label>
+                        <div style="display:flex;flex-wrap:wrap;gap:.4rem;">
+                            ${[['1', 'Mon'], ['2', 'Tue'], ['3', 'Wed'], ['4', 'Thu'], ['5', 'Fri'], ['6', 'Sat'], ['7', 'Sun']].map(([n, lbl]) => {
+            const on = String(staff?.access_days || '').split(',').includes(n);
+            return `<button type="button" class="staffDay" data-day="${n}" aria-pressed="${on ? 'true' : 'false'}" onclick="toggleStaffDay(this)" style="border:1px solid var(--border-color);border-radius:6px;padding:.45rem .75rem;cursor:pointer;font-weight:600;background:${on ? 'var(--brand-gold,#f5c518)' : 'transparent'};color:${on ? '#0d0d0d' : 'inherit'};">${lbl}</button>`;
+        }).join('')}
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:.6rem;">
+                        <div class="form-group" style="flex:1;"><label>Start time</label><input type="time" id="staffAccessStart" value="${staff?.access_start || ''}"></div>
+                        <div class="form-group" style="flex:1;"><label>End time <span style="color:var(--text-muted);font-weight:400;">(blank = all hours)</span></label><input type="time" id="staffAccessEnd" value="${staff?.access_end || ''}"></div>
+                    </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" onclick="closeStaffModal()">Cancel</button>
                         <button type="submit" class="btn btn-primary">Save Staff User</button>
@@ -3316,6 +3392,16 @@ function closeStaffModal() {
     document.getElementById('staffModal')?.remove();
 }
 
+// Day picker uses plain toggle buttons (not checkboxes) so a single tap always
+// flips the state — nested checkbox+label was inconsistent on touch (some days
+// needed a double tap).
+function toggleStaffDay(btn) {
+    const on = btn.getAttribute('aria-pressed') === 'true';
+    btn.setAttribute('aria-pressed', on ? 'false' : 'true');
+    btn.style.background = on ? 'transparent' : 'var(--brand-gold, #f5c518)';
+    btn.style.color = on ? 'inherit' : '#0d0d0d';
+}
+
 function saveStaff() {
     const id = document.getElementById('staffId')?.value || null;
     const payload = {
@@ -3324,7 +3410,11 @@ function saveStaff() {
         username: document.getElementById('staffUsername')?.value?.trim(),
         password: document.getElementById('staffPassword')?.value || '',
         role: document.getElementById('staffRole')?.value || 'staff',
-        staff_section: document.getElementById('staffSection')?.value || 'both'
+        staff_section: document.getElementById('staffSection')?.value || 'both',
+        access_enabled: document.getElementById('staffAccessEnabled')?.checked ? 1 : 0,
+        access_days: Array.from(document.querySelectorAll('.staffDay[aria-pressed="true"]')).map(c => c.dataset.day).join(','),
+        access_start: document.getElementById('staffAccessStart')?.value || '',
+        access_end: document.getElementById('staffAccessEnd')?.value || ''
     };
     const action = id ? 'update' : 'create';
     fetch(`api/staff.php?action=${action}`, {
@@ -3364,6 +3454,260 @@ function deleteStaff(id) {
             loadStaffTable(1);
         })
         .catch(err => Utils.showNotification(err.message, 'error'));
+}
+
+// -----------------------------------------------------------------------------
+// TRAINERS — CRUD screen + assignment dropdown for the member form
+// -----------------------------------------------------------------------------
+function loadTrainers() {
+    const html = `
+        <div class="members-section">
+            ${renderSectionGuideCard({
+                chip: 'Trainers Help',
+                title: 'Manage personal trainers',
+                description: 'Add trainers, set their salary/commission, and assign members to them on the member form.',
+                steps: [
+                    'Add a trainer with name, phone, and section (men/women/both).',
+                    'Set monthly salary and commission % (used later for payroll reporting).',
+                    'Assign a trainer to a member from the member add/edit form.'
+                ]
+            })}
+            <div class="section-header">
+                <div class="section-actions">
+                    <input type="text" id="trainerSearch" placeholder="Search by name, code, phone, or CNIC" class="search-input">
+                    <select id="trainerSectionFilter" class="filter-select">
+                        <option value="">All sections</option>
+                        <option value="men">Men only</option>
+                        <option value="women">Women only</option>
+                        <option value="both">Both</option>
+                    </select>
+                    <select id="trainerStatusFilter" class="filter-select">
+                        <option value="">All statuses</option>
+                        <option value="active" selected>Active</option>
+                        <option value="inactive">Inactive</option>
+                    </select>
+                    <button class="btn btn-primary" id="addTrainerBtn">Add Trainer</button>
+                </div>
+            </div>
+            <div id="trainersTableContainer"></div>
+        </div>
+    `;
+    document.getElementById('contentBody').innerHTML = html;
+
+    document.getElementById('addTrainerBtn').addEventListener('click', () => showTrainerForm());
+    const debounced = Utils.debounce(() => loadTrainersTable(1), 250);
+    document.getElementById('trainerSearch').addEventListener('input', debounced);
+    document.getElementById('trainerSectionFilter').addEventListener('change', () => loadTrainersTable(1));
+    document.getElementById('trainerStatusFilter').addEventListener('change', () => loadTrainersTable(1));
+
+    loadTrainersTable(1);
+}
+
+function loadTrainersTable(page = 1) {
+    const search = document.getElementById('trainerSearch')?.value.trim() || '';
+    const section = document.getElementById('trainerSectionFilter')?.value || '';
+    const status = document.getElementById('trainerStatusFilter')?.value || '';
+    const params = new URLSearchParams({ action: 'list', page, limit: 20 });
+    if (search) params.set('search', search);
+    if (section) params.set('section', section);
+    if (status) params.set('status', status);
+
+    fetch(`api/trainers.php?${params.toString()}`)
+        .then(res => res.json())
+        .then(data => {
+            if (!data.success) throw new Error(data.message || 'Failed to load trainers');
+            renderTrainersTable(data);
+        })
+        .catch(err => {
+            const c = document.getElementById('trainersTableContainer');
+            if (c) c.innerHTML = `<div class="error">${Utils.escapeHtml(err.message)}</div>`;
+        });
+}
+
+function renderTrainersTable(data) {
+    const rows = (data.data || []).map(t => `
+        <tr>
+            <td>${Utils.escapeHtml(t.trainer_code)}</td>
+            <td>${Utils.escapeHtml(t.name)}</td>
+            <td>${Utils.escapeHtml(t.phone)}</td>
+            <td>${Utils.escapeHtml(t.section)}</td>
+            <td>${Number(t.monthly_salary || 0).toFixed(2)}</td>
+            <td>${Number(t.commission_pct || 0).toFixed(2)}%</td>
+            <td>${Number(t.assigned_count || 0)}</td>
+            <td><span class="badge ${t.status === 'active' ? 'badge-success' : 'badge-muted'}">${Utils.escapeHtml(t.status)}</span></td>
+            <td>
+                <button class="btn btn-sm btn-secondary" onclick="editTrainer(${t.id})">Edit</button>
+                ${t.status === 'active'
+                    ? `<button class="btn btn-sm btn-danger" onclick="deactivateTrainer(${t.id})">Deactivate</button>`
+                    : `<button class="btn btn-sm btn-primary" onclick="activateTrainer(${t.id})">Reactivate</button>`}
+            </td>
+        </tr>
+    `).join('');
+
+    const c = document.getElementById('trainersTableContainer');
+    if (!c) return;
+    c.innerHTML = `
+        <div class="table-container">
+            <table class="data-table">
+                <thead><tr>
+                    <th>Code</th><th>Name</th><th>Phone</th><th>Section</th>
+                    <th>Salary</th><th>Commission</th><th>Assigned</th>
+                    <th>Status</th><th>Actions</th>
+                </tr></thead>
+                <tbody>${rows || `<tr><td colspan="9" class="text-center">No trainers yet — click "Add Trainer" to create the first one.</td></tr>`}</tbody>
+            </table>
+        </div>
+    `;
+}
+
+function showTrainerForm(trainer = null) {
+    const isEdit = !!trainer;
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.id = 'trainerModal';
+    modal.innerHTML = `
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>${isEdit ? 'Edit' : 'Add'} Trainer</h2>
+                <button class="modal-close" onclick="document.getElementById('trainerModal').remove()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="trainerForm" onsubmit="event.preventDefault(); saveTrainer(${trainer ? trainer.id : 'null'});">
+                    <div class="form-row">
+                        <div class="form-group"><label>Trainer Code</label><input id="trnCode" value="${Utils.escapeHtml(trainer?.trainer_code || '')}" placeholder="Auto"></div>
+                        <div class="form-group"><label>Name *</label><input id="trnName" value="${Utils.escapeHtml(trainer?.name || '')}" required></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label>Phone *</label><input id="trnPhone" value="${Utils.escapeHtml(trainer?.phone || '')}" required></div>
+                        <div class="form-group"><label>CNIC</label><input id="trnCnic" value="${Utils.escapeHtml(trainer?.cnic || '')}"></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label>Section *</label>
+                            <select id="trnSection">
+                                <option value="both" ${(trainer?.section || 'both') === 'both' ? 'selected' : ''}>Both</option>
+                                <option value="men" ${trainer?.section === 'men' ? 'selected' : ''}>Men only</option>
+                                <option value="women" ${trainer?.section === 'women' ? 'selected' : ''}>Women only</option>
+                            </select>
+                        </div>
+                        <div class="form-group"><label>Hire Date *</label><input type="date" id="trnHire" value="${Utils.escapeHtml(trainer?.hire_date || new Date().toISOString().slice(0,10))}" required></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label>Monthly Salary</label><input type="number" step="0.01" id="trnSalary" value="${trainer?.monthly_salary || 0}"></div>
+                        <div class="form-group"><label>Commission %</label><input type="number" step="0.01" min="0" max="100" id="trnCommission" value="${trainer?.commission_pct || 0}"></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label>Date of Birth</label><input type="date" id="trnDob" value="${Utils.escapeHtml(trainer?.dob || '')}"></div>
+                        <div class="form-group"><label>Emergency Contact</label><input id="trnEmergency" value="${Utils.escapeHtml(trainer?.emergency_contact || '')}"></div>
+                    </div>
+                    <div class="form-group"><label>Address</label><input id="trnAddress" value="${Utils.escapeHtml(trainer?.address || '')}"></div>
+                    <div class="form-group"><label>Notes</label><textarea id="trnNotes" rows="2">${Utils.escapeHtml(trainer?.notes || '')}</textarea></div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" onclick="document.getElementById('trainerModal').remove()">Cancel</button>
+                        <button type="submit" class="btn btn-primary">${isEdit ? 'Update' : 'Create'}</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+}
+
+function saveTrainer(id) {
+    const payload = {
+        trainer_code: document.getElementById('trnCode').value.trim(),
+        name: document.getElementById('trnName').value.trim(),
+        phone: document.getElementById('trnPhone').value.trim(),
+        cnic: document.getElementById('trnCnic').value.trim() || null,
+        section: document.getElementById('trnSection').value,
+        hire_date: document.getElementById('trnHire').value,
+        monthly_salary: parseFloat(document.getElementById('trnSalary').value) || 0,
+        commission_pct: parseFloat(document.getElementById('trnCommission').value) || 0,
+        dob: document.getElementById('trnDob').value || null,
+        emergency_contact: document.getElementById('trnEmergency').value.trim() || null,
+        address: document.getElementById('trnAddress').value.trim() || null,
+        notes: document.getElementById('trnNotes').value.trim() || null,
+    };
+    if (id) payload.id = id;
+
+    fetch(`api/trainers.php?action=${id ? 'update' : 'create'}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    })
+        .then(res => res.json())
+        .then(data => {
+            if (!data.success) throw new Error(data.message || 'Save failed');
+            Utils.showNotification(id ? 'Trainer updated' : 'Trainer added', 'success');
+            document.getElementById('trainerModal').remove();
+            loadTrainersTable(1);
+        })
+        .catch(err => Utils.showNotification(err.message, 'error'));
+}
+
+function editTrainer(id) {
+    fetch(`api/trainers.php?action=get&id=${id}`)
+        .then(res => res.json())
+        .then(data => {
+            if (!data.success) throw new Error(data.message || 'Failed to load trainer');
+            showTrainerForm(data.data);
+        })
+        .catch(err => Utils.showNotification(err.message, 'error'));
+}
+
+function deactivateTrainer(id) {
+    if (!confirm('Deactivate this trainer? Existing member assignments stay for history — they just stop appearing in the assign dropdown.')) return;
+    fetch(`api/trainers.php?action=deactivate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id })
+    })
+        .then(res => res.json())
+        .then(data => {
+            if (!data.success) throw new Error(data.message || 'Failed');
+            Utils.showNotification('Trainer deactivated', 'success');
+            loadTrainersTable(1);
+        })
+        .catch(err => Utils.showNotification(err.message, 'error'));
+}
+
+function activateTrainer(id) {
+    fetch(`api/trainers.php?action=activate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id })
+    })
+        .then(res => res.json())
+        .then(data => {
+            if (!data.success) throw new Error(data.message || 'Failed');
+            Utils.showNotification('Trainer reactivated', 'success');
+            loadTrainersTable(1);
+        })
+        .catch(err => Utils.showNotification(err.message, 'error'));
+}
+
+/** Cache the trainer select list — pulled fresh whenever a member form opens. */
+let _trainerSelectCache = null;
+function fetchTrainerOptions(section) {
+    const q = new URLSearchParams({ action: 'select' });
+    if (section === 'men' || section === 'women') q.set('section', section);
+    return fetch(`api/trainers.php?${q.toString()}`)
+        .then(res => res.json())
+        .then(data => (data.success && Array.isArray(data.data)) ? data.data : []);
+}
+
+/** Populate the assigned-trainer <select> on the member form. */
+function populateAssignedTrainerSelect(currentId = '', section = '') {
+    const sel = document.getElementById('assignedTrainerId');
+    if (!sel) return;
+    sel.innerHTML = `<option value="">— None —</option><option disabled>Loading…</option>`;
+    fetchTrainerOptions(section)
+        .then(list => {
+            sel.innerHTML = `<option value="">— None —</option>` +
+                list.map(t => `<option value="${t.id}" ${String(t.id) === String(currentId) ? 'selected' : ''}>${Utils.escapeHtml(t.name)} (${Utils.escapeHtml(t.section)})</option>`).join('');
+        })
+        .catch(() => {
+            sel.innerHTML = `<option value="">— None —</option>`;
+        });
 }
 
 function getActivityActionLabel(action) {
@@ -4543,8 +4887,8 @@ function showUpdateDueFeeModal(memberId, gender, currentDueAmount, memberName) {
                     </div>
 
                     <div class="form-group">
-                        <div id="dueFeePreview" style="background: #f8fffb; color: #14291c; padding: 1rem; border-radius: 5px; margin-top: 1rem; border: 1px solid var(--border-color);">
-                            <strong style="color: #166534;">Preview:</strong> <span style="color: #4b7a5e;">New unpaid amount will be: <span id="previewAmount" style="color: #14291c; font-weight: bold;">${Utils.formatCurrency(currentDueAmount)}</span></span>
+                        <div id="dueFeePreview" style="background: var(--bg-secondary); color: var(--text-color); padding: 1rem; border-radius: 5px; margin-top: 1rem; border: 1px solid var(--border-color);">
+                            <strong style="color: var(--text-color);">Preview:</strong> <span style="color: var(--text-secondary);">New unpaid amount will be: <span id="previewAmount" style="color: var(--text-color); font-weight: bold;">${Utils.formatCurrency(currentDueAmount)}</span></span>
                         </div>
                     </div>
 
@@ -5837,6 +6181,20 @@ function loadImport() {
             <div id="importResults"></div>
                 </div>
 
+                <!-- Import device attendance (ZKTeco F22 / fingerprint export) -->
+                <div class="import-card">
+                    <h2>🕓 Import device attendance</h2>
+                    <p class="form-hint" style="margin:.25rem 0 .75rem;">Upload an attendance export from your ZKTeco / fingerprint device. Each scan is matched to a member (by member code, device PIN, or name) and added to attendance — nothing on the device changes.</p>
+                    <form id="attImportForm" enctype="multipart/form-data">
+                        <div class="form-group">
+                            <label>Attendance file (.xls, .xlsx, .csv) *</label>
+                            <input type="file" id="attImportFile" name="file" accept=".xls,.xlsx,.csv" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Import attendance</button>
+                    </form>
+                    <div id="attImportResults"></div>
+                </div>
+
                 <!-- Export/Download Section -->
                 <div class="export-card">
                     <h2>📤 Download Data</h2>
@@ -5942,6 +6300,12 @@ function loadImport() {
         e.preventDefault();
         handleImport();
     });
+
+    const attForm = document.getElementById('attImportForm');
+    if (attForm) attForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        handleAttendanceImport();
+    });
 }
 
 let isImporting = false;
@@ -6006,6 +6370,48 @@ function handleImport() {
             console.error('Import error:', err);
             Utils.showNotification('Error during import: ' + err.message, 'error');
             resultsDiv.innerHTML = `<div class="error">Import failed: ${err.message}</div>`;
+        });
+}
+
+function handleAttendanceImport() {
+    const form = document.getElementById('attImportForm');
+    const formData = new FormData(form);
+    const btn = form.querySelector('button[type="submit"]');
+    const out = document.getElementById('attImportResults');
+    btn.disabled = true;
+    btn.textContent = 'Importing…';
+    out.innerHTML = '<div class="loading">Reading the file and matching members…</div>';
+    fetch('api/import-attendance.php', { method: 'POST', body: formData })
+        .then(res => res.json())
+        .then(data => {
+            btn.disabled = false;
+            btn.textContent = 'Import attendance';
+            if (data.success) {
+                const r = data.results || {};
+                Utils.showNotification(data.message, 'success');
+                out.innerHTML = `
+                <div class="import-results">
+                    <h3>Attendance import</h3>
+                    <p><strong>Added: ${r.imported || 0}</strong> visit(s) · updated: ${r.updated || 0} · already there: ${r.duplicates || 0} · unmatched: ${r.unmatched || 0}</p>
+                    <p class="form-hint">Each member's scans for a day become one visit — first scan is the check-in, last scan the check-out.</p>
+                    ${(r.unmatched_list && r.unmatched_list.length) ? `
+                        <div class="duplicates">
+                            <h4>Not matched to a member (${r.unmatched}):</h4>
+                            <ul>${r.unmatched_list.map(u => `<li>${escapeHtml(u)}</li>`).join('')}</ul>
+                            <p class="form-hint">Tip: match these by giving the device user the member's code, or the same name as in the system.</p>
+                        </div>` : ''}
+                    ${(r.errors && r.errors.length) ? `<div class="errors"><h4>Skipped rows:</h4><ul>${r.errors.slice(0, 20).map(e => `<li>${escapeHtml(e)}</li>`).join('')}</ul></div>` : ''}
+                </div>`;
+            } else {
+                Utils.showNotification(data.message, 'error');
+                out.innerHTML = `<div class="error">${escapeHtml(data.message)}</div>`;
+            }
+        })
+        .catch(err => {
+            btn.disabled = false;
+            btn.textContent = 'Import attendance';
+            Utils.showNotification('Error during import: ' + err.message, 'error');
+            out.innerHTML = `<div class="error">Import failed: ${escapeHtml(err.message)}</div>`;
         });
 }
 
@@ -6109,8 +6515,8 @@ function renderOutboxReviewTable(title, sourceLabel, rows, note = '') {
         const queuedValue = formatOutboxReviewValue(row.queued, row.type);
         const currentValue = formatOutboxReviewValue(row.current, row.type);
         const differs = row.compare !== false && queuedValue !== currentValue;
-        const queuedStyle = differs ? 'color:#92400e;font-weight:700;' : 'color:#14291c;';
-        const currentStyle = differs ? 'color:#7f1d1d;font-weight:700;' : 'color:#14291c;';
+        const queuedStyle = differs ? 'color:#92400e;font-weight:700;' : 'color:var(--text-color);';
+        const currentStyle = differs ? 'color:#7f1d1d;font-weight:700;' : 'color:var(--text-color);';
 
         return `
             <tr>
@@ -6122,11 +6528,11 @@ function renderOutboxReviewTable(title, sourceLabel, rows, note = '') {
     }).join('');
 
     return `
-        <div style="margin-top:0.75rem;padding:0.9rem;border-radius:10px;background:#f8fafc;border:1px solid #cbd5e1;">
+        <div style="margin-top:0.75rem;padding:0.9rem;border-radius:10px;background:var(--bg-secondary);border:1px solid #cbd5e1;">
             <div style="display:flex;justify-content:space-between;gap:0.75rem;flex-wrap:wrap;align-items:center;">
                 <div>
                     <strong style="color:#0f172a;">${escapeSyncHtml(title)}</strong>
-                    <div style="margin-top:0.2rem;color:#475569;font-size:0.9rem;">${escapeSyncHtml(sourceLabel)}</div>
+                    <div style="margin-top:0.2rem;color:var(--text-secondary);font-size:0.9rem;">${escapeSyncHtml(sourceLabel)}</div>
                 </div>
                 <span style="padding:0.28rem 0.6rem;border-radius:999px;background:#ecfdf3;color:#166534;font-size:0.8rem;font-weight:700;">Read only • ${escapeSyncHtml(changedLabel)}</span>
             </div>
@@ -6307,9 +6713,11 @@ function seedMemberResolutionForm(item, liveRecord, base = 'queued') {
     document.getElementById('email').value = baseRecord.email || overlayRecord?.email || '';
     document.getElementById('address').value = baseRecord.address || overlayRecord?.address || '';
     document.getElementById('joinDate').value = baseRecord.join_date || overlayRecord?.join_date || '';
-    document.getElementById('membershipType').value = baseRecord.membership_type || overlayRecord?.membership_type || 'Basic';
+    populateMembershipTypeOptions(baseRecord.membership_type || overlayRecord?.membership_type || '');
     document.getElementById('admissionFee').value = baseRecord.admission_fee ?? overlayRecord?.admission_fee ?? 0;
     document.getElementById('monthlyFee').value = baseRecord.monthly_fee ?? overlayRecord?.monthly_fee ?? 0;
+    document.getElementById('trainerFee').value = baseRecord.ptf_fee ?? overlayRecord?.ptf_fee ?? 0;
+    populateAssignedTrainerSelect(baseRecord.assigned_trainer_id ?? overlayRecord?.assigned_trainer_id ?? '', baseRecord.gender || overlayRecord?.gender || '');
     document.getElementById('lockerFee').value = baseRecord.locker_fee ?? overlayRecord?.locker_fee ?? 0;
     document.getElementById('nextFeeDueDate').value = baseRecord.next_fee_due_date || overlayRecord?.next_fee_due_date || '';
     document.getElementById('status').value = baseRecord.status || overlayRecord?.status || 'active';
@@ -6487,9 +6895,9 @@ function renderOfflineOutboxModuleCard(moduleKey) {
             <div style="padding:0.75rem 0;border-top:1px solid rgba(148,163,184,0.18);">
                 <div style="display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;align-items:center;">
                     <strong>${escapeSyncHtml(item.action || 'item')} • ${escapeSyncHtml(formatOfflineOutboxAge(item.createdAt))}</strong>
-                    <span style="font-size:0.85rem;color:#64748b;">Attempts: ${Number(item.attempts || 0)}</span>
+                    <span style="font-size:0.85rem;color:var(--text-secondary);">Attempts: ${Number(item.attempts || 0)}</span>
                 </div>
-                <div style="margin-top:0.25rem;color:#64748b;font-size:0.9rem;">Source: ${escapeSyncHtml(item.source || 'outbox')}</div>
+                <div style="margin-top:0.25rem;color:var(--text-secondary);font-size:0.9rem;">Source: ${escapeSyncHtml(item.source || 'outbox')}</div>
                 ${itemError}
                 ${hasConflict ? '<div style="margin-top:0.35rem;color:#7c2d12;font-size:0.9rem;font-weight:700;">Conflict retained for manual review.</div>' : ''}
                 ${reviewButton}
@@ -6512,12 +6920,12 @@ function renderOfflineOutboxModuleCard(moduleKey) {
     `).join('');
 
     return `
-        <div style="padding:1rem 1.15rem;border:1px solid ${pendingCount > 0 ? '#f59e0b' : '#bbf7d0'};border-radius:12px;background:${pendingCount > 0 ? '#fffbeb' : '#f8fafc'};">
+        <div style="padding:1rem 1.15rem;border:1px solid ${pendingCount > 0 ? '#f59e0b' : '#bbf7d0'};border-radius:12px;background:${pendingCount > 0 ? '#fffbeb' : 'var(--bg-secondary)'};">
             <div style="display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;align-items:flex-start;">
                 <div>
                     <div style="font-size:0.82rem;text-transform:uppercase;letter-spacing:0.08em;color:#166534;font-weight:700;">${escapeSyncHtml(moduleState.label)}</div>
                     <h4 style="margin:0.35rem 0 0;">${pendingCount} pending${failedCount ? `, ${failedCount} with errors` : ''}${conflictCount ? `, ${conflictCount} need review` : ''}</h4>
-                    <p style="margin:0.45rem 0 0;color:#475569;">${summary.persistenceMode === 'session' ? 'Session-only queue.' : 'Stored locally until replay.'}${conflictCount ? ' Conflicting edits stay queued until you review or resolve them.' : ''}</p>
+                    <p style="margin:0.45rem 0 0;color:var(--text-secondary);">${summary.persistenceMode === 'session' ? 'Session-only queue.' : 'Stored locally until replay.'}${conflictCount ? ' Conflicting edits stay queued until you review or resolve them.' : ''}</p>
                     ${latestIssue ? `<p style="margin:0.35rem 0 0;color:${latestIssueColor};">Last issue: ${escapeSyncHtml(latestIssue.message || 'Unknown error')}</p>` : ''}
                 </div>
                 <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.5rem;">
@@ -6526,13 +6934,13 @@ function renderOfflineOutboxModuleCard(moduleKey) {
                 </div>
             </div>
             <div style="margin-top:0.9rem;">
-                ${items.length ? itemRows : '<div style="color:#64748b;">No queued items right now.</div>'}
+                ${items.length ? itemRows : '<div style="color:var(--text-secondary);">No queued items right now.</div>'}
             </div>
             ${conflictCount ? `
             <div style="margin-top:1rem;padding-top:0.75rem;border-top:1px solid rgba(148,163,184,0.18);">
                 <strong style="color:#7c2d12;">Conflict review queue</strong>
                 <p style="margin:0.35rem 0 0;color:#7c2d12;font-size:0.9rem;">These queued edits need a human compare step before retrying.</p>
-                ${conflictReviewRows || '<div style="margin-top:0.5rem;color:#64748b;">Conflict items are already shown above.</div>'}
+                ${conflictReviewRows || '<div style="margin-top:0.5rem;color:var(--text-secondary);">Conflict items are already shown above.</div>'}
                 ${conflictItems.length > 5 ? `<div style="margin-top:0.5rem;color:#7c2d12;font-size:0.88rem;">... and ${conflictItems.length - 5} more conflict${conflictItems.length - 5 === 1 ? '' : 's'} pending review.</div>` : ''}
             </div>` : ''}
         </div>
@@ -6550,7 +6958,7 @@ function loadOfflineOutbox() {
             <div style="display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;align-items:center;">
                 <div>
                     <h3 style="margin:0;">Offline outbox</h3>
-                    <p style="margin:0.35rem 0 0;color:#475569;">Queued attendance, member, and payment writes live here. Conflicting member/payment edits stay queued until you resolve them manually. Nothing is auto-merged.</p>
+                    <p style="margin:0.35rem 0 0;color:var(--text-secondary);">Queued attendance, member, and payment writes live here. Conflicting member/payment edits stay queued until you resolve them manually. Nothing is auto-merged.</p>
                 </div>
                 <button type="button" class="btn btn-secondary" ${retryAllDisabled ? 'disabled' : ''} onclick="retryAllOfflineOutbox()">Retry all</button>
             </div>
@@ -6631,9 +7039,9 @@ function loadSync() {
             : '<button class="btn btn-primary" id="syncNowBtn">🔄 Send to Online</button><button class="btn btn-secondary" id="retryFailedSyncBtn">↺ Retry Failed Only</button>'}
                 </div>
             </div>
-            <div style="background: #ffffff; color: #14291c; padding: 1.5rem; border-radius: 10px; box-shadow: var(--shadow); margin-bottom: 1.5rem; border: 1px solid var(--border-color);">
-                <h3 style="color: #166534;">Current Status</h3>
-                <div id="syncStatus" style="margin-top: 1rem; color: #4b7a5e;">
+            <div style="background: var(--bg-secondary); color: var(--text-color); padding: 1.5rem; border-radius: 10px; box-shadow: var(--shadow); margin-bottom: 1.5rem; border: 1px solid var(--border-color);">
+                <h3 style="color: var(--text-color);">Current Status</h3>
+                <div id="syncStatus" style="margin-top: 1rem; color: var(--text-secondary);">
                     <p>${isOnline
             ? 'Click "Download to Local" to copy online data into your local database.'
             : 'Click "Send to Online" to upload local data to the online server. Use Retry Failed Only if some records already failed.'}</p>
@@ -6641,16 +7049,16 @@ function loadSync() {
             </div>
             <div id="offlineOutboxSummary"></div>
             <div style="display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));">
-                <div style="background: #ffffff; color: #14291c; padding: 1.5rem; border-radius: 10px; box-shadow: var(--shadow); border: 1px solid var(--border-color);">
-                    <h3 style="color: #166534;">Recent Activity</h3>
+                <div style="background: var(--bg-secondary); color: var(--text-color); padding: 1.5rem; border-radius: 10px; box-shadow: var(--shadow); border: 1px solid var(--border-color);">
+                    <h3 style="color: var(--text-color);">Recent Activity</h3>
                     <div id="syncHistory" style="margin-top: 1rem;">
                         <div class="loading">Loading sync history...</div>
                     </div>
                 </div>
                 ${isOnline ? '' : `
-                <div style="background: #ffffff; color: #14291c; padding: 1.5rem; border-radius: 10px; box-shadow: var(--shadow); border: 1px solid var(--border-color);">
-                    <h3 style="color: #166534;">Failed Records</h3>
-                    <div id="failedSyncRecords" style="margin-top: 1rem; color: #4b7a5e;">
+                <div style="background: var(--bg-secondary); color: var(--text-color); padding: 1.5rem; border-radius: 10px; box-shadow: var(--shadow); border: 1px solid var(--border-color);">
+                    <h3 style="color: var(--text-color);">Failed Records</h3>
+                    <div id="failedSyncRecords" style="margin-top: 1rem; color: var(--text-secondary);">
                         <div class="loading">Loading failed records...</div>
                     </div>
                 </div>`}
@@ -6693,15 +7101,15 @@ function renderSyncStatusCard(type, title, data = {}) {
     const note = data.message || '';
 
     return `
-        <div style="padding: 1rem; background: ${background}; border-radius: 10px; color: #14291c; border: 1px solid ${border};">
+        <div style="padding: 1rem; background: ${background}; border-radius: 10px; color: var(--text-color); border: 1px solid ${border};">
             <strong style="color: ${color};">${escapeSyncHtml(title)}</strong>
-            ${note ? `<p style="margin: 0.5rem 0 0 0; color: #4b7a5e;">${escapeSyncHtml(note)}</p>` : ''}
-            ${typeof data.total_synced !== 'undefined' ? `<p style="margin: 0.5rem 0 0 0;">Records Synced: <strong style="color: #166534;">${synced}</strong></p>` : ''}
+            ${note ? `<p style="margin: 0.5rem 0 0 0; color: var(--text-secondary);">${escapeSyncHtml(note)}</p>` : ''}
+            ${typeof data.total_synced !== 'undefined' ? `<p style="margin: 0.5rem 0 0 0;">Records Synced: <strong style="color: var(--text-color);">${synced}</strong></p>` : ''}
             ${typeof data.total_failed !== 'undefined' ? `<p style="margin: 0.35rem 0 0 0;">Records Failed: <strong style="color: ${failed > 0 ? '#DC2626' : '#166534'};">${failed}</strong></p>` : ''}
             ${errors.length ? `
                 <div style="margin-top: 0.75rem;">
                     <strong style="color: #B45309;">Main error reasons:</strong>
-                    <ul style="margin: 0.35rem 0 0 1rem; color: #4b7a5e;">
+                    <ul style="margin: 0.35rem 0 0 1rem; color: var(--text-secondary);">
                         ${errors.slice(0, 5).map(error => `<li>${escapeSyncHtml(error)}</li>`).join('')}
                         ${errors.length > 5 ? `<li>... and ${errors.length - 5} more</li>` : ''}
                     </ul>
@@ -6863,7 +7271,7 @@ async function loadSyncHistory() {
         const sessions = Array.isArray(data?.data) ? data.data : [];
 
         if (!sessions.length) {
-            syncHistory.innerHTML = '<p style="color: #4b7a5e;">No recent send/download activity yet.</p>';
+            syncHistory.innerHTML = '<p style="color: var(--text-secondary);">No recent send/download activity yet.</p>';
             return;
         }
 
@@ -6873,13 +7281,13 @@ async function loadSyncHistory() {
                 <div style="padding: 0.85rem 0; border-bottom: 1px solid #BBF7D0;">
                     <div style="display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; align-items: center;">
                         <div>
-                            <strong style="color: #14291c;">${escapeSyncHtml((session.session_type || 'sync').replace(/_/g, ' '))}</strong>
-                            <div style="font-size: 0.9rem; color: #4b7a5e; margin-top: 0.2rem;">Started: ${escapeSyncHtml(session.started_at || 'N/A')}</div>
-                            <div style="font-size: 0.9rem; color: #4b7a5e;">Finished: ${escapeSyncHtml(session.completed_at || 'Still running')}</div>
+                            <strong style="color: var(--text-color);">${escapeSyncHtml((session.session_type || 'sync').replace(/_/g, ' '))}</strong>
+                            <div style="font-size: 0.9rem; color: var(--text-secondary); margin-top: 0.2rem;">Started: ${escapeSyncHtml(session.started_at || 'N/A')}</div>
+                            <div style="font-size: 0.9rem; color: var(--text-secondary);">Finished: ${escapeSyncHtml(session.completed_at || 'Still running')}</div>
                         </div>
                         <div style="text-align: right;">
                             <div style="font-weight: 700; color: ${statusColor}; text-transform: capitalize;">${escapeSyncHtml(session.status || 'unknown')}</div>
-                            <div style="font-size: 0.9rem; color: #4b7a5e;">Sent: ${Number(session.records_synced || 0)} | Failed: ${Number(session.records_failed || 0)}</div>
+                            <div style="font-size: 0.9rem; color: var(--text-secondary);">Sent: ${Number(session.records_synced || 0)} | Failed: ${Number(session.records_failed || 0)}</div>
                         </div>
                     </div>
                     ${session.error_message ? `<div style="margin-top: 0.5rem; color: #B45309; font-size: 0.9rem; white-space: pre-line;">${escapeSyncHtml(session.error_message)}</div>` : ''}
@@ -6904,7 +7312,7 @@ async function loadFailedSyncRecords() {
         const records = Array.isArray(payload.records) ? payload.records : [];
 
         if (!records.length) {
-            failedContainer.innerHTML = '<p style="color: #166534;">No failed records right now. Good.</p>';
+            failedContainer.innerHTML = '<p style="color: var(--text-color);">No failed records right now. Good.</p>';
             return;
         }
 
@@ -6914,12 +7322,12 @@ async function loadFailedSyncRecords() {
                 ${records.map(record => `
                     <div style="padding: 0.9rem; border: 1px solid #FECACA; background: #FEF2F2; border-radius: 10px;">
                         <div style="display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; align-items: center;">
-                            <strong style="color: #14291c;">${escapeSyncHtml(record.table_name)} #${Number(record.record_id || 0)}</strong>
+                            <strong style="color: var(--text-color);">${escapeSyncHtml(record.table_name)} #${Number(record.record_id || 0)}</strong>
                             <span style="font-size: 0.85rem; color: #B45309;">Attempts: ${Number(record.sync_attempts || 0)}</span>
                         </div>
-                        <div style="margin-top: 0.35rem; color: #4b7a5e; font-size: 0.92rem;">${escapeSyncHtml(record.record_summary || 'Record summary unavailable')}</div>
+                        <div style="margin-top: 0.35rem; color: var(--text-secondary); font-size: 0.92rem;">${escapeSyncHtml(record.record_summary || 'Record summary unavailable')}</div>
                         <div style="margin-top: 0.45rem; color: #DC2626; font-size: 0.92rem;"><strong>Reason:</strong> ${escapeSyncHtml(record.last_error || 'Unknown error')}</div>
-                        <div style="margin-top: 0.35rem; color: #4b7a5e; font-size: 0.85rem;">Last try: ${escapeSyncHtml(record.updated_at || 'N/A')}</div>
+                        <div style="margin-top: 0.35rem; color: var(--text-secondary); font-size: 0.85rem;">Last try: ${escapeSyncHtml(record.updated_at || 'N/A')}</div>
                     </div>
                 `).join('')}
             </div>
@@ -7098,7 +7506,7 @@ function startCamera() {
                     <button class="modal-close" onclick="stopCamera()">&times;</button>
                 </div>
                 <div class="modal-body" style="text-align: center;">
-                    <video id="cameraVideo" autoplay playsinline style="width: 100%; max-height: 400px; background: #f8fffb; border-radius: 8px;"></video>
+                    <video id="cameraVideo" autoplay playsinline style="width: 100%; max-height: 400px; background: var(--bg-secondary); border-radius: 8px;"></video>
                     <canvas id="cameraCanvas" style="display: none;"></canvas>
                 </div>
                 <div class="modal-footer" style="justify-content: center;">
@@ -7444,6 +7852,39 @@ function renderDetailsSettings(s) {
             ${field('set_phone', 'Phone', s.phone, '0300 1234567', 'tel')}
         </div>
         <div class="form-row">
+            ${field('set_location', 'City / Location', s.location, 'Faisalabad')}
+            <div class="form-group">
+                <label>Logo</label>
+                <div style="display:flex;align-items:center;gap:.75rem;">
+                    <img id="brandLogoPreview" src="${packageEscHtml(s.logo_url || 'assets/images/bhatti-logo.png')}" alt="Gym logo" style="width:46px;height:46px;object-fit:contain;border:1px solid var(--border-color);border-radius:8px;background:#fff;flex:0 0 auto;">
+                    <input type="hidden" id="set_logo_url" value="${packageEscHtml(s.logo_url || '')}">
+                    ${admin ? '<input type="file" id="brandLogoFile" accept="image/png,image/jpeg,image/webp,image/gif" onchange="uploadBrandLogo(this)" style="flex:1;">' : ''}
+                </div>
+                <small class="form-hint" style="display:block;margin-top:.35rem;">Shows on the login page, dashboard, splash screen and browser tab. Then click Save Details.</small>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Accent colour</label>
+                <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;">
+                    <input type="color" id="set_theme_accent" value="${packageEscHtml(s.theme_accent || '#f5c518')}" ${dis} style="width:52px;height:38px;padding:2px;border:1px solid var(--border-color);border-radius:8px;background:#1a1a1a;cursor:pointer;">
+                    ${admin ? '<button type="button" class="btn btn-secondary" style="padding:.35rem .7rem;" onclick="document.getElementById(\'set_theme_accent\').value=\'#f5c518\'">Reset to gold</button>' : ''}
+                    <span class="form-hint">Buttons, highlights &amp; active items.</span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Font style</label>
+                <select id="set_font_family" ${dis}>
+                    <option value="">Default (Bebas + Hanken)</option>
+                    <option value="inter">Inter — clean</option>
+                    <option value="poppins">Poppins — rounded</option>
+                    <option value="montserrat">Montserrat — modern</option>
+                    <option value="oswald">Oswald + Roboto — condensed</option>
+                    <option value="playfair">Playfair + Lato — elegant</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-row">
             ${field('set_email', 'Email', s.email, 'gym@example.com', 'email')}
             ${field('set_address_url', 'Google Maps Link', s.address_url, 'https://maps.app.goo.gl/…', 'url')}
         </div>
@@ -7461,6 +7902,8 @@ function renderDetailsSettings(s) {
         </div>
         ${admin ? '<button class="btn btn-primary" onclick="saveDetailsSettings()">Save Details</button>' : ''}
       </div>`;
+    const fontSel = document.getElementById('set_font_family');
+    if (fontSel && s.font_family) fontSel.value = s.font_family;
 }
 
 function saveDetailsSettings() {
@@ -7468,6 +7911,10 @@ function saveDetailsSettings() {
     const val = id => { const e = document.getElementById(id); return e ? e.value.trim() : ''; };
     const payload = {
         gym_name: val('set_gym_name'),
+        location: val('set_location'),
+        logo_url: val('set_logo_url'),
+        theme_accent: val('set_theme_accent'),
+        font_family: val('set_font_family'),
         phone: val('set_phone'),
         email: val('set_email'),
         address_url: val('set_address_url'),
@@ -7493,6 +7940,33 @@ function saveDetailsSettings() {
         .catch(err => {
             console.error('Details save error:', err);
             Utils.showNotification('Error saving details', 'error');
+        });
+}
+
+// Upload a gym logo, then stash its URL for the Details save (branding.js
+// applies it across the app once saved).
+function uploadBrandLogo(input) {
+    if (!requireAdminAccess('change gym details')) return;
+    const f = input.files && input.files[0];
+    if (!f) return;
+    const fd = new FormData();
+    fd.append('image', f);
+    fetch('api/upload-branding.php', { method: 'POST', body: fd })
+        .then(res => res.json())
+        .then(d => {
+            if (d.success) {
+                const url = document.getElementById('set_logo_url');
+                const prev = document.getElementById('brandLogoPreview');
+                if (url) url.value = d.path;
+                if (prev) prev.src = d.path;
+                Utils.showNotification('Logo uploaded — click Save Details to apply it.', 'success');
+            } else {
+                Utils.showNotification(d.message || 'Logo upload failed', 'error');
+            }
+        })
+        .catch(err => {
+            console.error('Logo upload error:', err);
+            Utils.showNotification('Error uploading logo', 'error');
         });
 }
 
@@ -7594,15 +8068,22 @@ function _regById(id) { return _registrationsCache.find(r => String(r.id) === St
 function showRegistrationDetails(id) {
     const r = _regById(id);
     if (!r) return;
-    const row = (label, val) => `<div class="detail-item" style="display:flex;justify-content:space-between;gap:1rem;padding:.5rem 0;border-bottom:1px solid var(--border-color);"><span class="detail-label">${label}</span><strong>${escapeHtml(val || '-')}</strong></div>`;
+    let d = {};
+    if (r.details) { try { d = JSON.parse(r.details) || {}; } catch (e) { d = {}; } }
+    const row = (label, val) => (val ? `<div class="detail-item" style="display:flex;justify-content:space-between;gap:1rem;padding:.5rem 0;border-bottom:1px solid var(--border-color);"><span class="detail-label">${label}</span><strong style="text-align:right;">${escapeHtml(String(val))}</strong></div>` : '');
+    const ml = { height: 'Height', weight: 'Weight', chest: 'Chest', waist: 'Waist', shoulder: 'Shoulder', bicep: 'Bicep', forearm: 'Forearm', hip: 'Hip', thigh: 'Thigh', calf: 'Calf' };
+    const measures = Object.keys(ml).filter(k => d[k]).map(k => ml[k] + ': ' + d[k]).join(' · ');
     const html = `
         <div class="modal" id="regDetailModal">
             <div class="modal-content">
                 <div class="modal-header"><h2>Request details</h2><button class="modal-close" onclick="document.getElementById('regDetailModal').remove()">&times;</button></div>
                 <div class="modal-body">
-                    ${row('Name', r.name)}${row('Phone', r.phone)}${row('Side', r.gender === 'women' ? 'Women' : 'Men')}
-                    ${row('Address', r.address)}${row('CNIC', r.cnic)}${row('Date of birth', r.dob)}
-                    ${row('Emergency name', r.emergency_name)}${row('Emergency phone', r.emergency_phone)}
+                    ${row('Name', r.name)}${row('Phone (Cell)', r.phone)}${row('CNIC', r.cnic)}
+                    ${row('Side', r.gender === 'women' ? 'Women' : 'Men')}
+                    ${row("Husband's / Father's name", d.father_name)}${row('Occupation', d.occupation)}
+                    ${row('Date of birth', r.dob)}${row('Email', d.email)}
+                    ${row('Residence address', r.address)}${row('Office address', d.office_address)}${row('Office phone', d.office_phone)}
+                    ${row('Blood group', d.blood_group)}${row('Measurements', measures)}
                     ${row('Status', r.status)}${r.assigned_member_code ? row('Member code', r.assigned_member_code) : ''}
                     ${r.rejection_reason ? row('Reason', r.rejection_reason) : ''}
                 </div>
@@ -7628,11 +8109,13 @@ function showApproveRegistration(id) {
                         <strong>${escapeHtml(r.name || '')}</strong> · ${escapeHtml(r.phone || '')} · ${r.gender === 'women' ? 'Women' : 'Men'}
                         ${r.cnic ? '<br>CNIC: ' + escapeHtml(r.cnic) : ''}${r.address ? '<br>' + escapeHtml(r.address) : ''}
                     </div>
+                    <div class="form-group"><label>Side (which section)</label><select id="ar_side"><option value="men" ${r.gender !== 'women' ? 'selected' : ''}>Men</option><option value="women" ${r.gender === 'women' ? 'selected' : ''}>Women</option></select></div>
                     <div class="form-group"><label>Member code / serial *</label><input type="text" id="ar_code" required placeholder="Loading suggestion…"></div>
                     <div class="form-group"><label>Join date</label><input type="date" id="ar_join" value="${today}"></div>
                     <div class="form-group"><label>Admission fee</label><input type="number" id="ar_admission" min="0" step="any" value="0"></div>
                     <div class="form-group"><label>Monthly fee</label><input type="number" id="ar_monthly" min="0" step="any" value="0"></div>
                     <div class="form-group"><label>Locker fee</label><input type="number" id="ar_locker" min="0" step="any" value="0"></div>
+                    <div class="form-group"><label>Personal training fee (PTF)</label><input type="number" id="ar_ptf" min="0" step="any" value="0"></div>
                     <div class="form-group"><label>Amount paid now</label><input type="number" id="ar_paid" min="0" step="any" value="0"></div>
                     <div class="form-group"><label>Payment method</label><select id="ar_method"><option>Cash</option><option>Card</option><option>Bank Transfer</option><option>Easypaisa</option><option>JazzCash</option></select></div>
                     <div class="form-group"><label>Next fee due date</label><input type="date" id="ar_nextdue" value="${nextDue}"></div>
@@ -7656,11 +8139,13 @@ function closeApproveRegModal() { document.getElementById('approveRegModal')?.re
 function saveApproveRegistration() {
     const payload = {
         id: document.getElementById('ar_id')?.value,
+        gender: document.getElementById('ar_side')?.value || 'men',
         member_code: document.getElementById('ar_code')?.value?.trim(),
         join_date: document.getElementById('ar_join')?.value,
         admission_fee: document.getElementById('ar_admission')?.value || 0,
         monthly_fee: document.getElementById('ar_monthly')?.value || 0,
         locker_fee: document.getElementById('ar_locker')?.value || 0,
+        ptf_fee: document.getElementById('ar_ptf')?.value || 0,
         amount_paid: document.getElementById('ar_paid')?.value || 0,
         payment_method: document.getElementById('ar_method')?.value || 'Cash',
         next_fee_due_date: document.getElementById('ar_nextdue')?.value
@@ -7688,3 +8173,144 @@ function rejectRegistration(id) {
         })
         .catch(err => Utils.showNotification(err.message, 'error'));
 }
+
+// =============================================================================
+// REAL-TIME UNPAID-ENTRY ALERTS
+// Polls api/alerts.php; when an unpaid/overdue member scans in, fires a browser
+// notification (works on the front-desk laptop AND the owner's phone browser),
+// beeps, and shows a live feed panel. No hardware needed — the F22 already
+// pushes scans to the cloud, iclock.php records the alert, this surfaces it.
+// =============================================================================
+(function () {
+    var POLL_MS = 12000;
+    var seenIds = {};
+    var timer = null;
+    var panelOpen = false;
+
+    window.startEntryAlerts = function () {
+        try {
+            if ('Notification' in window && Notification.permission === 'default') {
+                setTimeout(function () { Notification.requestPermission(); }, 3000);
+            }
+        } catch (e) {}
+        injectAlertUI();
+        pollEntryAlerts();
+        if (timer) clearInterval(timer);
+        timer = setInterval(pollEntryAlerts, POLL_MS);
+    };
+
+    function injectAlertUI() {
+        if (document.getElementById('entryAlertBell')) return;
+        var css = document.createElement('style');
+        css.textContent =
+            '#entryAlertBell{position:fixed;bottom:18px;right:18px;width:56px;height:56px;border-radius:50%;background:#1f2937;color:#fff;border:2px solid #374151;display:flex;align-items:center;justify-content:center;font-size:24px;cursor:pointer;z-index:9998;box-shadow:0 4px 16px rgba(0,0,0,.3);transition:transform .15s}' +
+            '#entryAlertBell:hover{transform:scale(1.06)}' +
+            '#entryAlertBell.alarm{background:#dc2626;border-color:#ef4444;animation:eaPulse 1s infinite}' +
+            '@keyframes eaPulse{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.5)}50%{box-shadow:0 0 0 12px rgba(220,38,38,0)}}' +
+            '#entryAlertBadge{position:absolute;top:-4px;right:-4px;min-width:20px;height:20px;padding:0 5px;border-radius:10px;background:#ef4444;color:#fff;font-size:12px;font-weight:700;display:none;align-items:center;justify-content:center}' +
+            '#entryAlertPanel{position:fixed;bottom:84px;right:18px;width:340px;max-width:calc(100vw - 36px);max-height:60vh;overflow-y:auto;background:#111827;border:1px solid #374151;border-radius:12px;z-index:9998;display:none;box-shadow:0 8px 32px rgba(0,0,0,.5)}' +
+            '#entryAlertPanel .eah{padding:12px 16px;border-bottom:1px solid #374151;display:flex;align-items:center;gap:8px;position:sticky;top:0;background:#111827}' +
+            '#entryAlertPanel .eah b{font-size:15px;color:#f9fafb;flex:1}' +
+            '#entryAlertPanel .eah button{background:transparent;border:1px solid #374151;color:#9ca3af;font-size:11px;padding:4px 8px;border-radius:6px;cursor:pointer}' +
+            '.eaItem{padding:12px 16px;border-bottom:1px solid #1f2937}' +
+            '.eaItem .nm{font-weight:600;color:#f9fafb;font-size:14px}' +
+            '.eaItem .meta{color:#9ca3af;font-size:12px;margin-top:2px}' +
+            '.eaItem .amt{color:#f87171;font-weight:700}' +
+            '.eaEmpty{padding:28px 16px;text-align:center;color:#6b7280;font-size:13px}';
+        document.head.appendChild(css);
+
+        var bell = document.createElement('div');
+        bell.id = 'entryAlertBell';
+        bell.title = 'Unpaid-entry alerts';
+        bell.innerHTML = '🔔<span id="entryAlertBadge">0</span>';
+        bell.onclick = function () {
+            panelOpen = !panelOpen;
+            document.getElementById('entryAlertPanel').style.display = panelOpen ? 'block' : 'none';
+            if (panelOpen) markAllSeen();
+        };
+        document.body.appendChild(bell);
+
+        var panel = document.createElement('div');
+        panel.id = 'entryAlertPanel';
+        panel.innerHTML = '<div class="eah"><b>Unpaid entries today</b>' +
+            '<button onclick="__markAlertsSeen()">Clear</button></div>' +
+            '<div id="entryAlertList"><div class="eaEmpty">No unpaid entries yet today.</div></div>';
+        document.body.appendChild(panel);
+    }
+
+    function pollEntryAlerts() {
+        if (typeof Utils !== 'undefined' && Utils.isOnline && !Utils.isOnline()) return;
+        fetch('api/alerts.php?action=recent', { headers: { 'Accept': 'application/json' } })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (data) {
+                if (!data || !data.success) return;
+                renderAlertList(data.alerts || []);
+                var fresh = (data.alerts || []).filter(function (a) { return Number(a.seen) === 0 && !seenIds[a.id]; });
+                var bell = document.getElementById('entryAlertBell');
+                var badge = document.getElementById('entryAlertBadge');
+                if (data.unseen > 0) {
+                    if (bell) bell.classList.add('alarm');
+                    if (badge) { badge.style.display = 'flex'; badge.textContent = data.unseen; }
+                } else {
+                    if (bell) bell.classList.remove('alarm');
+                    if (badge) badge.style.display = 'none';
+                }
+                fresh.forEach(function (a) { seenIds[a.id] = true; fireNotification(a); });
+                if (fresh.length) beep();
+            })
+            .catch(function () {});
+    }
+
+    function renderAlertList(alerts) {
+        var el = document.getElementById('entryAlertList');
+        if (!el) return;
+        if (!alerts.length) { el.innerHTML = '<div class="eaEmpty">No unpaid entries yet today.</div>'; return; }
+        el.innerHTML = alerts.map(function (a) {
+            var when = (a.entered_at || '').substr(11, 5);
+            var od = a.days_overdue != null ? (a.days_overdue + 'd overdue') : 'overdue';
+            var amt = Number(a.due_amount) > 0 ? ' · <span class="amt">Rs ' + Number(a.due_amount).toLocaleString() + '</span>' : '';
+            var dot = Number(a.seen) === 0 ? ' 🔴' : '';
+            return '<div class="eaItem"><div class="nm">' + esc(a.name || 'Member') + dot + '</div>' +
+                '<div class="meta">' + esc(a.member_code || '') + ' · ' + esc(od) + amt + ' · entered ' + when + '</div></div>';
+        }).join('');
+    }
+
+    function fireNotification(a) {
+        try {
+            if (!('Notification' in window) || Notification.permission !== 'granted') return;
+            var body = (a.member_code ? a.member_code + ' · ' : '') +
+                (a.days_overdue != null ? a.days_overdue + ' days overdue' : 'fee overdue') +
+                (Number(a.due_amount) > 0 ? ' · Rs ' + Number(a.due_amount).toLocaleString() : '');
+            var n = new Notification('⚠️ Unpaid member entered: ' + (a.name || 'Member'), {
+                body: body, tag: 'entry-' + a.id, requireInteraction: false
+            });
+            setTimeout(function () { try { n.close(); } catch (e) {} }, 8000);
+        } catch (e) {}
+    }
+
+    var audioCtx = null;
+    function beep() {
+        try {
+            audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+            var o = audioCtx.createOscillator(), g = audioCtx.createGain();
+            o.connect(g); g.connect(audioCtx.destination);
+            o.type = 'sine'; o.frequency.value = 880;
+            g.gain.setValueAtTime(0.15, audioCtx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+            o.start(); o.stop(audioCtx.currentTime + 0.4);
+        } catch (e) {}
+    }
+
+    function markAllSeen() {
+        fetch('api/alerts.php?action=mark_seen', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+            .then(function () {
+                var bell = document.getElementById('entryAlertBell');
+                var badge = document.getElementById('entryAlertBadge');
+                if (bell) bell.classList.remove('alarm');
+                if (badge) badge.style.display = 'none';
+            }).catch(function () {});
+    }
+    window.__markAlertsSeen = markAllSeen;
+
+    function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]; }); }
+})();
