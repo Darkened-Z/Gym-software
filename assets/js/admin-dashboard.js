@@ -350,6 +350,7 @@ function switchSection(section) {
         'reports': 'Reports',
         'staff': 'Staff',
         'trainers': 'Trainers',
+        'entry-alerts': 'Entry Alerts',
         'activity-log': 'Activity Log',
         'import': 'Import / Download',
         'sync': 'Sync / Backup',
@@ -419,6 +420,9 @@ function loadSection(section) {
             break;
         case 'trainers':
             loadTrainers();
+            break;
+        case 'entry-alerts':
+            loadEntryAlertsSection();
             break;
         case 'activity-log':
             loadActivityLog();
@@ -8314,3 +8318,137 @@ function rejectRegistration(id) {
 
     function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]; }); }
 })();
+
+// =============================================================================
+// ENTRY ALERTS — dedicated dashboard section (full history + WhatsApp reminders)
+// =============================================================================
+function loadEntryAlertsSection() {
+    var body = document.getElementById('contentBody');
+    if (!body) return;
+    body.innerHTML = '<div class="loading">Loading alerts...</div>';
+
+    Promise.all([
+        fetch('api/alerts.php?action=recent&limit=100').then(function (r) { return r.json(); }).catch(function () { return { alerts: [] }; }),
+        fetch('api/alerts.php?action=stats').then(function (r) { return r.json(); }).catch(function () { return {}; })
+    ]).then(function (res) {
+        renderEntryAlertsSection(res[0] || {}, res[1] || {});
+    });
+}
+
+// Normalise to a valid Pakistani mobile in wa.me form (923XXXXXXXXX), or null.
+// Rejects the fake auto-generated numbers (e.g. 0000000002) that the F22
+// user-sync created for members enrolled directly on the device.
+function eaNormalisePhone(phone) {
+    var p = String(phone || '').replace(/[^0-9]/g, '');
+    if (p.indexOf('92') === 0) p = p.slice(2);            // strip country code
+    else if (p.indexOf('0') === 0) p = p.slice(1);        // strip leading 0
+    // A real PK mobile is now 10 digits starting with 3 (e.g. 3001112201).
+    if (p.length !== 10 || p[0] !== '3') return null;
+    return '92' + p;
+}
+function eaWaLink(phone, text) {
+    var n = eaNormalisePhone(phone);
+    if (!n) return null;
+    return 'https://wa.me/' + n + '?text=' + encodeURIComponent(text);
+}
+
+function eaReminderText(name, daysOverdue, amount) {
+    var who = name ? name : 'ji';
+    var line = 'Assalam-o-Alaikum ' + who + ' — reminder from your gym. ';
+    if (daysOverdue != null && daysOverdue > 0) line += 'Aap ki fee ' + daysOverdue + ' din se due hai. ';
+    else line += 'Aap ki fee due hai. ';
+    if (Number(amount) > 0) line += 'Amount: Rs ' + Number(amount).toLocaleString() + '. ';
+    line += 'Baraye meharbani reception pe clear kar dein. Shukria!';
+    return line;
+}
+
+function renderEntryAlertsSection(recent, stats) {
+    var alerts = recent.alerts || [];
+    var todays = alerts.filter(function (a) {
+        return (a.entered_at || '').slice(0, 10) === new Date().toISOString().slice(0, 10);
+    });
+    var monthTotal = stats.month_total != null ? stats.month_total : alerts.length;
+    var offenders = stats.repeat_offenders || [];
+
+    var esc = (typeof Utils !== 'undefined' && Utils.escapeHtml) ? Utils.escapeHtml : function (s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]; });
+    };
+
+    function row(a) {
+        var when = (a.entered_at || '').slice(11, 16);
+        var od = a.days_overdue != null ? (a.days_overdue + ' days overdue') : 'overdue';
+        var amt = Number(a.due_amount) > 0 ? ('Rs ' + Number(a.due_amount).toLocaleString()) : '—';
+        var wa = eaWaLink(a.phone, eaReminderText(a.name, a.days_overdue, a.due_amount));
+        var hasPhone = !!wa;
+        return '<tr>' +
+            '<td><strong>' + esc(a.name || 'Member') + '</strong><br><small style="color:#888">' + esc(a.member_code || '') + '</small></td>' +
+            '<td>' + esc(od) + '</td>' +
+            '<td>' + esc(amt) + '</td>' +
+            '<td>' + esc(when) + '</td>' +
+            '<td>' + (hasPhone
+                ? '<a class="btn btn-sm btn-primary" href="' + wa + '" target="_blank" rel="noopener">💬 Remind on WhatsApp</a>'
+                : '<span style="color:#888;font-size:.8rem">no phone</span>') +
+            '</td></tr>';
+    }
+
+    var html =
+        '<div class="members-section">' +
+            '<div class="section-header" style="margin-bottom:1rem;">' +
+                '<div>' +
+                    '<h2 style="margin:0;">🔔 Unpaid Entry Alerts</h2>' +
+                    '<p style="color:#888;margin:.25rem 0 0;font-size:.9rem;">When a member whose fee is overdue scans in at the gate, they appear here — and you get a live notification. Tap “Remind on WhatsApp” to message them instantly.</p>' +
+                '</div>' +
+            '</div>' +
+
+            '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1rem;margin-bottom:1.5rem;">' +
+                '<div class="stat-card" style="padding:1rem;border:1px solid var(--border,#333);border-radius:10px;">' +
+                    '<div style="color:#888;font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;">Today</div>' +
+                    '<div style="font-size:2rem;font-weight:700;color:#ef4444;">' + todays.length + '</div>' +
+                    '<div style="color:#888;font-size:.8rem;">unpaid entries</div>' +
+                '</div>' +
+                '<div class="stat-card" style="padding:1rem;border:1px solid var(--border,#333);border-radius:10px;">' +
+                    '<div style="color:#888;font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;">This month</div>' +
+                    '<div style="font-size:2rem;font-weight:700;">' + monthTotal + '</div>' +
+                    '<div style="color:#888;font-size:.8rem;">total</div>' +
+                '</div>' +
+                '<div class="stat-card" style="padding:1rem;border:1px solid var(--border,#333);border-radius:10px;">' +
+                    '<div style="color:#888;font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;">Repeat offenders</div>' +
+                    '<div style="font-size:2rem;font-weight:700;color:#f59e0b;">' + offenders.length + '</div>' +
+                    '<div style="color:#888;font-size:.8rem;">members this month</div>' +
+                '</div>' +
+            '</div>' +
+
+            '<div class="table-container" style="margin-bottom:2rem;">' +
+                '<h3 style="margin:0 0 .5rem;">Today\'s entries</h3>' +
+                (todays.length
+                    ? '<table class="data-table"><thead><tr><th>Member</th><th>Status</th><th>Amount</th><th>Entered</th><th>Action</th></tr></thead><tbody>' + todays.map(row).join('') + '</tbody></table>'
+                    : '<p style="color:#888;padding:1.5rem;text-align:center;">No unpaid members have entered today. 🎉</p>') +
+            '</div>' +
+
+            (offenders.length
+                ? '<div class="table-container">' +
+                    '<h3 style="margin:0 0 .5rem;">Repeat offenders this month</h3>' +
+                    '<table class="data-table"><thead><tr><th>Member</th><th>Entries</th><th>Days overdue</th><th>Amount</th><th>Action</th></tr></thead><tbody>' +
+                    offenders.map(function (o) {
+                        var wa = eaWaLink(o.phone, eaReminderText(o.name, o.days_overdue, o.due_amount));
+                        var hasPhone = !!wa;
+                        return '<tr><td><strong>' + esc(o.name || 'Member') + '</strong><br><small style="color:#888">' + esc(o.member_code || '') + '</small></td>' +
+                            '<td><span style="color:#f59e0b;font-weight:700;">' + o.entries + '×</span></td>' +
+                            '<td>' + (o.days_overdue != null ? o.days_overdue + 'd' : '—') + '</td>' +
+                            '<td>' + (Number(o.due_amount) > 0 ? 'Rs ' + Number(o.due_amount).toLocaleString() : '—') + '</td>' +
+                            '<td>' + (hasPhone ? '<a class="btn btn-sm btn-primary" href="' + wa + '" target="_blank" rel="noopener">💬 Remind</a>' : '<span style="color:#888;font-size:.8rem">no phone</span>') + '</td></tr>';
+                    }).join('') +
+                    '</tbody></table>' +
+                  '</div>'
+                : '') +
+
+            '<div style="margin-top:2rem;padding:1rem;border:1px dashed var(--border,#444);border-radius:10px;color:#888;font-size:.85rem;line-height:1.6;">' +
+                '<strong style="color:#ccc;">How notifications work:</strong><br>' +
+                '• A red bell (bottom-right) pulses and beeps the instant an unpaid member enters — on this screen and on your phone if the dashboard is open.<br>' +
+                '• Allow browser notifications when asked, and you\'ll get a popup with the member\'s name even when looking at another tab.<br>' +
+                '• Tap “Remind on WhatsApp” next to any entry to message that member a fee reminder in one tap.' +
+            '</div>' +
+        '</div>';
+
+    document.getElementById('contentBody').innerHTML = html;
+}
