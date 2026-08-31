@@ -6,7 +6,6 @@ let currentSection = 'dashboard';
 let currentGender = 'men';
 let currentUserRole = null;
 let staffSection = 'both'; // 'men' | 'women' | 'both' — this staff member's section access
-let staffLevel = 1; // staff only: 1 = full, 2/3 = progressively restricted
 let activeRequests = {}; // Track active fetch requests to cancel them if needed
 let isLoadingDashboard = false; // Prevent multiple simultaneous dashboard loads
 let memberStatusFilter = null; // 'active', 'inactive', or null for all
@@ -23,6 +22,7 @@ document.addEventListener('DOMContentLoaded', function () {
     startSectionAutoRefresh();
     startAutoSync(); // Start auto-sync timer
     bindOfflineOutboxRefresh();
+    startEntryAlerts(); // Real-time unpaid-entry alerts (browser notification + live feed)
 
     window.addEventListener('online', () => {
         if (currentSection === 'dashboard') {
@@ -124,27 +124,19 @@ function setupMobileMenu() {
     }
 }
 
-// Sections each staff level may use. Admin = no restriction. Level 1 is the full
-// front desk; Level 2 and 3 are progressively limited (order = landing priority).
-function allowedSectionsForUser() {
-    if (currentUserRole !== 'staff') return null; // admin / unknown -> everything
-    const byLevel = {
-        1: ['dashboard', 'members', 'registrations', 'attendance', 'payments', 'due-fees', 'expenses', 'details', 'reports'],
-        2: ['attendance', 'registrations', 'due-fees'],
-        3: ['attendance', 'registrations']
-    };
-    return byLevel[staffLevel] || byLevel[1];
-}
-
 function applyRolePermissions() {
-    const allowed = allowedSectionsForUser();
+    const hiddenSectionsByRole = {
+        staff: ['staff', 'registrations', 'activity-log', 'import', 'sync', 'reminders']
+    };
+
+    const hiddenSections = hiddenSectionsByRole[currentUserRole] || [];
     document.querySelectorAll('.nav-item[data-section]').forEach(item => {
         const section = item.dataset.section;
-        item.style.display = (allowed && !allowed.includes(section)) ? 'none' : '';
+        item.style.display = hiddenSections.includes(section) ? 'none' : '';
     });
 
-    if (allowed && !allowed.includes(currentSection)) {
-        switchSection(allowed[0]); // land on their first allowed section
+    if (hiddenSections.includes(currentSection)) {
+        switchSection('dashboard');
     }
 
     // Section access: a men- or women-only staff is locked to their side.
@@ -177,7 +169,6 @@ function checkAuth() {
         if (['admin', 'staff'].includes(storedRole)) {
             currentUserRole = storedRole;
             staffSection = sessionStorage.getItem('gym_last_section') || 'both';
-            staffLevel = parseInt(sessionStorage.getItem('gym_last_level'), 10) || 1;
             const userName = document.getElementById('userName');
             if (userName) {
                 userName.textContent = storedName || (storedRole === 'staff' ? 'Staff' : 'Admin');
@@ -195,10 +186,8 @@ function checkAuth() {
             } else {
                 currentUserRole = data.role;
                 staffSection = data.staff_section || 'both';
-                staffLevel = parseInt(data.staff_level, 10) || 1;
                 sessionStorage.setItem('gym_last_role', data.role);
                 sessionStorage.setItem('gym_last_section', staffSection);
-                sessionStorage.setItem('gym_last_level', staffLevel);
                 sessionStorage.setItem('gym_last_username', data.username || data.name || (data.role === 'staff' ? 'Staff' : 'Admin'));
                 const userName = document.getElementById('userName');
                 if (userName) {
@@ -263,17 +252,6 @@ function isAdminUser() {
     return currentUserRole === 'admin';
 }
 
-// Admin + staff Level 1/2 may collect fees/payments; Level 3 cannot.
-function canTakePayment() {
-    return isAdminUser() || (currentUserRole === 'staff' && staffLevel <= 2);
-}
-
-function requirePaymentAccess(actionText = 'take payments') {
-    if (canTakePayment()) return true;
-    Utils.showNotification(`Only admin and Level 1–2 staff can ${actionText}.`, 'error');
-    return false;
-}
-
 function requireAdminAccess(actionText = 'perform this action') {
     if (isAdminUser()) return true;
     Utils.showNotification(`Only admin can ${actionText}.`, 'error');
@@ -325,9 +303,11 @@ function startSectionAutoRefresh() {
 }
 
 function switchSection(section) {
-    const allowed = allowedSectionsForUser();
-    if (allowed && !allowed.includes(section)) {
-        Utils.showNotification('You do not have access to this section.', 'error');
+    const blockedSectionsByRole = {
+        staff: ['staff', 'registrations', 'activity-log', 'import', 'sync', 'reminders']
+    };
+    if ((blockedSectionsByRole[currentUserRole] || []).includes(section)) {
+        Utils.showNotification('This section is available for admin only.', 'error');
         return;
     }
 
@@ -369,6 +349,7 @@ function switchSection(section) {
         'details': 'Details',
         'reports': 'Reports',
         'staff': 'Staff',
+        'trainers': 'Trainers',
         'activity-log': 'Activity Log',
         'import': 'Import / Download',
         'sync': 'Sync / Backup',
@@ -435,6 +416,9 @@ function loadSection(section) {
             break;
         case 'staff':
             loadStaff();
+            break;
+        case 'trainers':
+            loadTrainers();
             break;
         case 'activity-log':
             loadActivityLog();
@@ -1003,12 +987,8 @@ function renderDashboardRecentViewport(tabKey = window.dashboardUiState?.recentT
     `;
 }
 
-function isMobileView() {
-    return window.innerWidth <= 768;
-}
-
 function renderDashboardChartHub(chartTabs = [], activeTab = '') {
-    if (!chartTabs.length || isMobileView()) return '';
+    if (!chartTabs.length) return '';
 
     window.dashboardChartTabs = chartTabs;
 
@@ -1042,7 +1022,6 @@ function renderDashboardChartHub(chartTabs = [], activeTab = '') {
 }
 
 function renderDashboardRecentMembers(men = { recent: [] }, women = { recent: [] }, activeTab = 'men') {
-    if (isMobileView()) return '';
     window.dashboardRecentData = { men, women };
 
     return `
@@ -1673,6 +1652,10 @@ function showAddMemberForm() {
                             <input type="number" step="0.01" id="trainerFee" name="ptf_fee" value="0">
                         </div>
                         <div class="form-group">
+                            <label>Assigned Trainer</label>
+                            <select id="assignedTrainerId" name="assigned_trainer_id"><option value="">— None —</option></select>
+                        </div>
+                        <div class="form-group">
                             <label>Locker Fee</label>
                             <input type="number" step="0.01" id="lockerFee" name="locker_fee" value="0">
                         </div>
@@ -1699,6 +1682,7 @@ function showAddMemberForm() {
     `;
     document.body.insertAdjacentHTML('beforeend', html);
     populateMembershipTypeOptions();
+    populateAssignedTrainerSelect('', '');
 
     const form = document.getElementById('memberForm');
     form.addEventListener('submit', function (e) {
@@ -1810,6 +1794,10 @@ function saveMemberData(profileImagePath) {
         admission_fee: parseFloat(document.getElementById('admissionFee').value) || 0,
         monthly_fee: parseFloat(document.getElementById('monthlyFee').value) || 0,
         ptf_fee: parseFloat(document.getElementById('trainerFee').value) || 0,
+        assigned_trainer_id: (function () {
+            const v = document.getElementById('assignedTrainerId')?.value;
+            return v ? parseInt(v, 10) : null;
+        })(),
         locker_fee: parseFloat(document.getElementById('lockerFee').value) || 0,
         next_fee_due_date: document.getElementById('nextFeeDueDate').value || null,
         status: document.getElementById('status').value,
@@ -1946,6 +1934,7 @@ function editMember(id) {
                 document.getElementById('admissionFee').value = m.admission_fee;
                 document.getElementById('monthlyFee').value = m.monthly_fee;
                 document.getElementById('trainerFee').value = m.ptf_fee ?? 0;
+                populateAssignedTrainerSelect(m.assigned_trainer_id ?? '', m.gender || '');
                 document.getElementById('lockerFee').value = m.locker_fee;
                 document.getElementById('nextFeeDueDate').value = m.next_fee_due_date || '';
                 document.getElementById('status').value = m.status;
@@ -2373,7 +2362,7 @@ function loadPayments() {
                     <button class="btn ${paymentsDefaultersFilter ? 'btn-warning' : 'btn-secondary'}" id="showDefaultersBtn">Show Late Payers</button>
                     <button class="btn ${memberStatusFilter === 'inactive' ? 'btn-primary' : 'btn-secondary'}" id="showInactivePaymentsBtn">Inactive Members</button>
                     <button class="btn ${memberStatusFilter === 'active' ? 'btn-primary' : 'btn-secondary'}" id="showActivePaymentsBtn">Active Members</button>
-                    ${canTakePayment() ? '<button class="btn btn-primary" id="addPaymentBtn">Take Payment</button>' : ''}
+                    ${isAdminUser() ? '<button class="btn btn-primary" id="addPaymentBtn">Take Payment</button>' : ''}
                 </div>
             </div>
             <div id="paymentsAnalyticsContainer" style="margin-bottom:1.5rem;"></div>
@@ -2519,7 +2508,7 @@ function loadPaymentsAnalytics() {
 }
 
 function showAddPaymentForm() {
-    if (!requirePaymentAccess('record payments')) return;
+    if (!requireAdminAccess('record payments')) return;
 
     const html = `
         <div class="modal" id="paymentModal">
@@ -2915,7 +2904,7 @@ function loadPaymentsTable(page = 1) {
 }
 
 function updateFee(memberId, memberCode) {
-    if (!requirePaymentAccess('take fees')) return;
+    if (!requireAdminAccess('take fees')) return;
 
     // Get member details first
     fetch(`api/members.php?action=get&id=${memberId}&gender=${currentGender}`)
@@ -3308,7 +3297,7 @@ function loadStaffTable(page = 1) {
                 <table class="data-table">
                     <thead>
                         <tr>
-                            <th>#</th><th>Name</th><th>Username</th><th>Role</th><th>Level</th><th>Section</th><th>Access</th><th>Created</th><th>Actions</th>
+                            <th>#</th><th>Name</th><th>Username</th><th>Role</th><th>Section</th><th>Access</th><th>Created</th><th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -3318,7 +3307,6 @@ function loadStaffTable(page = 1) {
                                 <td data-label="Name">${row.name || '-'}</td>
                                 <td data-label="Username">${row.username}</td>
                                 <td data-label="Role"><span class="status-badge status-active">${row.role}</span></td>
-                                <td data-label="Level">${row.role === 'admin' ? '—' : 'Level ' + (Number(row.staff_level) || 1)}</td>
                                 <td data-label="Section">${row.role === 'admin' ? 'Both' : ({ men: 'Men', women: 'Women', both: 'Both' }[row.staff_section] || 'Both')}</td>
                                 <td data-label="Access">${escapeHtml(formatStaffAccess(row))}</td>
                                 <td data-label="Created">${Utils.formatDate(row.created_at)}</td>
@@ -3327,7 +3315,7 @@ function loadStaffTable(page = 1) {
                                     <button class="btn btn-sm btn-danger" onclick="deleteStaff(${row.id})">Delete</button>
                                 </td>
                             </tr>
-                        `).join('') : '<tr><td colspan="9"><div class="empty-state"><strong>No staff found</strong>Add your first staff user here.</div></td></tr>'}
+                        `).join('') : '<tr><td colspan="8"><div class="empty-state"><strong>No staff found</strong>Add your first staff user here.</div></td></tr>'}
                     </tbody>
                 </table>
                 ${pagination.pages > 1 ? `
@@ -3365,11 +3353,6 @@ function showStaffForm(staff = null) {
                         <option value="both" ${(!staff || staff?.staff_section === 'both') ? 'selected' : ''}>Both (combined)</option>
                         <option value="men" ${staff?.staff_section === 'men' ? 'selected' : ''}>Men only</option>
                         <option value="women" ${staff?.staff_section === 'women' ? 'selected' : ''}>Women only</option>
-                    </select></div>
-                    <div class="form-group"><label>Staff access level <span style="color:var(--text-muted);font-weight:400;">(applies to the Staff role)</span></label><select id="staffLevel">
-                        <option value="1" ${(!staff || Number(staff?.staff_level || 1) === 1) ? 'selected' : ''}>Level 1 — full front desk</option>
-                        <option value="2" ${Number(staff?.staff_level) === 2 ? 'selected' : ''}>Level 2 — requests, check in/out, need payment</option>
-                        <option value="3" ${Number(staff?.staff_level) === 3 ? 'selected' : ''}>Level 3 — requests + check in/out only</option>
                     </select></div>
                     <div class="form-group" style="border-top:1px solid var(--border-color);padding-top:.85rem;">
                         <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;">
@@ -3428,7 +3411,6 @@ function saveStaff() {
         password: document.getElementById('staffPassword')?.value || '',
         role: document.getElementById('staffRole')?.value || 'staff',
         staff_section: document.getElementById('staffSection')?.value || 'both',
-        staff_level: parseInt(document.getElementById('staffLevel')?.value, 10) || 1,
         access_enabled: document.getElementById('staffAccessEnabled')?.checked ? 1 : 0,
         access_days: Array.from(document.querySelectorAll('.staffDay[aria-pressed="true"]')).map(c => c.dataset.day).join(','),
         access_start: document.getElementById('staffAccessStart')?.value || '',
@@ -3472,6 +3454,260 @@ function deleteStaff(id) {
             loadStaffTable(1);
         })
         .catch(err => Utils.showNotification(err.message, 'error'));
+}
+
+// -----------------------------------------------------------------------------
+// TRAINERS — CRUD screen + assignment dropdown for the member form
+// -----------------------------------------------------------------------------
+function loadTrainers() {
+    const html = `
+        <div class="members-section">
+            ${renderSectionGuideCard({
+                chip: 'Trainers Help',
+                title: 'Manage personal trainers',
+                description: 'Add trainers, set their salary/commission, and assign members to them on the member form.',
+                steps: [
+                    'Add a trainer with name, phone, and section (men/women/both).',
+                    'Set monthly salary and commission % (used later for payroll reporting).',
+                    'Assign a trainer to a member from the member add/edit form.'
+                ]
+            })}
+            <div class="section-header">
+                <div class="section-actions">
+                    <input type="text" id="trainerSearch" placeholder="Search by name, code, phone, or CNIC" class="search-input">
+                    <select id="trainerSectionFilter" class="filter-select">
+                        <option value="">All sections</option>
+                        <option value="men">Men only</option>
+                        <option value="women">Women only</option>
+                        <option value="both">Both</option>
+                    </select>
+                    <select id="trainerStatusFilter" class="filter-select">
+                        <option value="">All statuses</option>
+                        <option value="active" selected>Active</option>
+                        <option value="inactive">Inactive</option>
+                    </select>
+                    <button class="btn btn-primary" id="addTrainerBtn">Add Trainer</button>
+                </div>
+            </div>
+            <div id="trainersTableContainer"></div>
+        </div>
+    `;
+    document.getElementById('contentBody').innerHTML = html;
+
+    document.getElementById('addTrainerBtn').addEventListener('click', () => showTrainerForm());
+    const debounced = Utils.debounce(() => loadTrainersTable(1), 250);
+    document.getElementById('trainerSearch').addEventListener('input', debounced);
+    document.getElementById('trainerSectionFilter').addEventListener('change', () => loadTrainersTable(1));
+    document.getElementById('trainerStatusFilter').addEventListener('change', () => loadTrainersTable(1));
+
+    loadTrainersTable(1);
+}
+
+function loadTrainersTable(page = 1) {
+    const search = document.getElementById('trainerSearch')?.value.trim() || '';
+    const section = document.getElementById('trainerSectionFilter')?.value || '';
+    const status = document.getElementById('trainerStatusFilter')?.value || '';
+    const params = new URLSearchParams({ action: 'list', page, limit: 20 });
+    if (search) params.set('search', search);
+    if (section) params.set('section', section);
+    if (status) params.set('status', status);
+
+    fetch(`api/trainers.php?${params.toString()}`)
+        .then(res => res.json())
+        .then(data => {
+            if (!data.success) throw new Error(data.message || 'Failed to load trainers');
+            renderTrainersTable(data);
+        })
+        .catch(err => {
+            const c = document.getElementById('trainersTableContainer');
+            if (c) c.innerHTML = `<div class="error">${Utils.escapeHtml(err.message)}</div>`;
+        });
+}
+
+function renderTrainersTable(data) {
+    const rows = (data.data || []).map(t => `
+        <tr>
+            <td>${Utils.escapeHtml(t.trainer_code)}</td>
+            <td>${Utils.escapeHtml(t.name)}</td>
+            <td>${Utils.escapeHtml(t.phone)}</td>
+            <td>${Utils.escapeHtml(t.section)}</td>
+            <td>${Number(t.monthly_salary || 0).toFixed(2)}</td>
+            <td>${Number(t.commission_pct || 0).toFixed(2)}%</td>
+            <td>${Number(t.assigned_count || 0)}</td>
+            <td><span class="badge ${t.status === 'active' ? 'badge-success' : 'badge-muted'}">${Utils.escapeHtml(t.status)}</span></td>
+            <td>
+                <button class="btn btn-sm btn-secondary" onclick="editTrainer(${t.id})">Edit</button>
+                ${t.status === 'active'
+                    ? `<button class="btn btn-sm btn-danger" onclick="deactivateTrainer(${t.id})">Deactivate</button>`
+                    : `<button class="btn btn-sm btn-primary" onclick="activateTrainer(${t.id})">Reactivate</button>`}
+            </td>
+        </tr>
+    `).join('');
+
+    const c = document.getElementById('trainersTableContainer');
+    if (!c) return;
+    c.innerHTML = `
+        <div class="table-container">
+            <table class="data-table">
+                <thead><tr>
+                    <th>Code</th><th>Name</th><th>Phone</th><th>Section</th>
+                    <th>Salary</th><th>Commission</th><th>Assigned</th>
+                    <th>Status</th><th>Actions</th>
+                </tr></thead>
+                <tbody>${rows || `<tr><td colspan="9" class="text-center">No trainers yet — click "Add Trainer" to create the first one.</td></tr>`}</tbody>
+            </table>
+        </div>
+    `;
+}
+
+function showTrainerForm(trainer = null) {
+    const isEdit = !!trainer;
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.id = 'trainerModal';
+    modal.innerHTML = `
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>${isEdit ? 'Edit' : 'Add'} Trainer</h2>
+                <button class="modal-close" onclick="document.getElementById('trainerModal').remove()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="trainerForm" onsubmit="event.preventDefault(); saveTrainer(${trainer ? trainer.id : 'null'});">
+                    <div class="form-row">
+                        <div class="form-group"><label>Trainer Code</label><input id="trnCode" value="${Utils.escapeHtml(trainer?.trainer_code || '')}" placeholder="Auto"></div>
+                        <div class="form-group"><label>Name *</label><input id="trnName" value="${Utils.escapeHtml(trainer?.name || '')}" required></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label>Phone *</label><input id="trnPhone" value="${Utils.escapeHtml(trainer?.phone || '')}" required></div>
+                        <div class="form-group"><label>CNIC</label><input id="trnCnic" value="${Utils.escapeHtml(trainer?.cnic || '')}"></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label>Section *</label>
+                            <select id="trnSection">
+                                <option value="both" ${(trainer?.section || 'both') === 'both' ? 'selected' : ''}>Both</option>
+                                <option value="men" ${trainer?.section === 'men' ? 'selected' : ''}>Men only</option>
+                                <option value="women" ${trainer?.section === 'women' ? 'selected' : ''}>Women only</option>
+                            </select>
+                        </div>
+                        <div class="form-group"><label>Hire Date *</label><input type="date" id="trnHire" value="${Utils.escapeHtml(trainer?.hire_date || new Date().toISOString().slice(0,10))}" required></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label>Monthly Salary</label><input type="number" step="0.01" id="trnSalary" value="${trainer?.monthly_salary || 0}"></div>
+                        <div class="form-group"><label>Commission %</label><input type="number" step="0.01" min="0" max="100" id="trnCommission" value="${trainer?.commission_pct || 0}"></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label>Date of Birth</label><input type="date" id="trnDob" value="${Utils.escapeHtml(trainer?.dob || '')}"></div>
+                        <div class="form-group"><label>Emergency Contact</label><input id="trnEmergency" value="${Utils.escapeHtml(trainer?.emergency_contact || '')}"></div>
+                    </div>
+                    <div class="form-group"><label>Address</label><input id="trnAddress" value="${Utils.escapeHtml(trainer?.address || '')}"></div>
+                    <div class="form-group"><label>Notes</label><textarea id="trnNotes" rows="2">${Utils.escapeHtml(trainer?.notes || '')}</textarea></div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" onclick="document.getElementById('trainerModal').remove()">Cancel</button>
+                        <button type="submit" class="btn btn-primary">${isEdit ? 'Update' : 'Create'}</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+}
+
+function saveTrainer(id) {
+    const payload = {
+        trainer_code: document.getElementById('trnCode').value.trim(),
+        name: document.getElementById('trnName').value.trim(),
+        phone: document.getElementById('trnPhone').value.trim(),
+        cnic: document.getElementById('trnCnic').value.trim() || null,
+        section: document.getElementById('trnSection').value,
+        hire_date: document.getElementById('trnHire').value,
+        monthly_salary: parseFloat(document.getElementById('trnSalary').value) || 0,
+        commission_pct: parseFloat(document.getElementById('trnCommission').value) || 0,
+        dob: document.getElementById('trnDob').value || null,
+        emergency_contact: document.getElementById('trnEmergency').value.trim() || null,
+        address: document.getElementById('trnAddress').value.trim() || null,
+        notes: document.getElementById('trnNotes').value.trim() || null,
+    };
+    if (id) payload.id = id;
+
+    fetch(`api/trainers.php?action=${id ? 'update' : 'create'}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    })
+        .then(res => res.json())
+        .then(data => {
+            if (!data.success) throw new Error(data.message || 'Save failed');
+            Utils.showNotification(id ? 'Trainer updated' : 'Trainer added', 'success');
+            document.getElementById('trainerModal').remove();
+            loadTrainersTable(1);
+        })
+        .catch(err => Utils.showNotification(err.message, 'error'));
+}
+
+function editTrainer(id) {
+    fetch(`api/trainers.php?action=get&id=${id}`)
+        .then(res => res.json())
+        .then(data => {
+            if (!data.success) throw new Error(data.message || 'Failed to load trainer');
+            showTrainerForm(data.data);
+        })
+        .catch(err => Utils.showNotification(err.message, 'error'));
+}
+
+function deactivateTrainer(id) {
+    if (!confirm('Deactivate this trainer? Existing member assignments stay for history — they just stop appearing in the assign dropdown.')) return;
+    fetch(`api/trainers.php?action=deactivate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id })
+    })
+        .then(res => res.json())
+        .then(data => {
+            if (!data.success) throw new Error(data.message || 'Failed');
+            Utils.showNotification('Trainer deactivated', 'success');
+            loadTrainersTable(1);
+        })
+        .catch(err => Utils.showNotification(err.message, 'error'));
+}
+
+function activateTrainer(id) {
+    fetch(`api/trainers.php?action=activate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id })
+    })
+        .then(res => res.json())
+        .then(data => {
+            if (!data.success) throw new Error(data.message || 'Failed');
+            Utils.showNotification('Trainer reactivated', 'success');
+            loadTrainersTable(1);
+        })
+        .catch(err => Utils.showNotification(err.message, 'error'));
+}
+
+/** Cache the trainer select list — pulled fresh whenever a member form opens. */
+let _trainerSelectCache = null;
+function fetchTrainerOptions(section) {
+    const q = new URLSearchParams({ action: 'select' });
+    if (section === 'men' || section === 'women') q.set('section', section);
+    return fetch(`api/trainers.php?${q.toString()}`)
+        .then(res => res.json())
+        .then(data => (data.success && Array.isArray(data.data)) ? data.data : []);
+}
+
+/** Populate the assigned-trainer <select> on the member form. */
+function populateAssignedTrainerSelect(currentId = '', section = '') {
+    const sel = document.getElementById('assignedTrainerId');
+    if (!sel) return;
+    sel.innerHTML = `<option value="">— None —</option><option disabled>Loading…</option>`;
+    fetchTrainerOptions(section)
+        .then(list => {
+            sel.innerHTML = `<option value="">— None —</option>` +
+                list.map(t => `<option value="${t.id}" ${String(t.id) === String(currentId) ? 'selected' : ''}>${Utils.escapeHtml(t.name)} (${Utils.escapeHtml(t.section)})</option>`).join('');
+        })
+        .catch(() => {
+            sel.innerHTML = `<option value="">— None —</option>`;
+        });
 }
 
 function getActivityActionLabel(action) {
@@ -5768,7 +6004,7 @@ function renderReport(data, type) {
                                             <td><span style="color: ${d.days_overdue > 0 ? 'red' : '#f39c12'}; font-weight: bold;">${d.days_overdue || 0} days</span></td>
                                             <td><strong style="color: #e74c3c;">${Utils.formatCurrency(d.total_due_amount || 0)}</strong></td>
                                             <td>
-                                                ${canTakePayment() ? `<button class="btn btn-sm btn-primary" onclick="currentGender='${d.gender}'; updateFee(${d.id}, '${d.member_code}')">Take Fee</button>` : '<span style="color:#6b7280;">Read only</span>'}
+                                                ${isAdminUser() ? `<button class="btn btn-sm btn-primary" onclick="currentGender='${d.gender}'; updateFee(${d.id}, '${d.member_code}')">Take Fee</button>` : '<span style="color:#6b7280;">Read only</span>'}
                                             </td>
                                         </tr>
                                     `).join('')}
@@ -6481,6 +6717,7 @@ function seedMemberResolutionForm(item, liveRecord, base = 'queued') {
     document.getElementById('admissionFee').value = baseRecord.admission_fee ?? overlayRecord?.admission_fee ?? 0;
     document.getElementById('monthlyFee').value = baseRecord.monthly_fee ?? overlayRecord?.monthly_fee ?? 0;
     document.getElementById('trainerFee').value = baseRecord.ptf_fee ?? overlayRecord?.ptf_fee ?? 0;
+    populateAssignedTrainerSelect(baseRecord.assigned_trainer_id ?? overlayRecord?.assigned_trainer_id ?? '', baseRecord.gender || overlayRecord?.gender || '');
     document.getElementById('lockerFee').value = baseRecord.locker_fee ?? overlayRecord?.locker_fee ?? 0;
     document.getElementById('nextFeeDueDate').value = baseRecord.next_fee_due_date || overlayRecord?.next_fee_due_date || '';
     document.getElementById('status').value = baseRecord.status || overlayRecord?.status || 'active';
@@ -7663,32 +7900,10 @@ function renderDetailsSettings(s) {
             ${field('set_social_snapchat', 'Snapchat Link', s.social_snapchat, 'https://snapchat.com/add/…', 'url')}
             ${field('set_social_tiktok', 'TikTok Link', s.social_tiktok, 'https://tiktok.com/@…', 'url')}
         </div>
-        <div class="form-group" style="margin-top:.25rem;">
-            <label>Other social links <span style="color:var(--text-secondary);font-weight:400;">(LinkedIn, X, Telegram, website…)</span></label>
-            <div id="customSocialList" style="margin:.4rem 0;"></div>
-            ${admin ? `
-            <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:flex-end;">
-                <div style="flex:0 0 auto;">
-                    <small class="form-hint" style="display:block;">Icon</small>
-                    <select id="newSocialIcon" style="padding:.5rem;"></select>
-                </div>
-                <div style="flex:1 1 120px;">
-                    <small class="form-hint" style="display:block;">Label</small>
-                    <input type="text" id="newSocialLabel" maxlength="40" placeholder="LinkedIn">
-                </div>
-                <div style="flex:2 1 220px;">
-                    <small class="form-hint" style="display:block;">URL</small>
-                    <input type="url" id="newSocialUrl" placeholder="https://linkedin.com/company/…">
-                </div>
-                <button type="button" class="btn btn-secondary" onclick="addCustomSocialLink()">+ Add</button>
-            </div>
-            <small class="form-hint" style="display:block;margin-top:.35rem;">Added links show in your gym’s footer. Remember to click Save Details.</small>` : ''}
-        </div>
         ${admin ? '<button class="btn btn-primary" onclick="saveDetailsSettings()">Save Details</button>' : ''}
       </div>`;
     const fontSel = document.getElementById('set_font_family');
     if (fontSel && s.font_family) fontSel.value = s.font_family;
-    initCustomSocialLinks(s.social_custom);
 }
 
 function saveDetailsSettings() {
@@ -7708,8 +7923,7 @@ function saveDetailsSettings() {
         social_facebook: val('set_social_facebook'),
         social_instagram: val('set_social_instagram'),
         social_snapchat: val('set_social_snapchat'),
-        social_tiktok: val('set_social_tiktok'),
-        social_custom: JSON.stringify(window._customSocialLinks || [])
+        social_tiktok: val('set_social_tiktok')
     };
     fetch('api/settings.php?action=save', {
         method: 'POST',
@@ -7727,65 +7941,6 @@ function saveDetailsSettings() {
             console.error('Details save error:', err);
             Utils.showNotification('Error saving details', 'error');
         });
-}
-
-// ---- Owner-added custom social links (Details section) ----
-// Held as an array of {icon,label,url}; persisted as JSON in the social_custom
-// setting and rendered in the public footer next to the fixed platforms.
-window._customSocialLinks = [];
-
-function initCustomSocialLinks(raw) {
-    let arr = [];
-    try { arr = JSON.parse(raw || '[]'); } catch (e) { arr = []; }
-    window._customSocialLinks = Array.isArray(arr) ? arr.filter(x => x && x.url) : [];
-    const sel = document.getElementById('newSocialIcon');
-    if (sel && window.SOCIAL_ICON_CHOICES) {
-        sel.innerHTML = window.SOCIAL_ICON_CHOICES.map(c => `<option value="${c.key}">${c.label}</option>`).join('');
-    }
-    renderCustomSocialList();
-}
-
-function renderCustomSocialList() {
-    const box = document.getElementById('customSocialList');
-    if (!box) return;
-    const list = window._customSocialLinks || [];
-    if (!list.length) {
-        box.innerHTML = '<small class="form-hint" style="opacity:.75;">No extra links yet.</small>';
-        return;
-    }
-    const admin = isAdminUser();
-    box.innerHTML = list.map((it, i) => {
-        const color = (window.SOCIAL_ICON_COLORS && window.SOCIAL_ICON_COLORS[it.icon]) || '#6b7280';
-        const ic = window.socialIconSvg ? window.socialIconSvg(it.icon, color) : '';
-        return `<div style="display:flex;align-items:center;gap:.55rem;padding:.4rem 0;border-bottom:1px solid var(--border-color);">
-            <span style="width:26px;height:26px;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;">${ic}</span>
-            <span style="flex:1 1 auto;min-width:0;"><strong>${packageEscHtml(it.label || '')}</strong>
-            <br><small style="color:var(--text-secondary);word-break:break-all;">${packageEscHtml(it.url || '')}</small></span>
-            ${admin ? `<button type="button" class="btn btn-sm btn-danger" onclick="removeCustomSocialLink(${i})">Remove</button>` : ''}
-        </div>`;
-    }).join('');
-}
-
-function addCustomSocialLink() {
-    if (!requireAdminAccess('change gym details')) return;
-    const icon = (document.getElementById('newSocialIcon') || {}).value || 'link';
-    const label = ((document.getElementById('newSocialLabel') || {}).value || '').trim();
-    const url = ((document.getElementById('newSocialUrl') || {}).value || '').trim();
-    if (!url) { Utils.showNotification('Enter the link URL.', 'error'); return; }
-    if (!/^https?:\/\//i.test(url)) { Utils.showNotification('URL must start with http:// or https://', 'error'); return; }
-    window._customSocialLinks = window._customSocialLinks || [];
-    window._customSocialLinks.push({ icon, label: (label || icon).slice(0, 40), url: url.slice(0, 300) });
-    const lab = document.getElementById('newSocialLabel'); if (lab) lab.value = '';
-    const u = document.getElementById('newSocialUrl'); if (u) u.value = '';
-    renderCustomSocialList();
-    Utils.showNotification('Link added. Click Save Details to keep it.', 'success');
-}
-
-function removeCustomSocialLink(i) {
-    if (!requireAdminAccess('change gym details')) return;
-    if (!window._customSocialLinks) return;
-    window._customSocialLinks.splice(i, 1);
-    renderCustomSocialList();
 }
 
 // Upload a gym logo, then stash its URL for the Details save (branding.js
@@ -7924,8 +8079,6 @@ function showRegistrationDetails(id) {
                 <div class="modal-header"><h2>Request details</h2><button class="modal-close" onclick="document.getElementById('regDetailModal').remove()">&times;</button></div>
                 <div class="modal-body">
                     ${row('Name', r.name)}${row('Phone (Cell)', r.phone)}${row('CNIC', r.cnic)}
-                    ${row('Comment', r.note)}
-                    ${d.photo ? `<div class="detail-item" style="padding:.5rem 0;"><img src="${escapeHtml(d.photo)}" alt="Photo" style="max-width:130px;border-radius:8px;border:1px solid var(--border-color);"></div>` : ''}
                     ${row('Side', r.gender === 'women' ? 'Women' : 'Men')}
                     ${row("Husband's / Father's name", d.father_name)}${row('Occupation', d.occupation)}
                     ${row('Date of birth', r.dob)}${row('Email', d.email)}
@@ -8020,3 +8173,144 @@ function rejectRegistration(id) {
         })
         .catch(err => Utils.showNotification(err.message, 'error'));
 }
+
+// =============================================================================
+// REAL-TIME UNPAID-ENTRY ALERTS
+// Polls api/alerts.php; when an unpaid/overdue member scans in, fires a browser
+// notification (works on the front-desk laptop AND the owner's phone browser),
+// beeps, and shows a live feed panel. No hardware needed — the F22 already
+// pushes scans to the cloud, iclock.php records the alert, this surfaces it.
+// =============================================================================
+(function () {
+    var POLL_MS = 12000;
+    var seenIds = {};
+    var timer = null;
+    var panelOpen = false;
+
+    window.startEntryAlerts = function () {
+        try {
+            if ('Notification' in window && Notification.permission === 'default') {
+                setTimeout(function () { Notification.requestPermission(); }, 3000);
+            }
+        } catch (e) {}
+        injectAlertUI();
+        pollEntryAlerts();
+        if (timer) clearInterval(timer);
+        timer = setInterval(pollEntryAlerts, POLL_MS);
+    };
+
+    function injectAlertUI() {
+        if (document.getElementById('entryAlertBell')) return;
+        var css = document.createElement('style');
+        css.textContent =
+            '#entryAlertBell{position:fixed;bottom:18px;right:18px;width:56px;height:56px;border-radius:50%;background:#1f2937;color:#fff;border:2px solid #374151;display:flex;align-items:center;justify-content:center;font-size:24px;cursor:pointer;z-index:9998;box-shadow:0 4px 16px rgba(0,0,0,.3);transition:transform .15s}' +
+            '#entryAlertBell:hover{transform:scale(1.06)}' +
+            '#entryAlertBell.alarm{background:#dc2626;border-color:#ef4444;animation:eaPulse 1s infinite}' +
+            '@keyframes eaPulse{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.5)}50%{box-shadow:0 0 0 12px rgba(220,38,38,0)}}' +
+            '#entryAlertBadge{position:absolute;top:-4px;right:-4px;min-width:20px;height:20px;padding:0 5px;border-radius:10px;background:#ef4444;color:#fff;font-size:12px;font-weight:700;display:none;align-items:center;justify-content:center}' +
+            '#entryAlertPanel{position:fixed;bottom:84px;right:18px;width:340px;max-width:calc(100vw - 36px);max-height:60vh;overflow-y:auto;background:#111827;border:1px solid #374151;border-radius:12px;z-index:9998;display:none;box-shadow:0 8px 32px rgba(0,0,0,.5)}' +
+            '#entryAlertPanel .eah{padding:12px 16px;border-bottom:1px solid #374151;display:flex;align-items:center;gap:8px;position:sticky;top:0;background:#111827}' +
+            '#entryAlertPanel .eah b{font-size:15px;color:#f9fafb;flex:1}' +
+            '#entryAlertPanel .eah button{background:transparent;border:1px solid #374151;color:#9ca3af;font-size:11px;padding:4px 8px;border-radius:6px;cursor:pointer}' +
+            '.eaItem{padding:12px 16px;border-bottom:1px solid #1f2937}' +
+            '.eaItem .nm{font-weight:600;color:#f9fafb;font-size:14px}' +
+            '.eaItem .meta{color:#9ca3af;font-size:12px;margin-top:2px}' +
+            '.eaItem .amt{color:#f87171;font-weight:700}' +
+            '.eaEmpty{padding:28px 16px;text-align:center;color:#6b7280;font-size:13px}';
+        document.head.appendChild(css);
+
+        var bell = document.createElement('div');
+        bell.id = 'entryAlertBell';
+        bell.title = 'Unpaid-entry alerts';
+        bell.innerHTML = '🔔<span id="entryAlertBadge">0</span>';
+        bell.onclick = function () {
+            panelOpen = !panelOpen;
+            document.getElementById('entryAlertPanel').style.display = panelOpen ? 'block' : 'none';
+            if (panelOpen) markAllSeen();
+        };
+        document.body.appendChild(bell);
+
+        var panel = document.createElement('div');
+        panel.id = 'entryAlertPanel';
+        panel.innerHTML = '<div class="eah"><b>Unpaid entries today</b>' +
+            '<button onclick="__markAlertsSeen()">Clear</button></div>' +
+            '<div id="entryAlertList"><div class="eaEmpty">No unpaid entries yet today.</div></div>';
+        document.body.appendChild(panel);
+    }
+
+    function pollEntryAlerts() {
+        if (typeof Utils !== 'undefined' && Utils.isOnline && !Utils.isOnline()) return;
+        fetch('api/alerts.php?action=recent', { headers: { 'Accept': 'application/json' } })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (data) {
+                if (!data || !data.success) return;
+                renderAlertList(data.alerts || []);
+                var fresh = (data.alerts || []).filter(function (a) { return Number(a.seen) === 0 && !seenIds[a.id]; });
+                var bell = document.getElementById('entryAlertBell');
+                var badge = document.getElementById('entryAlertBadge');
+                if (data.unseen > 0) {
+                    if (bell) bell.classList.add('alarm');
+                    if (badge) { badge.style.display = 'flex'; badge.textContent = data.unseen; }
+                } else {
+                    if (bell) bell.classList.remove('alarm');
+                    if (badge) badge.style.display = 'none';
+                }
+                fresh.forEach(function (a) { seenIds[a.id] = true; fireNotification(a); });
+                if (fresh.length) beep();
+            })
+            .catch(function () {});
+    }
+
+    function renderAlertList(alerts) {
+        var el = document.getElementById('entryAlertList');
+        if (!el) return;
+        if (!alerts.length) { el.innerHTML = '<div class="eaEmpty">No unpaid entries yet today.</div>'; return; }
+        el.innerHTML = alerts.map(function (a) {
+            var when = (a.entered_at || '').substr(11, 5);
+            var od = a.days_overdue != null ? (a.days_overdue + 'd overdue') : 'overdue';
+            var amt = Number(a.due_amount) > 0 ? ' · <span class="amt">Rs ' + Number(a.due_amount).toLocaleString() + '</span>' : '';
+            var dot = Number(a.seen) === 0 ? ' 🔴' : '';
+            return '<div class="eaItem"><div class="nm">' + esc(a.name || 'Member') + dot + '</div>' +
+                '<div class="meta">' + esc(a.member_code || '') + ' · ' + esc(od) + amt + ' · entered ' + when + '</div></div>';
+        }).join('');
+    }
+
+    function fireNotification(a) {
+        try {
+            if (!('Notification' in window) || Notification.permission !== 'granted') return;
+            var body = (a.member_code ? a.member_code + ' · ' : '') +
+                (a.days_overdue != null ? a.days_overdue + ' days overdue' : 'fee overdue') +
+                (Number(a.due_amount) > 0 ? ' · Rs ' + Number(a.due_amount).toLocaleString() : '');
+            var n = new Notification('⚠️ Unpaid member entered: ' + (a.name || 'Member'), {
+                body: body, tag: 'entry-' + a.id, requireInteraction: false
+            });
+            setTimeout(function () { try { n.close(); } catch (e) {} }, 8000);
+        } catch (e) {}
+    }
+
+    var audioCtx = null;
+    function beep() {
+        try {
+            audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+            var o = audioCtx.createOscillator(), g = audioCtx.createGain();
+            o.connect(g); g.connect(audioCtx.destination);
+            o.type = 'sine'; o.frequency.value = 880;
+            g.gain.setValueAtTime(0.15, audioCtx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+            o.start(); o.stop(audioCtx.currentTime + 0.4);
+        } catch (e) {}
+    }
+
+    function markAllSeen() {
+        fetch('api/alerts.php?action=mark_seen', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+            .then(function () {
+                var bell = document.getElementById('entryAlertBell');
+                var badge = document.getElementById('entryAlertBadge');
+                if (bell) bell.classList.remove('alarm');
+                if (badge) badge.style.display = 'none';
+            }).catch(function () {});
+    }
+    window.__markAlertsSeen = markAllSeen;
+
+    function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]; }); }
+})();
