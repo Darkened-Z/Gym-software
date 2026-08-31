@@ -84,8 +84,8 @@ try {
             $monthStart = date('Y-m-01');
             $total = (int)$db->query("SELECT COUNT(*) FROM access_alerts WHERE entered_at >= '{$monthStart}'")->fetchColumn();
             $stmt = $db->query(
-                "SELECT name, member_code, gender, COUNT(*) AS entries, MAX(days_overdue) AS days_overdue,
-                        MAX(due_amount) AS due_amount
+                "SELECT name, member_code, gender, MAX(phone) AS phone, COUNT(*) AS entries,
+                        MAX(days_overdue) AS days_overdue, MAX(due_amount) AS due_amount
                  FROM access_alerts
                  WHERE entered_at >= '{$monthStart}'
                  GROUP BY member_id, gender, name, member_code
