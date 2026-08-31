@@ -1,0 +1,20 @@
+====================================================
+  APEX GYM — F22 FINGERPRINT LOCK  (Reception Laptop)
+====================================================
+
+PEHLE YEH KAREIN / DO THIS FIRST:
+
+  1. python.org/downloads se Python install karein.
+     ("Add Python to PATH" pe TICK zaroor lagayein.)
+
+  2. "1-install.bat"  pe double-click.
+
+  3. "2-test-connection.bat"  pe double-click.
+     -> Screenshot le kar Zeeshan ko bhej dein.
+     (Yeh test safe hai — kuch delete nahi hota.)
+
+  Zeeshan ke "OK" ke baad hi "3-run-bridge.bat" chalayein.
+
+----------------------------------------------------
+  Detail guide: SETUP-URDU.md  file kholein.
+----------------------------------------------------
