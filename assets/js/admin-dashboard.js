@@ -3827,7 +3827,7 @@ function attachChartTooltip(canvas, points, formatter) {
 }
 
 function drawChartAxes(ctx, width, height, padding, maxValue, tickCount = 4) {
-    ctx.strokeStyle = '#d1d5db';
+    ctx.strokeStyle = '#2a2a2a';
     ctx.lineWidth = 1;
 
     ctx.beginPath();
@@ -3836,7 +3836,7 @@ function drawChartAxes(ctx, width, height, padding, maxValue, tickCount = 4) {
     ctx.lineTo(width - padding, height - padding);
     ctx.stroke();
 
-    ctx.fillStyle = '#6b7280';
+    ctx.fillStyle = '#9ca3af';
     ctx.font = '11px Arial';
 
     for (let i = 0; i <= tickCount; i++) {
@@ -3850,16 +3850,17 @@ function drawChartAxes(ctx, width, height, padding, maxValue, tickCount = 4) {
     }
 }
 
-function renderSimpleLineChart(canvasId, series = [], color = '#166534') {
+function renderSimpleLineChart(canvasId, series = [], color = '#f5c518') {
     const canvas = document.getElementById(canvasId);
     if (!canvas) return;
+    if (color === '#166534') color = '#f5c518';
     const ctx = canvas.getContext('2d');
     const width = canvas.width;
     const height = canvas.height;
     ctx.clearRect(0, 0, width, height);
 
     if (!series.length) {
-        ctx.fillStyle = '#6b7280';
+        ctx.fillStyle = '#9ca3af';
         ctx.font = '14px Arial';
         ctx.fillText('No data available', 20, 30);
         return;
@@ -3883,7 +3884,7 @@ function renderSimpleLineChart(canvasId, series = [], color = '#166534') {
         else ctx.lineTo(x, y);
 
         if (index === 0 || index === series.length - 1 || index % Math.ceil(series.length / 4) === 0) {
-            ctx.fillStyle = '#6b7280';
+            ctx.fillStyle = '#9ca3af';
             ctx.font = '10px Arial';
             ctx.fillText(String(item.label).slice(0, 8), x - 12, height - 10);
         }
@@ -3903,13 +3904,14 @@ function renderSimpleLineChart(canvasId, series = [], color = '#166534') {
 function renderSimpleBarChart(canvasId, series = [], color = '#0369a1') {
     const canvas = document.getElementById(canvasId);
     if (!canvas) return;
+    if (color === '#166534') color = '#f5c518';
     const ctx = canvas.getContext('2d');
     const width = canvas.width;
     const height = canvas.height;
     ctx.clearRect(0, 0, width, height);
 
     if (!series.length) {
-        ctx.fillStyle = '#6b7280';
+        ctx.fillStyle = '#9ca3af';
         ctx.font = '14px Arial';
         ctx.fillText('No data available', 20, 30);
         return;
@@ -7414,13 +7416,13 @@ function toggleGlobalSearchScan() {
 
     // Create and show overlay
     const overlayHtml = `
-        <div id="scanSearchOverlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(243,247,244,0.96); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--text-color);">
-            <div style="font-size: 4rem; color: #2196F3; margin-bottom: 20px;">
+        <div id="scanSearchOverlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(10,10,10,0.96); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--text-color); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);">
+            <div style="font-size: 4rem; color: var(--brand-gold, #f5c518); margin-bottom: 20px;">
                 <i class="fas fa-wifi fa-pulse"></i>
             </div>
-            <h2 style="margin-bottom: 10px;">Waiting for member card...</h2>
-            <p style="font-size: 1.2rem; color: #ccc;">Tap or scan the member card on the desk scanner to open profile.</p>
-            <button class="btn btn-secondary" onclick="stopGlobalSearchScan()" style="margin-top: 30px; padding: 10px 30px; font-size: 1.1rem;">Close</button>
+            <h2 style="margin-bottom: 10px; color: #ffffff; font-family: var(--brand-font-display, inherit); letter-spacing: .04em; font-size: 2.2rem;">Waiting for member card...</h2>
+            <p style="font-size: 1.15rem; color: var(--text-secondary, #c8c8c8);">Tap or scan the member card on the desk scanner to open profile.</p>
+            <button class="btn btn-secondary" onclick="stopGlobalSearchScan()" style="margin-top: 30px; padding: 10px 30px; font-size: 1.05rem;">Close</button>
         </div>
     `;
     document.body.insertAdjacentHTML('beforeend', overlayHtml);
