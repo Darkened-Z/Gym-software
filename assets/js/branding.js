@@ -60,8 +60,8 @@
             var dash = t.indexOf('—'); // em dash
             var suffix = dash >= 0 ? t.slice(dash + 1).trim() : '';
             document.title = suffix ? (name + ' — ' + suffix) : name;
-            setText('.brand-login-head h1', name);
-            setText('.brand-sidebar-header h2', name);
+            setText('.brand-login-head h1, .login-box > h1', name);
+            setText('.brand-sidebar-header h2, .sidebar-header h2', name);
             each('.brand-splash-logo, .brand-login-logo, .brand-sidebar-logo', function (el) {
                 el.setAttribute('alt', name);
             });

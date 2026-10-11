@@ -206,7 +206,9 @@ body {
 html body { background: #0a0a0a; }
 
 .brand-login-head h1,
+.login-box h1,
 .sidebar-header.brand-sidebar-header h2,
+.sidebar-header h2,
 #pageTitle,
 .content-header h1,
 .dashboard-recent h2,
@@ -219,9 +221,9 @@ html body { background: #0a0a0a; }
   background: none;
 }
 /* Display headings must be LIGHT/GOLD on dark — never --brand-ink (vanishes) */
-.brand-login-head h1 { font-size: 3rem; line-height: 1; color: #ffffff; }
+.brand-login-head h1, .login-box h1 { font-size: 3rem; line-height: 1; color: #ffffff; }
 .content-header h1, #pageTitle { font-size: 2rem; color: #ffffff; }
-.sidebar-header.brand-sidebar-header h2 { font-size: 1.5rem; color: #ffffff; }
+.sidebar-header.brand-sidebar-header h2, .sidebar-header h2 { font-size: 1.5rem; color: #ffffff; }
 .dashboard-recent h2, .dashboard-intro-copy h2, .modal-header h2 { color: #ededed; }
 
 ::selection { background: var(--brand-yellow); color: var(--brand-ink); }
@@ -713,11 +715,13 @@ select, select option, optgroup,
 
 /* Gold underline under display headings (echoes the logo ring) */
 .brand-login-head h1::after,
+.login-box h1::after,
 #pageTitle::after {
   content: ''; display: block; height: 3px; width: 56px; border-radius: 2px;
   background: var(--brand-gold); margin-top: .45rem;
 }
-.brand-login-head h1::after { margin-left: auto; margin-right: auto; }
+.brand-login-head h1::after, .login-box h1::after { margin-left: auto; margin-right: auto; }
+.lookup-bar #lookupBtn { background: var(--gold-grad); color: #0d0d0d; border: 1px solid #d9a407; }
 
 /* ============================================================================
    12. PWA STATUS BAR (assets/css/pwa.css — was the last light white-flash band)
