@@ -1,4 +1,4 @@
-const SHELL_CACHE = 'gym-shell-v11';
+const SHELL_CACHE = 'gym-shell-v12';
 const DATA_CACHE = 'gym-data-v1';
 const SHELL_ASSETS = [
     '/',
@@ -8,8 +8,8 @@ const SHELL_ASSETS = [
     '/member-profile-women.html',
     '/manifest.webmanifest',
     '/assets/css/style.css?v=7',
-    '/assets/css/brand.css?v=11',
-    '/assets/css/admin-dashboard.css?v=9',
+    '/assets/css/brand.css?v=12',
+    '/assets/css/admin-dashboard.css?v=10',
     '/assets/css/member-profile.css?v=8',
     '/assets/css/pwa.css',
     '/assets/js/utils.js?v=7',
@@ -17,7 +17,7 @@ const SHELL_ASSETS = [
     '/assets/js/branding.js?v=2',
     '/assets/js/social-icons.js?v=1',
     '/assets/js/auth.js?v=9',
-    '/assets/js/admin-dashboard.js?v=34',
+    '/assets/js/admin-dashboard.js?v=35',
     '/assets/js/member-profile.js?v=10',
     '/assets/js/pwa.js?v=4',
     '/assets/icons/gym-icon.svg',

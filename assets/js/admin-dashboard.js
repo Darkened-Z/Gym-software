@@ -1505,7 +1505,7 @@ function renderMembersTable(members, pagination) {
     const startIndex = (currentPage - 1) * limit;
 
     const html = `
-        <div style="overflow-x: auto;">
+        <div class="table-responsive">
             <table class="data-table">
                 <thead>
                     <tr>
@@ -1525,9 +1525,9 @@ function renderMembersTable(members, pagination) {
                         <tr>
                             <td data-label="#">${startIndex + idx + 1}</td>
                             <td data-label="Code"><span class="member-code-badge">${m.member_code}</span></td>
-                            <td data-label="Name" class="cell-member-name"><strong class="member-name-text">${escapeHtml(m.name)}</strong></td>
+                            <td data-label="Name" class="cell-member-name" title="${escapeHtml(m.name)}"><strong class="member-name-text">${escapeHtml(m.name)}</strong></td>
                             <td data-label="Phone" class="cell-nowrap">${m.phone}</td>
-                            <td data-label="Email" class="cell-email">${m.email ? escapeHtml(m.email) : '<span style="color: var(--text-muted); opacity: 0.6;">N/A</span>'}</td>
+                            <td data-label="Email" class="cell-email" title="${escapeHtml(m.email || '')}">${m.email ? escapeHtml(m.email) : '<span style="color: var(--text-muted); opacity: 0.6;">N/A</span>'}</td>
                             <td data-label="Join Date" class="cell-nowrap cell-date">${Utils.formatDate(m.join_date)}</td>
                             <td data-label="Due Amount" class="cell-nowrap">${m.total_due_amount > 0 ? `<span class="due-pill due-owed">${Utils.formatCurrency(m.total_due_amount)}</span>` : '<span class="due-pill due-clear"><i class="fa fa-check-circle" style="font-size: 0.75rem;"></i> No Due</span>'}</td>
                             <td data-label="Status"><span class="status-badge status-${m.calculated_status || m.status}">${m.calculated_status || m.status}</span></td>
