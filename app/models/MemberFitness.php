@@ -82,14 +82,32 @@ class MemberFitness {
 
     public function save(string $gender, int $memberId, array $data): bool {
         $gender = $gender === 'women' ? 'women' : 'men';
-        $height = isset($data['height']) && is_numeric($data['height']) ? (float)$data['height'] : null;
-        $goal = in_array($data['goal'] ?? '', ['lose', 'gain', 'maintain'], true) ? $data['goal'] : 'maintain';
-        $targetWeight = isset($data['target_weight']) && is_numeric($data['target_weight']) ? (float)$data['target_weight'] : null;
-        $goalNotes = trim((string)($data['goal_notes'] ?? ''));
-        $vegetarian = !empty($data['vegetarian']) ? 1 : 0;
-        $allergies = trim((string)($data['allergies'] ?? ''));
-        $injuries = trim((string)($data['injuries'] ?? ''));
-        $experience = in_array($data['experience'] ?? '', ['novice', 'intermediate', 'advanced'], true) ? $data['experience'] : 'intermediate';
+        $current = $this->getByMember($gender, $memberId);
+
+        $height = array_key_exists('height', $data)
+            ? (is_numeric($data['height']) ? (float)$data['height'] : null)
+            : ($current['height'] ?? 175.0);
+        $goal = isset($data['goal']) && in_array($data['goal'], ['lose', 'gain', 'maintain'], true)
+            ? $data['goal']
+            : ($current['goal'] ?? 'maintain');
+        $targetWeight = array_key_exists('target_weight', $data)
+            ? (is_numeric($data['target_weight']) ? (float)$data['target_weight'] : null)
+            : ($current['target_weight'] ?? null);
+        $goalNotes = array_key_exists('goal_notes', $data)
+            ? trim((string)$data['goal_notes'])
+            : (string)($current['goal_notes'] ?? '');
+        $vegetarian = array_key_exists('vegetarian', $data)
+            ? (!empty($data['vegetarian']) ? 1 : 0)
+            : (!empty($current['vegetarian']) ? 1 : 0);
+        $allergies = array_key_exists('allergies', $data)
+            ? (is_array($data['allergies']) ? implode(', ', $data['allergies']) : trim((string)$data['allergies']))
+            : (string)($current['allergies'] ?? '');
+        $injuries = array_key_exists('injuries', $data)
+            ? (is_array($data['injuries']) ? implode(', ', $data['injuries']) : trim((string)$data['injuries']))
+            : (string)($current['injuries'] ?? '');
+        $experience = isset($data['experience']) && in_array($data['experience'], ['novice', 'intermediate', 'advanced'], true)
+            ? $data['experience']
+            : ($current['experience'] ?? 'intermediate');
 
         try {
             $stmt = $this->conn->prepare(

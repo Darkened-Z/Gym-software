@@ -258,8 +258,14 @@
   let currentActiveTab = 'dashboard';
 
   // 1. Auth & Session Handling
+  function getQueryParam(p) {
+    const u = new URLSearchParams(window.location.search);
+    return u.get(p) || '';
+  }
+
   async function checkAuth() {
-    const savedCode = localStorage.getItem('apex_trainer_code');
+    const urlCode = getQueryParam('code');
+    const savedCode = urlCode || localStorage.getItem('apex_trainer_code');
     const savedId = localStorage.getItem('apex_trainer_id');
 
     if (!savedCode && !savedId) {
@@ -273,6 +279,8 @@
       if (data && data.success) {
         portalData = data;
         currentTrainer = data.trainer;
+        localStorage.setItem('apex_trainer_code', currentTrainer.trainer_code);
+        localStorage.setItem('apex_trainer_id', currentTrainer.id);
         showPortalView();
         updateSidebar();
         renderTab(currentActiveTab);
@@ -290,6 +298,11 @@
   function showLoginView() {
     document.getElementById('loginView').style.display = 'flex';
     document.getElementById('portalView').style.display = 'none';
+    const urlCode = getQueryParam('code');
+    const loginInp = document.getElementById('trainerLoginId');
+    if (urlCode && loginInp && !loginInp.value) {
+      loginInp.value = urlCode;
+    }
   }
 
   function showPortalView() {
@@ -646,7 +659,7 @@
             </thead>
             <tbody>
               ${members.map(m => {
-                const estPtf = 2500;
+                const estPtf = Number(m.ptf_fee) > 0 ? Number(m.ptf_fee) : 2500;
                 const trainerShare = Math.round((estPtf * (s.commission_pct || 0)) / 100);
                 return `
                   <tr>

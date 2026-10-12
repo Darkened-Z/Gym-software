@@ -1169,6 +1169,8 @@ async function loadEmbeddedApexFit(memberCode, gender) {
     const container = document.getElementById('embeddedApexFitContainer');
     if (!container || !window.APEX_AI) return;
 
+    const fmtMd = (str) => String(str || '').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+
     try {
         const res = await fetch(`api/fitness.php?action=get&code=${encodeURIComponent(memberCode)}`);
         const json = await res.json();
@@ -1176,23 +1178,24 @@ async function loadEmbeddedApexFit(memberCode, gender) {
 
         const raw = json.data;
         const fit = raw.fitness || {};
-        const progress = fit.progress || [];
-        const sessions = (raw.recent_attendance || []).map(a => ({ date: a.date, minutes: a.minutes }));
+        const progress = raw.progress || fit.progress || [];
+        const sessions = (raw.sessions || raw.recent_attendance || []).map(a => ({ date: a.date, minutes: a.minutes }));
 
         const m = {
             id: raw.id,
-            code: raw.member_code,
+            code: raw.code || raw.member_code,
             name: raw.full_name || raw.name,
-            firstName: (raw.full_name || raw.name || '').split(' ')[0],
+            firstName: raw.firstName || (raw.full_name || raw.name || '').split(' ')[0],
             phone: raw.phone,
-            gender: gender === 'women' ? 'female' : 'male',
-            height: fit.height || 172,
-            goal: fit.goal || 'maintain',
-            targetWeight: fit.target_weight || null,
-            vegetarian: !!fit.vegetarian,
-            allergies: fit.allergies ? fit.allergies.split(',').map(s=>s.trim()) : [],
-            injuries: fit.injuries ? fit.injuries.split(',').map(s=>s.trim()) : [],
-            trainer: raw.trainer?.name || 'Head Coach',
+            dob: raw.dob || '1996-01-01',
+            gender: (raw.gender === 'female' || gender === 'women') ? 'female' : 'male',
+            height: raw.height || fit.height || 172,
+            goal: raw.goal || fit.goal || 'maintain',
+            targetWeight: raw.targetWeight ?? fit.target_weight ?? null,
+            vegetarian: !!(raw.vegetarian ?? fit.vegetarian),
+            allergies: Array.isArray(raw.allergies) ? raw.allergies : (fit.allergies ? fit.allergies.split(',').map(s=>s.trim()).filter(Boolean) : []),
+            injuries: Array.isArray(raw.injuries) ? raw.injuries : (fit.injuries ? fit.injuries.split(',').map(s=>s.trim()).filter(Boolean) : []),
+            trainer: (typeof raw.trainer === 'string' ? raw.trainer : raw.trainer?.name) || 'Head Coach',
             progress: progress.length ? progress : [{ date: new Date().toISOString().slice(0, 10), weight: 75, waist: 82 }],
             sessions: sessions
         };
@@ -1221,7 +1224,7 @@ async function loadEmbeddedApexFit(memberCode, gender) {
                             <strong style="color:#e2c169;">💪 Today's Routine: ${workout.title}</strong>
                             <span style="font-size:0.7rem; color:#a19d92; text-transform:uppercase;">${workout.restDay ? 'Rest' : workout.estMinutes + ' min'}</span>
                         </div>
-                        <p style="font-size:0.85rem; color:#d9d4c7; line-height:1.4; margin-bottom:0.75rem;">${workout.coachMessage}</p>
+                        <p style="font-size:0.85rem; color:#d9d4c7; line-height:1.4; margin-bottom:0.75rem;">${fmtMd(workout.coachMessage)}</p>
                         <ul style="list-style:none; padding:0; margin:0; font-size:0.82rem;">
                             ${workout.exercises.slice(0, 3).map((ex, i) => `
                                 <li style="display:flex; justify-content:space-between; padding:0.4rem 0; border-bottom:1px solid rgba(244,241,234,0.05); color:#f4f1ea;">

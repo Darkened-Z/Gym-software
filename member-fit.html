@@ -272,6 +272,11 @@
   let chatSelectedAgent = 'coach';
   let chatHistory = [];
 
+  // Markdown bold helper
+  function fmtMd(str) {
+    return String(str || '').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  }
+
   // 1. Initial Member Resolution (URL param ?code=... or localStorage)
   function getQueryParam(p) {
     const u = new URLSearchParams(window.location.search);
@@ -279,7 +284,12 @@
   }
 
   async function loadMember(codeOrPhone) {
-    const code = codeOrPhone || getQueryParam('code') || localStorage.getItem('apex_member_code') || '';
+    let stored = localStorage.getItem('apex_member_code') || '';
+    if (stored === 'undefined' || stored === 'null') {
+      localStorage.removeItem('apex_member_code');
+      stored = '';
+    }
+    const code = codeOrPhone || getQueryParam('code') || stored || '';
     if (!code) {
       renderLoginPrompt();
       return;
@@ -290,7 +300,10 @@
       const data = await res.json();
       if (data && data.success && data.data) {
         currentMember = data.data;
-        localStorage.setItem('apex_member_code', currentMember.member_code);
+        const resolvedCode = currentMember.code || currentMember.member_code || code;
+        currentMember.code = resolvedCode;
+        currentMember.member_code = resolvedCode;
+        localStorage.setItem('apex_member_code', resolvedCode);
         updateSidebarProfile();
         renderTab(currentActiveTab);
       } else {
@@ -306,7 +319,8 @@
     if (!currentMember) return;
     const name = currentMember.full_name || currentMember.name || 'Member';
     const init = name.charAt(0).toUpperCase();
-    const goal = currentMember.fitness?.goal ? currentMember.fitness.goal.toUpperCase() : 'FITNESS';
+    const rawGoal = currentMember.goal || currentMember.fitness?.goal || 'fitness';
+    const goal = rawGoal.toUpperCase();
 
     document.getElementById('sideName').textContent = name;
     document.getElementById('sideGoal').textContent = `Goal: ${goal}`;
@@ -383,33 +397,47 @@
 
   function buildMemberAdapter(raw) {
     const fit = raw.fitness || {};
-    const progress = fit.progress || [];
-    const sessions = (raw.recent_attendance || []).map(a => ({ date: a.date, minutes: a.minutes }));
+    const progress = raw.progress || fit.progress || [];
+    const sessions = (raw.sessions || raw.recent_attendance || []).map(a => ({
+      date: a.date,
+      minutes: a.minutes || 55,
+      rpe: a.rpe || 8,
+      type: a.type || 'full-body'
+    }));
+
+    const parseList = (val) => {
+      if (Array.isArray(val)) return val.filter(Boolean);
+      if (typeof val === 'string' && val.trim()) return val.split(',').map(s => s.trim()).filter(Boolean);
+      return [];
+    };
 
     return {
       id: raw.id,
-      code: raw.member_code,
+      code: raw.code || raw.member_code,
       name: raw.full_name || raw.name,
-      firstName: (raw.full_name || raw.name || '').split(' ')[0],
-      phone: raw.phone,
-      gender: raw.gender === 'women' ? 'female' : 'male',
-      height: fit.height || 172,
-      goal: fit.goal || 'maintain',
-      targetWeight: fit.target_weight || null,
-      vegetarian: !!fit.vegetarian,
-      allergies: (fit.allergies ? fit.allergies.split(',').map(s=>s.trim()) : []),
-      injuries: (fit.injuries ? fit.injuries.split(',').map(s=>s.trim()) : []),
-      trainer: raw.trainer?.name || 'Head Coach',
-      trainerPhone: raw.trainer?.phone || '',
-      monthlyFee: raw.monthly_fee || 0,
-      pkg: raw.package_name || 'Standard Gym',
-      dueAmount: raw.due_amount || 0,
-      nextDue: raw.due_date || 'N/A',
-      joinDate: raw.join_date || '2026-01-01',
+      firstName: raw.firstName || (raw.full_name || raw.name || '').split(' ')[0],
+      phone: raw.phone || '',
+      dob: raw.dob || '1996-01-01',
+      gender: (raw.gender === 'female' || raw.gender === 'women' || raw.section === 'women') ? 'female' : 'male',
+      height: Number(raw.height || fit.height || 172),
+      goal: raw.goal || fit.goal || 'maintain',
+      targetWeight: (raw.targetWeight ?? fit.target_weight) ? Number(raw.targetWeight ?? fit.target_weight) : null,
+      goalNotes: raw.goalNotes || fit.goal_notes || '',
+      experience: raw.experience || fit.experience || 'intermediate',
+      vegetarian: !!(raw.vegetarian ?? fit.vegetarian),
+      allergies: parseList(raw.allergies ?? fit.allergies),
+      injuries: parseList(raw.injuries ?? fit.injuries),
+      trainer: (typeof raw.trainer === 'string' ? raw.trainer : raw.trainer?.name) || 'Head Coach',
+      trainerPhone: raw.trainerPhone || raw.trainer?.phone || '',
+      monthlyFee: Number(raw.monthlyFee ?? raw.monthly_fee ?? 0),
+      pkg: raw.pkg || raw.package_name || 'Standard Gym',
+      dueAmount: Number(raw.due ?? raw.dueAmount ?? raw.due_amount ?? 0),
+      nextDue: raw.nextDue || raw.due_date || 'N/A',
+      joinDate: raw.joinDate || raw.join_date || '2026-01-01',
       progress: progress.length ? progress : [{ date: new Date().toISOString().slice(0, 10), weight: 75, waist: 82 }],
       sessions: sessions,
-      sessionLogs: fit.session_logs || [],
-      mealLogs: fit.meal_logs || []
+      sessionLogs: raw.sessionLogs || fit.session_logs || [],
+      mealLogs: raw.mealLogs || fit.meal_logs || []
     };
   }
 
@@ -420,7 +448,7 @@
     const nutrition = window.APEX_AI.nutritionPlan(m);
     const narrative = window.APEX_AI.progressNarrative(m);
 
-    const weightVal = stats.last ? `${stats.last.weight.toFixed(1)} kg` : '—';
+    const weightVal = stats.last ? `${Number(stats.last.weight).toFixed(1)} kg` : '—';
     const trendVal = stats.perWeek !== 0 ? `${stats.perWeek > 0 ? '+' : ''}${stats.perWeek.toFixed(2)} kg/wk` : 'Stable';
     const goalVal = stats.goalDone != null ? `${stats.goalDone}%` : '—';
     const freqVal = `${stats.sessionsPerWeek} / wk`;
@@ -429,9 +457,12 @@
       <div class="page-head">
         <div>
           <h1>Welcome back, ${m.firstName}</h1>
-          <p class="sub">Your personalized fitness program · Day ${(new Date()).toLocaleDateString('en-US', { weekday: 'long' })}</p>
+          <p class="sub">Your personalized fitness program · ${(new Date()).toLocaleDateString('en-US', { weekday: 'long' })}</p>
         </div>
-        <div class="ai-badge">Evidence-Based AI Coach</div>
+        <div style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap;">
+          <div class="ai-badge">Evidence-Based AI Coach</div>
+          <button class="btn-pill" onclick="window.openGoalsModal()">⚙ Edit Goals</button>
+        </div>
       </div>
 
       <!-- Stats Grid -->
@@ -458,6 +489,12 @@
         </div>
       </div>
 
+      ${m.goalNotes ? `
+        <div class="info-note">
+          <strong>📋 Coach Note from ${m.trainer}:</strong> ${fmtMd(m.goalNotes)}
+        </div>
+      ` : ''}
+
       <!-- Today's Workout Card -->
       <div class="card">
         <div class="card-head">
@@ -465,7 +502,7 @@
           <span class="sub">${workout.restDay ? 'REST & RECOVERY' : workout.estMinutes + ' MIN · ' + workout.focus.toUpperCase()}</span>
         </div>
         <div class="card-body">
-          <p>${workout.coachMessage}</p>
+          <p>${fmtMd(workout.coachMessage)}</p>
           <ul class="ex-list">
             ${workout.exercises.slice(0, 4).map((ex, i) => `
               <li>
@@ -488,7 +525,7 @@
           <span class="sub">${nutrition.calories} KCAL · ${nutrition.protein}G PROTEIN</span>
         </div>
         <div class="card-body">
-          <p>${nutrition.nutritionistMessage}</p>
+          <p>${fmtMd(nutrition.nutritionistMessage)}</p>
           <div class="macro-grid">
             <div class="macro"><div class="k">Calories</div><div class="v gold">${nutrition.calories}<span class="u">kcal</span></div></div>
             <div class="macro"><div class="k">Protein</div><div class="v green">${nutrition.protein}<span class="u">g</span></div></div>
@@ -506,8 +543,8 @@
           <span class="sub">AI ANALYST</span>
         </div>
         <div class="card-body">
-          <p><strong>${narrative.headline}</strong></p>
-          ${narrative.paragraphs.map(p => `<p>${p}</p>`).join('')}
+          <p><strong>${fmtMd(narrative.headline)}</strong></p>
+          ${narrative.paragraphs.map(p => `<p>${fmtMd(p)}</p>`).join('')}
           <div style="margin-top:1rem;">
             <button class="btn-pill" onclick="window.openProgressModal()">+ Log New Weight</button>
           </div>
@@ -529,8 +566,8 @@
         <button class="btn-gold" style="width:auto;" onclick="window.openLogWorkoutModal()">+ Log Completed Session</button>
       </div>
 
-      ${workout.coachMessage ? `<div class="info-note">${workout.coachMessage}</div>` : ''}
-      ${workout.injuryNote ? `<div class="warn-note">${workout.injuryNote}</div>` : ''}
+      ${workout.coachMessage ? `<div class="info-note">${fmtMd(workout.coachMessage)}</div>` : ''}
+      ${workout.injuryNote ? `<div class="warn-note">${fmtMd(workout.injuryNote)}</div>` : ''}
 
       <div class="card">
         <div class="card-head">
@@ -569,12 +606,47 @@
           <div class="card-body"><p>${workout.finisher}</p></div>
         </div>
       ` : ''}
+
+      ${m.sessionLogs && m.sessionLogs.length ? `
+        <div class="card">
+          <div class="card-head">
+            <h2>Logged Workout History</h2>
+            <span class="sub">${m.sessionLogs.length} SESSIONS</span>
+          </div>
+          <div class="card-body" style="padding:0; overflow-x:auto;">
+            <table style="width:100%; border-collapse:collapse; font-size:.85rem; text-align:left;">
+              <thead>
+                <tr style="border-bottom:1px solid var(--line); color:var(--cream-4);">
+                  <th style="padding:.75rem 1rem;">DATE</th>
+                  <th style="padding:.75rem 1rem;">SESSION</th>
+                  <th style="padding:.75rem 1rem;">DURATION</th>
+                  <th style="padding:.75rem 1rem;">RPE</th>
+                  <th style="padding:.75rem 1rem;">NOTES</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${m.sessionLogs.slice().reverse().map(s => `
+                  <tr style="border-bottom:1px solid var(--line);">
+                    <td style="padding:.75rem 1rem; font-family:'JetBrains Mono',monospace;">${s.date || '—'}</td>
+                    <td style="padding:.75rem 1rem; font-weight:600; color:var(--cream);">${s.title || 'Workout'}</td>
+                    <td style="padding:.75rem 1rem;">${s.minutes || 55} min</td>
+                    <td style="padding:.75rem 1rem; color:var(--gold-2);">RPE ${s.rpe || 8}</td>
+                    <td style="padding:.75rem 1rem; color:var(--cream-3);">${s.notes || ''}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ` : ''}
     `;
   }
 
   // --- TAB: NUTRITION ---
   function renderNutritionView(m, container) {
     const plan = window.APEX_AI.nutritionPlan(m);
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayMeals = (m.mealLogs || []).filter(x => x.date === todayStr);
 
     container.innerHTML = `
       <div class="page-head">
@@ -593,8 +665,30 @@
       </div>
 
       <div class="info-note">
-        ${plan.nutritionistMessage}
+        ${fmtMd(plan.nutritionistMessage)}
       </div>
+
+      ${m.mealLogs && m.mealLogs.length ? `
+        <div class="card">
+          <div class="card-head">
+            <h2>Logged Meals</h2>
+            <span class="sub">${todayMeals.length} TODAY · ${m.mealLogs.length} TOTAL</span>
+          </div>
+          <div class="card-body">
+            ${m.mealLogs.slice(-6).reverse().map(ml => `
+              <div style="display:flex; justify-content:space-between; align-items:center; padding:.6rem 0; border-bottom:1px solid var(--line);">
+                <div>
+                  <strong>${ml.name || 'Meal'}</strong> <span class="mono" style="margin-left:.4rem;">${ml.date || ''}</span>
+                  ${ml.desc ? `<div style="color:var(--cream-3); font-size:.82rem;">${ml.desc}</div>` : ''}
+                </div>
+                <div style="text-align:right; font-family:'JetBrains Mono',monospace; font-size:.82rem;">
+                  <span style="color:var(--gold-2);">${ml.kcal || 0} kcal</span> · <span style="color:var(--green);">${ml.protein || 0}g P</span>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      ` : ''}
 
       <div class="card">
         <div class="card-head">
@@ -664,8 +758,8 @@
           <span class="sub">INSIGHTS</span>
         </div>
         <div class="card-body">
-          <p><strong>${narrative.headline}</strong></p>
-          ${narrative.paragraphs.map(p => `<p>${p}</p>`).join('')}
+          <p><strong>${fmtMd(narrative.headline)}</strong></p>
+          ${narrative.paragraphs.map(p => `<p>${fmtMd(p)}</p>`).join('')}
         </div>
       </div>
 
@@ -753,7 +847,7 @@
           ${chatHistory.map(msg => `
             <div class="msg ${msg.sender}">
               ${msg.sender === 'ai' ? `<span class="from">${agents[msg.agent]?.emoji || '🤖'} ${agents[msg.agent]?.name || 'Coach'}</span>` : ''}
-              <div>${msg.text}</div>
+              <div>${fmtMd(msg.text)}</div>
             </div>
           `).join('')}
         </div>
@@ -819,18 +913,22 @@
           <h1>Membership & Trainer Profile</h1>
           <p class="sub">Account ID: ${m.code}</p>
         </div>
-        <button class="btn-pill" onclick="localStorage.removeItem('apex_member_code'); location.reload();">Sign Out / Switch</button>
+        <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
+          <button class="btn-gold" style="width:auto;" onclick="window.openGoalsModal()">Edit Fitness Goals & Preferences</button>
+          <button class="btn-pill" onclick="localStorage.removeItem('apex_member_code'); location.reload();">Sign Out / Switch</button>
+        </div>
       </div>
 
       <div class="card">
         <div class="card-head">
-          <h2>Member Details</h2>
+          <h2>Member Details & AI Personalization</h2>
           <span class="sub">${m.pkg.toUpperCase()}</span>
         </div>
         <div class="card-body">
           <p><strong>Full Name:</strong> ${m.name}</p>
           <p><strong>Mobile:</strong> ${m.phone}</p>
           <p><strong>Gender:</strong> ${m.gender === 'female' ? 'Women' : 'Men'}</p>
+          <p><strong>Height:</strong> ${m.height} cm · <strong>Goal:</strong> ${m.goal.toUpperCase()} ${m.targetWeight ? `(Target: ${m.targetWeight} kg)` : ''}</p>
           <p><strong>Dietary Preference:</strong> ${m.vegetarian ? 'Vegetarian' : 'Standard / Omnivorous'}</p>
           <p><strong>Allergies / Restrictions:</strong> ${m.allergies.length ? m.allergies.join(', ') : 'None'}</p>
           <p><strong>Active Injuries / Pain:</strong> ${m.injuries.length ? m.injuries.join(', ') : 'None'}</p>
@@ -863,7 +961,89 @@
     `;
   }
 
-  // 4. Modals (Log Weight, Log Workout, Log Meal)
+  // 4. Modals (Edit Goals, Log Weight, Log Workout, Log Meal)
+  window.openGoalsModal = function() {
+    if (!currentMember) return;
+    const m = buildMemberAdapter(currentMember);
+    const modal = document.getElementById('modalContainer');
+    modal.innerHTML = `
+      <div class="modal-overlay" onclick="if(event.target===this) this.remove();">
+        <div class="modal">
+          <div class="modal-head">
+            <h3>Edit Fitness Goals & Preferences</h3>
+            <button class="modal-close" onclick="this.closest('.modal-overlay').remove();">&times;</button>
+          </div>
+          <div class="modal-body">
+            <form id="goalsEditForm">
+              <div class="form-group">
+                <label>Primary Goal</label>
+                <select id="gGoal">
+                  <option value="lose" ${m.goal === 'lose' ? 'selected' : ''}>Fat Loss / Cut</option>
+                  <option value="gain" ${m.goal === 'gain' ? 'selected' : ''}>Muscle Gain / Bulk</option>
+                  <option value="maintain" ${m.goal === 'maintain' ? 'selected' : ''}>Recomp / Maintain</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Target Weight (kg)</label>
+                <input type="number" step="0.5" id="gTargetWeight" value="${m.targetWeight || ''}" placeholder="e.g. 72">
+              </div>
+              <div class="form-group">
+                <label>Height (cm)</label>
+                <input type="number" step="1" id="gHeight" value="${m.height || 172}" required>
+              </div>
+              <div class="form-group">
+                <label>Dietary Preference</label>
+                <select id="gVeg">
+                  <option value="0" ${!m.vegetarian ? 'selected' : ''}>Standard / Omnivorous</option>
+                  <option value="1" ${m.vegetarian ? 'selected' : ''}>Vegetarian</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Allergies (comma-separated, e.g. dairy, eggs)</label>
+                <input type="text" id="gAllergies" value="${m.allergies.join(', ')}" placeholder="Leave blank if none">
+              </div>
+              <div class="form-group">
+                <label>Active Injuries (comma-separated, e.g. knee, shoulder, lower-back)</label>
+                <input type="text" id="gInjuries" value="${m.injuries.join(', ')}" placeholder="Leave blank if none">
+              </div>
+              <button type="submit" class="btn-gold">Save Preferences</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('goalsEditForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const mCode = currentMember.code || currentMember.member_code;
+      const payload = {
+        goal: document.getElementById('gGoal').value,
+        target_weight: parseFloat(document.getElementById('gTargetWeight').value) || null,
+        height: parseFloat(document.getElementById('gHeight').value) || 172,
+        vegetarian: document.getElementById('gVeg').value === '1',
+        allergies: document.getElementById('gAllergies').value.trim(),
+        injuries: document.getElementById('gInjuries').value.trim()
+      };
+
+      try {
+        const res = await fetch(`api/fitness.php?action=save_profile&code=${encodeURIComponent(mCode)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const d = await res.json();
+        if (d.success) {
+          document.querySelector('.modal-overlay').remove();
+          loadMember(mCode);
+        } else {
+          alert(d.message || 'Error saving preferences');
+        }
+      } catch (err) {
+        alert('Network error saving preferences');
+      }
+    });
+  };
+
   window.openProgressModal = function() {
     const modal = document.getElementById('modalContainer');
     modal.innerHTML = `
@@ -900,6 +1080,7 @@
 
     document.getElementById('progressLogForm').addEventListener('submit', async (e) => {
       e.preventDefault();
+      const mCode = currentMember.code || currentMember.member_code;
       const payload = {
         date: new Date().toISOString().slice(0, 10),
         weight: parseFloat(document.getElementById('mWeight').value),
@@ -909,7 +1090,7 @@
       };
 
       try {
-        const res = await fetch(`api/fitness.php?action=log_progress&code=${encodeURIComponent(currentMember.member_code)}`, {
+        const res = await fetch(`api/fitness.php?action=log_progress&code=${encodeURIComponent(mCode)}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
@@ -917,7 +1098,7 @@
         const d = await res.json();
         if (d.success) {
           document.querySelector('.modal-overlay').remove();
-          loadMember(currentMember.member_code);
+          loadMember(mCode);
         } else {
           alert(d.message || 'Error saving progress');
         }
@@ -968,6 +1149,7 @@
 
     document.getElementById('workoutLogForm').addEventListener('submit', async (e) => {
       e.preventDefault();
+      const mCode = currentMember.code || currentMember.member_code;
       const payload = {
         date: new Date().toISOString().slice(0, 10),
         title: document.getElementById('wTitle').value.trim(),
@@ -977,7 +1159,7 @@
       };
 
       try {
-        const res = await fetch(`api/fitness.php?action=log_session&code=${encodeURIComponent(currentMember.member_code)}`, {
+        const res = await fetch(`api/fitness.php?action=log_session&code=${encodeURIComponent(mCode)}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
@@ -985,7 +1167,7 @@
         const d = await res.json();
         if (d.success) {
           document.querySelector('.modal-overlay').remove();
-          loadMember(currentMember.member_code);
+          loadMember(mCode);
         } else {
           alert(d.message || 'Error recording session');
         }
@@ -1036,6 +1218,7 @@
 
     document.getElementById('mealLogForm').addEventListener('submit', async (e) => {
       e.preventDefault();
+      const mCode = currentMember.code || currentMember.member_code;
       const payload = {
         date: new Date().toISOString().slice(0, 10),
         name: document.getElementById('mType').value,
@@ -1045,7 +1228,7 @@
       };
 
       try {
-        const res = await fetch(`api/fitness.php?action=log_meal&code=${encodeURIComponent(currentMember.member_code)}`, {
+        const res = await fetch(`api/fitness.php?action=log_meal&code=${encodeURIComponent(mCode)}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
@@ -1053,7 +1236,7 @@
         const d = await res.json();
         if (d.success) {
           document.querySelector('.modal-overlay').remove();
-          loadMember(currentMember.member_code);
+          loadMember(mCode);
         } else {
           alert(d.message || 'Error recording meal');
         }

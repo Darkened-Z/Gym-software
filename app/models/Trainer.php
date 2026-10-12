@@ -266,14 +266,15 @@ class Trainer {
         }
 
         foreach ($sections as $sec) {
-            $sql = "SELECT m.id, m.member_code, m.full_name, m.phone, m.profile_photo,
-                           m.package_name, m.fee_status, m.due_date, m.due_amount, m.monthly_fee,
-                           m.status, '{$sec}' as section,
+            $sql = "SELECT m.id, m.member_code, m.name AS full_name, m.name, m.phone,
+                           m.profile_image AS profile_photo, m.membership_type AS package_name,
+                           m.next_fee_due_date AS due_date, m.total_due_amount AS due_amount,
+                           m.monthly_fee, m.ptf_fee, m.status, '{$sec}' as section,
                            mf.height, mf.goal, mf.target_weight, mf.goal_notes, mf.progress_json, mf.logs_json
                     FROM members_{$sec} m
                     LEFT JOIN member_fitness mf ON mf.gender = '{$sec}' AND mf.member_id = m.id
                     WHERE m.assigned_trainer_id = :tid
-                    ORDER BY m.full_name ASC";
+                    ORDER BY m.name ASC";
             $stmt = $this->conn->prepare($sql);
             $stmt->execute([':tid' => $trainerId]);
             $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -313,12 +314,17 @@ class Trainer {
             $sessionsThisWeek += (int)$wStmt->fetchColumn();
         }
 
-        // Commission calculation (e.g. from PT fees if any, or flat salary + commission on members)
+        // Commission calculation (from PT fees if set, or 2500 fallback per active assigned member)
         $salary = (float)($trainer['monthly_salary'] ?? 0);
         $commPct = (float)($trainer['commission_pct'] ?? 0);
-        // Estimate PTF base (e.g. 2000 per assigned active member or package surplus)
         $activeCount = count(array_filter($members, fn($m) => ($m['status'] ?? '') === 'active'));
-        $estimatedPtfPool = $activeCount * 2500;
+        $estimatedPtfPool = 0;
+        foreach ($members as $m) {
+            if (($m['status'] ?? '') === 'active') {
+                $ptf = (float)($m['ptf_fee'] ?? 0);
+                $estimatedPtfPool += ($ptf > 0 ? $ptf : 2500);
+            }
+        }
         $earnedCommission = round(($estimatedPtfPool * $commPct) / 100);
         $mtdTotalEarnings = $salary + $earnedCommission;
 

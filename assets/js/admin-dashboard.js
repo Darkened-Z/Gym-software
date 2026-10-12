@@ -237,7 +237,7 @@ function showLicenseBanner(msg, urgent) {
 }
 
 function setupNavigation() {
-    document.querySelectorAll('.nav-item').forEach(item => {
+    document.querySelectorAll('.nav-item[data-section]').forEach(item => {
         if (item.id !== 'logoutBtn') {
             item.addEventListener('click', function (e) {
                 e.preventDefault();

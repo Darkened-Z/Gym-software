@@ -13,6 +13,11 @@ require_once __DIR__ . '/../app/models/Attendance.php';
 require_once __DIR__ . '/../app/models/Trainer.php';
 require_once __DIR__ . '/../app/models/MemberFitness.php';
 
+if (session_status() === PHP_SESSION_NONE) {
+    @session_start();
+}
+$sessionMemberCode = $_SESSION['member_code'] ?? '';
+$sessionMemberGender = $_SESSION['member_gender'] ?? 'men';
 if (session_status() === PHP_SESSION_ACTIVE) {
     session_write_close();
 }
@@ -54,10 +59,10 @@ try {
                 $gender = 'women';
             }
         }
-    } elseif (!empty($_SESSION['member_code'])) {
-        $gender = ($_SESSION['member_gender'] ?? 'men') === 'women' ? 'women' : 'men';
+    } elseif ($sessionMemberCode !== '') {
+        $gender = $sessionMemberGender === 'women' ? 'women' : 'men';
         $model = $gender === 'women' ? $memberWomen : $memberMen;
-        $member = $model->getByCode($_SESSION['member_code']);
+        $member = $model->getByCode($sessionMemberCode);
     }
 
     if (!$member) {
@@ -73,7 +78,7 @@ try {
         case 'get': {
             $fit = $fitnessModel->getByMember($gender, $memberId);
 
-            // Fetch recent attendance sessions (last 30 days) to feed into the AI stats
+            // Fetch recent attendance sessions (last 60 days) to feed into the AI stats
             $attStmt = $db->prepare(
                 "SELECT DATE(check_in) as `date`,
                         TIMESTAMPDIFF(MINUTE, check_in, COALESCE(check_out, DATE_ADD(check_in, INTERVAL 60 MINUTE))) as minutes
@@ -94,55 +99,85 @@ try {
                 ];
             }
 
-            // Fetch trainer name if assigned
+            // Fetch trainer details if assigned
             $trainerName = null;
+            $trainerPhone = null;
             if (!empty($member['assigned_trainer_id'])) {
                 try {
-                    $tStmt = $db->prepare("SELECT name FROM trainers WHERE id = :tid LIMIT 1");
+                    $tStmt = $db->prepare("SELECT name, phone FROM trainers WHERE id = :tid LIMIT 1");
                     $tStmt->execute([':tid' => $member['assigned_trainer_id']]);
-                    $trainerName = $tStmt->fetchColumn() ?: null;
+                    $tRow = $tStmt->fetch(PDO::FETCH_ASSOC);
+                    if ($tRow) {
+                        $trainerName = $tRow['name'] ?: null;
+                        $trainerPhone = $tRow['phone'] ?: null;
+                    }
                 } catch (Exception $e) {}
             }
 
-            // Build AI-compatible member payload
+            $progressArr = $fit['progress'] ?: [
+                [
+                    'date' => $member['join_date'] ?? date('Y-m-d'),
+                    'weight' => $fit['target_weight'] ? ($fit['goal'] === 'lose' ? $fit['target_weight'] + 5 : ($fit['goal'] === 'gain' ? $fit['target_weight'] - 4 : $fit['target_weight'])) : 72.0,
+                    'chest' => 96,
+                    'waist' => 82,
+                    'arms' => 32,
+                    'thighs' => 54,
+                    'notes' => 'Baseline'
+                ]
+            ];
+
+            // Build AI-compatible member payload (supports both top-level and nested .fitness/.recent_attendance consumers)
             $payload = [
                 'id' => $memberId,
                 'code' => $member['member_code'],
+                'member_code' => $member['member_code'],
                 'name' => $member['name'],
+                'full_name' => $member['name'],
                 'firstName' => explode(' ', trim($member['name']))[0] ?? $member['name'],
                 'gender' => $gender === 'women' ? 'female' : 'male',
                 'section' => $gender,
                 'phone' => $member['phone'] ?? '',
+                'dob' => $member['dob'] ?? '1996-01-01',
                 'joinDate' => $member['join_date'] ?? date('Y-m-d'),
+                'join_date' => $member['join_date'] ?? date('Y-m-d'),
                 'height' => (float)($fit['height'] ?: 175.0),
                 'goal' => $fit['goal'] ?: 'maintain',
                 'targetWeight' => $fit['target_weight'] !== null ? (float)$fit['target_weight'] : null,
                 'goalNotes' => $fit['goal_notes'] ?: '',
                 'vegetarian' => (bool)$fit['vegetarian'],
-                'allergies' => array_filter(array_map('trim', explode(',', $fit['allergies'] ?? ''))),
-                'injuries' => array_filter(array_map('trim', explode(',', $fit['injuries'] ?? ''))),
+                'allergies' => array_values(array_filter(array_map('trim', explode(',', $fit['allergies'] ?? '')))),
+                'injuries' => array_values(array_filter(array_map('trim', explode(',', $fit['injuries'] ?? '')))),
                 'experience' => $fit['experience'] ?: 'intermediate',
                 'pkg' => $member['membership_type'] ?? 'Standard',
+                'package_name' => $member['membership_type'] ?? 'Standard',
                 'monthlyFee' => (float)($member['monthly_fee'] ?? 0),
+                'monthly_fee' => (float)($member['monthly_fee'] ?? 0),
                 'ptf' => (float)($member['ptf_fee'] ?? 0),
                 'due' => (float)($member['total_due_amount'] ?? 0),
+                'dueAmount' => (float)($member['total_due_amount'] ?? 0),
+                'due_amount' => (float)($member['total_due_amount'] ?? 0),
                 'nextDue' => $member['next_fee_due_date'] ?? null,
-                'trainer' => $trainerName,
-                'progress' => $fit['progress'] ?: [
-                    // Provide at least a sensible baseline if no progress has been logged yet
-                    [
-                        'date' => $member['join_date'] ?? date('Y-m-d'),
-                        'weight' => $fit['target_weight'] ? ($fit['goal'] === 'lose' ? $fit['target_weight'] + 5 : ($fit['goal'] === 'gain' ? $fit['target_weight'] - 4 : $fit['target_weight'])) : 72.0,
-                        'chest' => 96,
-                        'waist' => 82,
-                        'arms' => 32,
-                        'thighs' => 54,
-                        'notes' => 'Baseline'
-                    ]
-                ],
+                'due_date' => $member['next_fee_due_date'] ?? null,
+                'trainer' => $trainerName ?: 'Head Coach',
+                'trainerPhone' => $trainerPhone ?: '',
+                'progress' => $progressArr,
                 'sessions' => $sessions,
+                'recent_attendance' => $sessions,
                 'sessionLogs' => $fit['session_logs'] ?: [],
-                'mealLogs' => $fit['meal_logs'] ?: []
+                'mealLogs' => $fit['meal_logs'] ?: [],
+                'fitness' => [
+                    'height' => (float)($fit['height'] ?: 175.0),
+                    'goal' => $fit['goal'] ?: 'maintain',
+                    'target_weight' => $fit['target_weight'] !== null ? (float)$fit['target_weight'] : null,
+                    'goal_notes' => $fit['goal_notes'] ?: '',
+                    'vegetarian' => (bool)$fit['vegetarian'],
+                    'allergies' => $fit['allergies'] ?? '',
+                    'injuries' => $fit['injuries'] ?? '',
+                    'experience' => $fit['experience'] ?: 'intermediate',
+                    'progress' => $progressArr,
+                    'session_logs' => $fit['session_logs'] ?: [],
+                    'meal_logs' => $fit['meal_logs'] ?: []
+                ]
             ];
 
             echo json_encode([
