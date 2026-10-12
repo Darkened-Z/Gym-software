@@ -1,4 +1,4 @@
-const SHELL_CACHE = 'gym-shell-v12';
+const SHELL_CACHE = 'gym-shell-v13';
 const DATA_CACHE = 'gym-data-v1';
 const SHELL_ASSETS = [
     '/',
@@ -8,7 +8,7 @@ const SHELL_ASSETS = [
     '/member-profile-women.html',
     '/manifest.webmanifest',
     '/assets/css/style.css?v=7',
-    '/assets/css/brand.css?v=12',
+    '/assets/css/brand.css?v=13',
     '/assets/css/admin-dashboard.css?v=10',
     '/assets/css/member-profile.css?v=8',
     '/assets/css/pwa.css',
