@@ -839,6 +839,11 @@ function renderMemberProfile(data) {
                             ` : ''}
                         </div>
                     </div>
+                    <div style="margin-top: 1.25rem;">
+                        <a href="member-fit.html?code=${encodeURIComponent(member.member_code)}" class="btn" style="display:flex; align-items:center; justify-content:center; gap:0.5rem; background:linear-gradient(135deg, #c9a24a, #e2c169); color:#0a0a0a; font-weight:700; width:100%; padding:0.85rem; border-radius:6px; text-decoration:none; box-shadow:0 4px 14px rgba(201,162,74,0.3); letter-spacing:0.02em;">
+                            <span>💪</span> Open Apex Fit AI Coach Portal →
+                        </a>
+                    </div>
                 </div>
 
                 <!-- Right Side: Payment History -->
@@ -871,12 +876,19 @@ function renderMemberProfile(data) {
                     <div data-attendance-outbox-panel aria-live="polite"></div>
                 </div>
             </div>
+
+            <!-- Embedded Apex Fit Section -->
+            <div id="embeddedApexFitContainer" style="margin-top: 2rem; padding: 0 2rem;"></div>
         </div>
     `;
 
     document.getElementById('memberContent').innerHTML = html;
     if (window.AttendanceOutbox && typeof window.AttendanceOutbox.refreshPanels === 'function') {
         window.AttendanceOutbox.refreshPanels();
+    }
+
+    if (!isSnapshot && Utils.isOnline()) {
+        loadEmbeddedApexFit(member.member_code, gender);
     }
 }
 
@@ -1149,3 +1161,110 @@ function changePaymentPage(direction) {
         }
     }
 }
+
+/**
+ * Loads and embeds the Apex Fit AI Coach summary directly into the member profile
+ */
+async function loadEmbeddedApexFit(memberCode, gender) {
+    const container = document.getElementById('embeddedApexFitContainer');
+    if (!container || !window.APEX_AI) return;
+
+    try {
+        const res = await fetch(`api/fitness.php?action=get&code=${encodeURIComponent(memberCode)}`);
+        const json = await res.json();
+        if (!json || !json.success || !json.data) return;
+
+        const raw = json.data;
+        const fit = raw.fitness || {};
+        const progress = fit.progress || [];
+        const sessions = (raw.recent_attendance || []).map(a => ({ date: a.date, minutes: a.minutes }));
+
+        const m = {
+            id: raw.id,
+            code: raw.member_code,
+            name: raw.full_name || raw.name,
+            firstName: (raw.full_name || raw.name || '').split(' ')[0],
+            phone: raw.phone,
+            gender: gender === 'women' ? 'female' : 'male',
+            height: fit.height || 172,
+            goal: fit.goal || 'maintain',
+            targetWeight: fit.target_weight || null,
+            vegetarian: !!fit.vegetarian,
+            allergies: fit.allergies ? fit.allergies.split(',').map(s=>s.trim()) : [],
+            injuries: fit.injuries ? fit.injuries.split(',').map(s=>s.trim()) : [],
+            trainer: raw.trainer?.name || 'Head Coach',
+            progress: progress.length ? progress : [{ date: new Date().toISOString().slice(0, 10), weight: 75, waist: 82 }],
+            sessions: sessions
+        };
+
+        const workout = window.APEX_AI.coachWorkout(m);
+        const nutrition = window.APEX_AI.nutritionPlan(m);
+        const stats = window.APEX_AI.stats(m);
+
+        container.innerHTML = `
+            <div style="background: linear-gradient(135deg, rgba(20,20,20,0.95), rgba(28,28,28,0.95)); border: 1px solid rgba(201,162,74,0.3); border-radius: 8px; padding: 1.5rem; margin-top: 1rem; box-shadow: 0 8px 32px rgba(0,0,0,0.4);">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; border-bottom:1px solid rgba(244,241,234,0.1); padding-bottom:1rem; margin-bottom:1.25rem;">
+                    <div style="display:flex; align-items:center; gap:0.75rem;">
+                        <div style="width:36px; height:36px; border:1px solid #c9a24a; color:#c9a24a; display:flex; align-items:center; justify-content:center; font-weight:800; border-radius:4px;">A</div>
+                        <div>
+                            <h3 style="margin:0; font-size:1.2rem; color:#f4f1ea;">Apex Fit — AI Coach & Nutrition Insights</h3>
+                            <div style="font-size:0.75rem; color:#a19d92; text-transform:uppercase; letter-spacing:0.05em;">Evidence-informed programming (Helms, Israetel, Renaissance Periodization)</div>
+                        </div>
+                    </div>
+                    <a href="member-fit.html?code=${encodeURIComponent(memberCode)}" class="btn" style="background:#c9a24a; color:#0a0a0a; font-weight:700; padding:0.5rem 1rem; border-radius:4px; text-decoration:none; font-size:0.82rem; text-transform:uppercase;">Open Full AI Portal →</a>
+                </div>
+
+                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem;">
+                    <!-- Today's Workout Routine -->
+                    <div style="background: rgba(10,10,10,0.6); border: 1px solid rgba(244,241,234,0.08); padding: 1rem; border-radius: 6px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+                            <strong style="color:#e2c169;">💪 Today's Routine: ${workout.title}</strong>
+                            <span style="font-size:0.7rem; color:#a19d92; text-transform:uppercase;">${workout.restDay ? 'Rest' : workout.estMinutes + ' min'}</span>
+                        </div>
+                        <p style="font-size:0.85rem; color:#d9d4c7; line-height:1.4; margin-bottom:0.75rem;">${workout.coachMessage}</p>
+                        <ul style="list-style:none; padding:0; margin:0; font-size:0.82rem;">
+                            ${workout.exercises.slice(0, 3).map((ex, i) => `
+                                <li style="display:flex; justify-content:space-between; padding:0.4rem 0; border-bottom:1px solid rgba(244,241,234,0.05); color:#f4f1ea;">
+                                    <span>${i+1}. ${ex.name}</span>
+                                    <span style="color:#e2c169; font-family:monospace;">${ex.prescription}</span>
+                                </li>
+                            `).join('')}
+                        </ul>
+                    </div>
+
+                    <!-- Today's Nutrition & Fuel -->
+                    <div style="background: rgba(10,10,10,0.6); border: 1px solid rgba(244,241,234,0.08); padding: 1rem; border-radius: 6px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+                            <strong style="color:#63c66d;">🥗 Nutrition & Macro Targets</strong>
+                            <span style="font-size:0.7rem; color:#a19d92;">${nutrition.method}</span>
+                        </div>
+                        <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:0.5rem; text-align:center; margin-bottom:0.75rem;">
+                            <div style="background:rgba(20,20,20,0.8); padding:0.5rem; border-radius:4px;">
+                                <div style="font-size:0.65rem; color:#a19d92; text-transform:uppercase;">KCAL</div>
+                                <div style="font-size:1.1rem; color:#e2c169; font-weight:700;">${nutrition.calories}</div>
+                            </div>
+                            <div style="background:rgba(20,20,20,0.8); padding:0.5rem; border-radius:4px;">
+                                <div style="font-size:0.65rem; color:#a19d92; text-transform:uppercase;">PROTEIN</div>
+                                <div style="font-size:1.1rem; color:#63c66d; font-weight:700;">${nutrition.protein}g</div>
+                            </div>
+                            <div style="background:rgba(20,20,20,0.8); padding:0.5rem; border-radius:4px;">
+                                <div style="font-size:0.65rem; color:#a19d92; text-transform:uppercase;">CARBS</div>
+                                <div style="font-size:1.1rem; color:#7ab6e2; font-weight:700;">${nutrition.carbs}g</div>
+                            </div>
+                            <div style="background:rgba(20,20,20,0.8); padding:0.5rem; border-radius:4px;">
+                                <div style="font-size:0.65rem; color:#a19d92; text-transform:uppercase;">FATS</div>
+                                <div style="font-size:1.1rem; color:#d9d4c7; font-weight:700;">${nutrition.fat}g</div>
+                            </div>
+                        </div>
+                        <p style="font-size:0.82rem; color:#d9d4c7; line-height:1.4; margin:0;">
+                            💧 <strong>Hydration:</strong> ${nutrition.hydration}L water today. Protein floor is non-negotiable for muscle preservation.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        `;
+    } catch (err) {
+        console.warn('Unable to load embedded fitness coach:', err);
+    }
+}
+

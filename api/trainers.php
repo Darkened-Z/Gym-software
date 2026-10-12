@@ -15,13 +15,18 @@ require_once __DIR__ . '/../app/models/Trainer.php';
 
 header('Content-Type: application/json');
 
-AuthHelper::requireAdminOrStaff();
-
 $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? 'list';
 
+// Portal actions can be accessed by trainers via trainer authentication
+$isPortalAction = in_array($action, ['portal_login', 'portal_data', 'portal_update_member'], true);
+if (!$isPortalAction) {
+    AuthHelper::requireAdminOrStaff();
+}
+
 try {
     $db = (new Database())->getConnection();
+
     $adminLogger = new AdminLogger($db);
     $model = new Trainer($db);
 
@@ -109,6 +114,107 @@ try {
                 $adminLogger->log('trainer_activated', 'trainer', $id);
             }
             echo json_encode($res);
+            break;
+        }
+
+        case 'portal_login': {
+            if ($method !== 'POST') { http_response_code(405); echo json_encode(['success' => false, 'message' => 'Method not allowed']); exit; }
+            $input = json_decode(file_get_contents('php://input'), true);
+            $loginId = trim((string)($input['login_id'] ?? $input['code'] ?? ''));
+            $pin = trim((string)($input['pin'] ?? ''));
+
+            if ($loginId === '') {
+                http_response_code(400);
+                echo json_encode(['success' => false, 'message' => 'Trainer code or phone number required']);
+                exit;
+            }
+
+            // Lookup by trainer code or phone
+            $trainer = $model->getByCode($loginId);
+            if (!$trainer) {
+                $trainer = $model->getByPhone($loginId);
+            }
+
+            if (!$trainer || ($trainer['status'] ?? '') !== 'active') {
+                http_response_code(401);
+                echo json_encode(['success' => false, 'message' => 'Trainer not found or inactive']);
+                exit;
+            }
+
+            // Authenticate PIN: default is last 4 digits of trainer phone, or '1234'
+            $cleanPhone = preg_replace('/[^0-9]/', '', $trainer['phone'] ?? '');
+            $expectedPin = substr($cleanPhone, -4);
+            if ($pin !== '' && $pin !== $expectedPin && $pin !== '1234') {
+                http_response_code(401);
+                echo json_encode(['success' => false, 'message' => 'Invalid PIN. (Default PIN is last 4 digits of phone)']);
+                exit;
+            }
+
+            if (session_status() === PHP_SESSION_NONE) {
+                session_start();
+            }
+            $_SESSION['trainer_id'] = (int)$trainer['id'];
+            $_SESSION['trainer_code'] = $trainer['trainer_code'];
+
+            echo json_encode([
+                'success' => true,
+                'trainer' => [
+                    'id' => (int)$trainer['id'],
+                    'trainer_code' => $trainer['trainer_code'],
+                    'name' => $trainer['name'],
+                    'phone' => $trainer['phone'],
+                    'section' => $trainer['section'],
+                    'commission_pct' => (float)$trainer['commission_pct'],
+                    'monthly_salary' => (float)$trainer['monthly_salary'],
+                    'notes' => $trainer['notes']
+                ]
+            ]);
+            break;
+        }
+
+        case 'portal_data': {
+            $trainerId = filter_var($_GET['trainer_id'] ?? 0, FILTER_VALIDATE_INT);
+            if (!$trainerId) {
+                if (session_status() === PHP_SESSION_NONE) session_start();
+                $trainerId = (int)($_SESSION['trainer_id'] ?? 0);
+            }
+            if (!$trainerId && !empty($_GET['code'])) {
+                $t = $model->getByCode($_GET['code']);
+                if ($t) $trainerId = (int)$t['id'];
+            }
+
+            if (!$trainerId) {
+                http_response_code(401);
+                echo json_encode(['success' => false, 'message' => 'Trainer authentication required']);
+                exit;
+            }
+
+            $portalData = $model->getPortalData($trainerId);
+            echo json_encode($portalData);
+            break;
+        }
+
+        case 'portal_update_member': {
+            if ($method !== 'POST') { http_response_code(405); echo json_encode(['success' => false, 'message' => 'Method not allowed']); exit; }
+            require_once __DIR__ . '/../app/models/MemberFitness.php';
+            $input = json_decode(file_get_contents('php://input'), true);
+            $gender = ($input['gender'] ?? 'men') === 'women' ? 'women' : 'men';
+            $memberId = (int)($input['member_id'] ?? 0);
+            if (!$memberId) {
+                http_response_code(400);
+                echo json_encode(['success' => false, 'message' => 'Member ID is required']);
+                exit;
+            }
+
+            $fitModel = new MemberFitness($db);
+            $updateData = [];
+            if (isset($input['goal'])) $updateData['goal'] = $input['goal'];
+            if (isset($input['target_weight'])) $updateData['target_weight'] = $input['target_weight'];
+            if (isset($input['goal_notes'])) $updateData['goal_notes'] = $input['goal_notes'];
+            if (isset($input['height'])) $updateData['height'] = $input['height'];
+
+            $ok = $fitModel->save($gender, $memberId, $updateData);
+            echo json_encode(['success' => $ok]);
             break;
         }
 

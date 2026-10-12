@@ -1,0 +1,817 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0d0d0d">
+<title>Apex Coach — Trainer Portal</title>
+<link rel="manifest" href="manifest.php">
+<link rel="apple-touch-icon" href="assets/images/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/brand.css?v=13">
+<style>
+  :root {
+    --ink:#0a0a0a; --ink-2:#141414; --ink-3:#1c1c1c; --ink-4:#242424;
+    --cream:#f4f1ea; --cream-2:#d9d4c7; --cream-3:#a19d92; --cream-4:#6a6659;
+    --line:rgba(244,241,234,.08); --line-strong:rgba(244,241,234,.16);
+    --gold:#c9a24a; --gold-2:#e2c169;
+    --green:#63c66d; --red:#e2645a; --amber:#e2b054; --blue:#7ab6e2;
+  }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body {
+    margin:0; height:100%; background:var(--ink); color:var(--cream);
+    font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    zoom: 0.9;
+  }
+  a { color:inherit; text-decoration:none; }
+  button { font-family:inherit; cursor:pointer; }
+  .serif { font-family:'Instrument Serif',Georgia,serif; letter-spacing:.01em; }
+  .mono { font-family:'JetBrains Mono',ui-monospace,monospace; font-size:.72rem; letter-spacing:.08em; text-transform:uppercase; color:var(--cream-3); }
+  strong, b { color:var(--cream); font-weight:700; }
+
+  /* Login Card */
+  .login-wrap { min-height:100dvh; display:flex; align-items:center; justify-content:center; padding:2rem 1.5rem; background:radial-gradient(ellipse at top, rgba(201,162,74,.06), transparent 60%), var(--ink); }
+  .login-card { width:100%; max-width:420px; background:var(--ink-2); border:1px solid var(--line-strong); padding:2rem 1.75rem; border-radius:8px; }
+  .brand-row { display:flex; align-items:center; gap:.7rem; margin-bottom:1.5rem; }
+  .brand-mark { width:38px; height:38px; border:1px solid var(--gold); display:flex; align-items:center; justify-content:center; color:var(--gold); font-weight:800; letter-spacing:.05em; border-radius:4px; }
+  .brand-txt { display:flex; flex-direction:column; line-height:1.1; }
+  .brand-txt .big { font-family:'Instrument Serif'; font-size:1.35rem; }
+  .brand-txt .small { color:var(--cream-4); font-size:.7rem; letter-spacing:.15em; text-transform:uppercase; }
+
+  /* Shell */
+  .app { min-height:100dvh; display:grid; grid-template-columns:1fr; }
+  @media (min-width: 900px) { .app { grid-template-columns:260px 1fr; } }
+  .sidebar { display:none; padding:1.5rem 1.2rem; border-right:1px solid var(--line); background:var(--ink); position:sticky; top:0; height:100dvh; }
+  @media (min-width: 900px) { .sidebar { display:flex; flex-direction:column; } }
+  .nav { display:flex; flex-direction:column; gap:.15rem; }
+  .nav a { padding:.75rem 1rem; color:var(--cream-3); font-weight:500; font-size:.9rem; border-left:2px solid transparent; display:flex; align-items:center; gap:.75rem; transition:all .15s; border-radius:4px; }
+  .nav a:hover { color:var(--cream); background:var(--ink-2); }
+  .nav a.active { color:var(--cream); background:var(--ink-2); border-left-color:var(--gold); }
+  .nav .ico { width:16px; opacity:.85; font-size:1.05rem; }
+
+  .side-foot { margin-top:auto; padding-top:1rem; border-top:1px solid var(--line); display:flex; align-items:center; gap:.75rem; }
+  .avatar { width:36px; height:36px; border-radius:50%; background:linear-gradient(135deg,var(--gold),var(--gold-2)); color:var(--ink); display:flex; align-items:center; justify-content:center; font-weight:800; flex:0 0 36px; }
+  .side-foot .who { line-height:1.15; flex:1; overflow:hidden; }
+  .side-foot .who b { display:block; font-size:.85rem; text-overflow:ellipsis; white-space:nowrap; overflow:hidden; }
+  .side-foot .who small { color:var(--cream-4); font-size:.72rem; }
+  .side-foot .logout-btn { color:var(--cream-4); font-size:.75rem; text-transform:uppercase; cursor:pointer; background:transparent; border:none; padding:4px; }
+  .side-foot .logout-btn:hover { color:var(--red); }
+
+  .topbar { display:flex; align-items:center; justify-content:space-between; padding:1rem 1.25rem; border-bottom:1px solid var(--line); background:var(--ink); position:sticky; top:0; z-index:20; }
+  @media (min-width: 900px) { .topbar { display:none; } }
+  .hamb { border:1px solid var(--line-strong); background:transparent; color:var(--cream); padding:.5rem .7rem; border-radius:4px; }
+
+  .drawer { position:fixed; inset:0 auto 0 0; width:82%; max-width:320px; background:var(--ink-2); padding:1.5rem 1.2rem; transform:translateX(-100%); transition:transform .22s; z-index:50; display:flex; flex-direction:column; }
+  .drawer.open { transform:translateX(0); }
+  .backdrop { position:fixed; inset:0; background:rgba(0,0,0,.65); z-index:40; opacity:0; pointer-events:none; transition:opacity .2s; }
+  .backdrop.open { opacity:1; pointer-events:auto; }
+
+  .main { padding:1.5rem 1.25rem 4rem; max-width:1200px; margin:0 auto; width:100%; }
+  @media (min-width: 900px) { .main { padding:2.5rem 3rem 4rem; } }
+  .page-head { display:flex; align-items:end; justify-content:space-between; flex-wrap:wrap; gap:1rem; margin-bottom:2rem; }
+  .page-head h1 { font-family:'Instrument Serif'; font-size:clamp(1.6rem,4.5vw,2.4rem); margin:0 0 .3rem; line-height:1.1; }
+  .page-head .sub { color:var(--cream-3); font-size:.9rem; margin:0; }
+
+  /* Stats Grid */
+  .stats { display:grid; grid-template-columns:repeat(2,1fr); gap:1px; background:var(--line-strong); border:1px solid var(--line-strong); margin-bottom:2rem; border-radius:6px; overflow:hidden; }
+  @media (min-width: 700px) { .stats { grid-template-columns:repeat(4,1fr); } }
+  .stat { background:var(--ink); padding:1.25rem 1.2rem; display:flex; flex-direction:column; gap:.5rem; min-height:96px; }
+  .stat .k { color:var(--cream-4); font-size:.68rem; letter-spacing:.15em; text-transform:uppercase; }
+  .stat .v { font-family:'Instrument Serif'; font-size:2rem; line-height:1; margin-top:auto; }
+  .stat .v.green { color:var(--green); } .stat .v.gold { color:var(--gold-2); } .stat .v.blue { color:var(--blue); } .stat .v.red { color:var(--red); }
+  .stat .delta { color:var(--cream-3); font-size:.75rem; }
+
+  /* Cards */
+  .card { border:1px solid var(--line-strong); background:var(--ink); margin-bottom:1.5rem; border-radius:6px; overflow:hidden; }
+  .card-head { display:flex; align-items:center; justify-content:space-between; padding:1.1rem 1.25rem; border-bottom:1px solid var(--line); flex-wrap:wrap; gap:.5rem; }
+  .card-head h2 { font-family:'Instrument Serif'; font-size:1.25rem; margin:0; }
+  .card-head .sub { color:var(--cream-4); font-size:.72rem; letter-spacing:.15em; text-transform:uppercase; }
+  .card-body { padding:1.25rem; }
+
+  /* Badges & Pills */
+  .pill { display:inline-flex; align-items:center; gap:.3rem; padding:.2rem .6rem; font-size:.7rem; letter-spacing:.08em; text-transform:uppercase; border-radius:99px; border:1px solid; }
+  .pill.green { color:var(--green); border-color:rgba(99,198,109,.4); background:rgba(99,198,109,.08); }
+  .pill.gold  { color:var(--gold-2); border-color:rgba(226,193,105,.4); background:rgba(226,193,105,.08); }
+  .pill.red   { color:var(--red); border-color:rgba(226,100,90,.4); background:rgba(226,100,90,.08); }
+
+  /* Forms & Buttons */
+  .field { margin-bottom:1rem; }
+  .field label { display:block; font-size:.72rem; letter-spacing:.1em; text-transform:uppercase; color:var(--cream-4); margin-bottom:.35rem; }
+  .field input, .field select, .field textarea { width:100%; padding:.75rem 1rem; background:var(--ink); color:var(--cream); border:1px solid var(--line-strong); border-radius:4px; font-size:.9rem; font-family:inherit; outline:none; }
+  .field input:focus, .field select:focus, .field textarea:focus { border-color:var(--gold); }
+  .btn-gold { width:100%; padding:.85rem 1rem; background:var(--gold); color:var(--ink); border:none; font-weight:700; letter-spacing:.05em; font-size:.85rem; text-transform:uppercase; border-radius:4px; cursor:pointer; }
+  .btn-gold:hover { background:var(--gold-2); }
+  .btn-pill { display:inline-flex; align-items:center; gap:.4rem; padding:.45rem .9rem; border:1px solid var(--line-strong); background:var(--ink-2); color:var(--cream); font-size:.8rem; border-radius:4px; cursor:pointer; }
+  .btn-pill:hover { border-color:var(--gold); color:var(--gold-2); }
+
+  /* Table */
+  table { width:100%; border-collapse:collapse; font-size:.85rem; text-align:left; }
+  th { padding:.75rem 1rem; color:var(--cream-4); font-size:.7rem; letter-spacing:.1em; text-transform:uppercase; border-bottom:1px solid var(--line); }
+  td { padding:.85rem 1rem; border-bottom:1px solid var(--line); color:var(--cream-2); }
+  tr:hover td { background:rgba(255,255,255,.02); }
+
+  /* Modals */
+  .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.75); z-index:70; display:flex; align-items:center; justify-content:center; padding:1rem; }
+  .modal { width:100%; max-width:580px; background:var(--ink-2); border:1px solid var(--line-strong); border-radius:8px; overflow:hidden; }
+  .modal-head { display:flex; align-items:center; justify-content:space-between; padding:1.1rem 1.25rem; border-bottom:1px solid var(--line); }
+  .modal-head h3 { margin:0; font-family:'Instrument Serif'; font-size:1.3rem; }
+  .modal-close { background:transparent; border:none; color:var(--cream-3); font-size:1.5rem; padding:0 .5rem; }
+  .modal-body { padding:1.25rem; max-height:80vh; overflow-y:auto; }
+
+  /* Mobile Bottom Nav */
+  .bottom-nav { display:none; position:fixed; bottom:0; left:0; right:0; background:var(--ink-2); border-top:1px solid var(--line); padding:.4rem .2rem; z-index:15; }
+  @media (max-width: 899px) { .bottom-nav { display:flex; justify-content:space-around; } }
+  .bottom-nav a { flex:1; display:flex; flex-direction:column; align-items:center; padding:.45rem .2rem; color:var(--cream-4); font-size:.65rem; letter-spacing:.05em; text-transform:uppercase; }
+  .bottom-nav a.active { color:var(--gold-2); font-weight:600; }
+  .bottom-nav a .ico { font-size:1.15rem; margin-bottom:.2rem; }
+</style>
+</head>
+<body>
+
+<div id="loginView" class="login-wrap" style="display:none;">
+  <div class="login-card">
+    <div class="brand-row">
+      <div class="brand-mark">C</div>
+      <div class="brand-txt">
+        <span class="big gym-brand-name">Apex Coach</span>
+        <span class="small">Trainer Portal</span>
+      </div>
+    </div>
+    <div class="serif" style="font-size:1.75rem; margin-bottom:.4rem;">Trainer Sign In</div>
+    <p style="color:var(--cream-3); font-size:.85rem; margin-bottom:1.5rem;">Access your roster, member fitness progress, PT sessions, and commission payout.</p>
+
+    <div id="loginError" style="display:none; border-left:3px solid var(--red); background:rgba(226,100,90,.08); padding:.75rem 1rem; margin-bottom:1rem; font-size:.85rem; color:var(--cream-2);"></div>
+
+    <form id="trainerLoginForm">
+      <div class="field">
+        <label>Trainer Code or Mobile Number</label>
+        <input type="text" id="trainerLoginId" placeholder="e.g. TRN-0001 or 03009991101" required autofocus autocomplete="off">
+      </div>
+      <div class="field">
+        <label>4-Digit PIN / Password</label>
+        <input type="password" id="trainerLoginPin" placeholder="Default: last 4 digits of phone" maxlength="20" autocomplete="current-password">
+      </div>
+      <button type="submit" class="btn-gold" style="margin-top:.75rem;">Sign In to Portal →</button>
+      <div style="color:var(--cream-4); font-size:.74rem; margin-top:1rem; text-align:center;">
+        Default PIN is the last 4 digits of your registered phone number.
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="app" id="portalView" style="display:none;">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="brand-row">
+      <div class="brand-mark">C</div>
+      <div class="brand-txt">
+        <span class="big gym-brand-name">Apex Coach</span>
+        <span class="small">Trainer Portal</span>
+      </div>
+    </div>
+    <nav class="nav" id="sidebarNav">
+      <a href="#dashboard" class="active" data-tab="dashboard"><span class="ico">📊</span> Dashboard</a>
+      <a href="#members" data-tab="members"><span class="ico">👥</span> My Members</a>
+      <a href="#schedule" data-tab="schedule"><span class="ico">📅</span> PT Schedule</a>
+      <a href="#earnings" data-tab="earnings"><span class="ico">💰</span> Earnings & PTF</a>
+      <a href="#profile" data-tab="profile"><span class="ico">👤</span> Profile</a>
+    </nav>
+    <div class="side-foot">
+      <div class="avatar" id="sideAv">T</div>
+      <div class="who">
+        <b id="sideName">Trainer</b>
+        <small id="sideCode">TRN-0001</small>
+      </div>
+      <button class="logout-btn" id="logoutBtn" title="Logout">Log out</button>
+    </div>
+  </aside>
+
+  <!-- Content -->
+  <div>
+    <div class="topbar">
+      <div class="brand-row" style="margin:0;">
+        <div class="brand-mark">C</div>
+        <div class="brand-txt">
+          <span class="big gym-brand-name">Apex Coach</span>
+        </div>
+      </div>
+      <button class="hamb" id="hambBtn" aria-label="Menu">☰</button>
+    </div>
+    <main class="main" id="mainContent">
+      <div style="text-align:center; padding:4rem 1rem; color:var(--cream-3);">
+        <div style="font-size:2rem; margin-bottom:.5rem;">⏳</div>
+        <div>Loading Trainer Dashboard...</div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- Mobile Bottom Nav -->
+<nav class="bottom-nav" id="bottomNav">
+  <a href="#dashboard" class="active" data-tab="dashboard"><span class="ico">📊</span>Dashboard</a>
+  <a href="#members" data-tab="members"><span class="ico">👥</span>Members</a>
+  <a href="#schedule" data-tab="schedule"><span class="ico">📅</span>Schedule</a>
+  <a href="#earnings" data-tab="earnings"><span class="ico">💰</span>Earnings</a>
+</nav>
+
+<!-- Mobile Drawer -->
+<div class="backdrop" id="drawerBackdrop"></div>
+<aside class="drawer" id="drawer">
+  <div class="brand-row">
+    <div class="brand-mark">C</div>
+    <div class="brand-txt">
+      <span class="big gym-brand-name">Apex Coach</span>
+      <span class="small">Trainer Portal</span>
+    </div>
+  </div>
+  <nav class="nav" id="drawerNav">
+    <a href="#dashboard" class="active" data-tab="dashboard"><span class="ico">📊</span> Dashboard</a>
+    <a href="#members" data-tab="members"><span class="ico">👥</span> My Members</a>
+    <a href="#schedule" data-tab="schedule"><span class="ico">📅</span> PT Schedule</a>
+    <a href="#earnings" data-tab="earnings"><span class="ico">💰</span> Earnings & PTF</a>
+    <a href="#profile" data-tab="profile"><span class="ico">👤</span> Profile</a>
+  </nav>
+  <div class="side-foot" style="margin-top:auto;">
+    <div class="avatar" id="drawerAv">T</div>
+    <div class="who">
+      <b id="drawerName">Trainer</b>
+      <small id="drawerCode">TRN-0001</small>
+    </div>
+    <button class="logout-btn" id="drawerLogoutBtn">Log out</button>
+  </div>
+</aside>
+
+<div id="modalContainer"></div>
+
+<script src="assets/js/branding.js"></script>
+<script>
+(function() {
+  'use strict';
+
+  let currentTrainer = null;
+  let portalData = null;
+  let currentActiveTab = 'dashboard';
+
+  // 1. Auth & Session Handling
+  async function checkAuth() {
+    const savedCode = localStorage.getItem('apex_trainer_code');
+    const savedId = localStorage.getItem('apex_trainer_id');
+
+    if (!savedCode && !savedId) {
+      showLoginView();
+      return;
+    }
+
+    try {
+      const res = await fetch(`api/trainers.php?action=portal_data&trainer_id=${encodeURIComponent(savedId || 0)}&code=${encodeURIComponent(savedCode || '')}`);
+      const data = await res.json();
+      if (data && data.success) {
+        portalData = data;
+        currentTrainer = data.trainer;
+        showPortalView();
+        updateSidebar();
+        renderTab(currentActiveTab);
+      } else {
+        localStorage.removeItem('apex_trainer_code');
+        localStorage.removeItem('apex_trainer_id');
+        showLoginView();
+      }
+    } catch (err) {
+      console.error('Portal auth check failed:', err);
+      showLoginView();
+    }
+  }
+
+  function showLoginView() {
+    document.getElementById('loginView').style.display = 'flex';
+    document.getElementById('portalView').style.display = 'none';
+  }
+
+  function showPortalView() {
+    document.getElementById('loginView').style.display = 'none';
+    document.getElementById('portalView').style.display = 'grid';
+  }
+
+  document.getElementById('trainerLoginForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const loginId = document.getElementById('trainerLoginId').value.trim();
+    const pin = document.getElementById('trainerLoginPin').value.trim();
+    const errBox = document.getElementById('loginError');
+    errBox.style.display = 'none';
+
+    try {
+      const res = await fetch('api/trainers.php?action=portal_login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ login_id: loginId, pin: pin })
+      });
+      const data = await res.json();
+      if (data && data.success && data.trainer) {
+        localStorage.setItem('apex_trainer_code', data.trainer.trainer_code);
+        localStorage.setItem('apex_trainer_id', data.trainer.id);
+        checkAuth();
+      } else {
+        errBox.textContent = data.message || 'Invalid trainer credentials';
+        errBox.style.display = 'block';
+      }
+    } catch (err) {
+      errBox.textContent = 'Connection error. Please try again.';
+      errBox.style.display = 'block';
+    }
+  });
+
+  function logout() {
+    localStorage.removeItem('apex_trainer_code');
+    localStorage.removeItem('apex_trainer_id');
+    showLoginView();
+  }
+
+  document.getElementById('logoutBtn').addEventListener('click', logout);
+  const dLogout = document.getElementById('drawerLogoutBtn');
+  if (dLogout) dLogout.addEventListener('click', logout);
+
+  function updateSidebar() {
+    if (!currentTrainer) return;
+    const name = currentTrainer.name;
+    const code = currentTrainer.trainer_code;
+    const init = name.charAt(0).toUpperCase();
+
+    document.getElementById('sideName').textContent = name;
+    document.getElementById('sideCode').textContent = code;
+    document.getElementById('sideAv').textContent = init;
+
+    const dName = document.getElementById('drawerName');
+    const dCode = document.getElementById('drawerCode');
+    const dAv = document.getElementById('drawerAv');
+    if (dName) dName.textContent = name;
+    if (dCode) dCode.textContent = code;
+    if (dAv) dAv.textContent = init;
+  }
+
+  // 2. Tab Routing
+  function renderTab(tab) {
+    currentActiveTab = tab;
+    document.querySelectorAll('#sidebarNav a, #drawerNav a, #bottomNav a').forEach(a => {
+      a.classList.toggle('active', a.dataset.tab === tab);
+    });
+
+    if (!portalData) return;
+    const main = document.getElementById('mainContent');
+
+    switch (tab) {
+      case 'dashboard': renderDashboard(main); break;
+      case 'members':   renderMembersList(main); break;
+      case 'schedule':  renderSchedule(main); break;
+      case 'earnings':  renderEarnings(main); break;
+      case 'profile':   renderProfile(main); break;
+      default:          renderDashboard(main); break;
+    }
+  }
+
+  // --- TAB: DASHBOARD ---
+  function renderDashboard(container) {
+    const s = portalData.summary || {};
+    const att = portalData.attention_list || [];
+
+    container.innerHTML = `
+      <div class="page-head">
+        <div>
+          <h1>Welcome, Coach ${currentTrainer.name.split(' ')[0]}</h1>
+          <p class="sub">Portal Dashboard · Assigned Section: ${currentTrainer.section.toUpperCase()}</p>
+        </div>
+      </div>
+
+      <!-- Stats Grid -->
+      <div class="stats">
+        <div class="stat">
+          <span class="k">Assigned Members</span>
+          <span class="v gold">${s.total_members || 0}</span>
+          <span class="delta">${s.active_members || 0} active in gym</span>
+        </div>
+        <div class="stat">
+          <span class="k">Sessions Conducted</span>
+          <span class="v green">${s.sessions_this_week || 0}</span>
+          <span class="delta">This week</span>
+        </div>
+        <div class="stat">
+          <span class="k">Est. MTD Earnings</span>
+          <span class="v blue">Rs ${Number(s.mtd_earnings || 0).toLocaleString('en-PK')}</span>
+          <span class="delta">Base: Rs ${Number(s.salary || 0).toLocaleString('en-PK')} + ${s.commission_pct}% PTF</span>
+        </div>
+        <div class="stat">
+          <span class="k">Needs Attention</span>
+          <span class="v ${s.attention_count > 0 ? 'red' : 'green'}">${s.attention_count || 0}</span>
+          <span class="delta">${s.attention_count > 0 ? 'Absent or fee overdue' : 'All members on track'}</span>
+        </div>
+      </div>
+
+      <!-- Needs Attention List -->
+      <div class="card">
+        <div class="card-head">
+          <h2>Members Needing Attention</h2>
+          <span class="sub">${att.length} MEMBERS</span>
+        </div>
+        <div class="card-body" style="padding:0; overflow-x:auto;">
+          ${att.length === 0 ? `
+            <div style="padding:2rem; text-align:center; color:var(--cream-3);">
+              🎉 All assigned members are actively training with up-to-date fees!
+            </div>
+          ` : `
+            <table>
+              <thead>
+                <tr>
+                  <th>MEMBER</th>
+                  <th>PHONE</th>
+                  <th>LAST SEEN</th>
+                  <th>REASON</th>
+                  <th>ACTION</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${att.map(m => `
+                  <tr>
+                    <td>
+                      <strong>${m.full_name}</strong>
+                      <div class="mono">${m.member_code} · ${m.section}</div>
+                    </td>
+                    <td><a href="tel:${m.phone}" style="color:var(--gold-2);">${m.phone}</a></td>
+                    <td>${m.last_checkin ? m.last_checkin.slice(0, 10) : '<span style="color:var(--red);">Never</span>'}</td>
+                    <td>
+                      ${(m.attention_reasons || []).map(r => `<span class="pill red">${r}</span> `).join('')}
+                    </td>
+                    <td>
+                      <button class="btn-pill" onclick="window.openMemberModal(${m.id}, '${m.section}')">View Profile</button>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          `}
+        </div>
+      </div>
+
+      <!-- Today's Schedule Snapshot -->
+      <div class="card">
+        <div class="card-head">
+          <h2>Today's Training Slots</h2>
+          <span class="sub">${(new Date()).toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase()}</span>
+        </div>
+        <div class="card-body">
+          <p style="color:var(--cream-2); margin-bottom:1rem;">Members scheduled for personal training, assessment, and check-ins today.</p>
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:.75rem;">
+            <div style="border:1px solid var(--line-strong); padding:1rem; border-radius:4px; background:var(--ink-2);">
+              <span class="mono">Morning Slot · 07:00 AM – 11:00 AM</span>
+              <div style="margin-top:.4rem; font-weight:600;">Open Floor & Strength Checks</div>
+              <div style="color:var(--cream-3); font-size:.8rem; margin-top:.2rem;">Form coaching & progressive overload checks</div>
+            </div>
+            <div style="border:1px solid var(--line-strong); padding:1rem; border-radius:4px; background:var(--ink-2);">
+              <span class="mono">Evening Slot · 05:00 PM – 10:00 PM</span>
+              <div style="margin-top:.4rem; font-weight:600;">Personal Training Appointments</div>
+              <div style="color:var(--cream-3); font-size:.8rem; margin-top:.2rem;">1-on-1 PT sessions & body measurements</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // --- TAB: MY MEMBERS ---
+  function renderMembersList(container) {
+    const members = portalData.members || [];
+
+    container.innerHTML = `
+      <div class="page-head">
+        <div>
+          <h1>My Assigned Members</h1>
+          <p class="sub">${members.length} Total Athletes on Roster</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Member Roster</h2>
+          <div style="display:flex; gap:.5rem;">
+            <input type="text" id="memberSearch" placeholder="Search by name or code..." style="padding:.4rem .8rem; background:var(--ink-2); color:var(--cream); border:1px solid var(--line-strong); font-size:.82rem; border-radius:4px; outline:none;">
+          </div>
+        </div>
+        <div class="card-body" style="padding:0; overflow-x:auto;">
+          <table id="rosterTable">
+            <thead>
+              <tr>
+                <th>CODE</th>
+                <th>MEMBER NAME</th>
+                <th>PHONE</th>
+                <th>SECTION</th>
+                <th>GOAL</th>
+                <th>WEIGHT</th>
+                <th>FEE DUES</th>
+                <th>LAST ATTENDED</th>
+                <th>ACTION</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${members.map(m => `
+                <tr data-name="${m.full_name.toLowerCase()}" data-code="${m.member_code.toLowerCase()}">
+                  <td class="mono">${m.member_code}</td>
+                  <td>
+                    <strong>${m.full_name}</strong>
+                    <div style="color:var(--cream-4); font-size:.75rem;">${m.package_name || 'Standard'}</div>
+                  </td>
+                  <td><a href="tel:${m.phone}" style="color:var(--gold-2);">${m.phone}</a></td>
+                  <td style="text-transform:capitalize;">${m.section}</td>
+                  <td><span class="pill gold">${m.goal ? m.goal.toUpperCase() : 'FITNESS'}</span></td>
+                  <td>${m.last_weight ? m.last_weight + ' kg' : '—'}</td>
+                  <td>
+                    ${m.due_amount > 0 ? `<span class="pill red">Rs ${Number(m.due_amount).toLocaleString('en-PK')}</span>` : `<span class="pill green">Paid</span>`}
+                  </td>
+                  <td>${m.last_checkin ? m.last_checkin.slice(0, 10) : '—'}</td>
+                  <td>
+                    <button class="btn-pill" onclick="window.openMemberModal(${m.id}, '${m.section}')">Open Profile</button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('memberSearch').addEventListener('input', (e) => {
+      const q = e.target.value.toLowerCase().trim();
+      document.querySelectorAll('#rosterTable tbody tr').forEach(tr => {
+        const name = tr.dataset.name || '';
+        const code = tr.dataset.code || '';
+        tr.style.display = (name.includes(q) || code.includes(q)) ? '' : 'none';
+      });
+    });
+  }
+
+  // --- TAB: SCHEDULE ---
+  function renderSchedule(container) {
+    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    container.innerHTML = `
+      <div class="page-head">
+        <div>
+          <h1>Weekly PT & Assessment Schedule</h1>
+          <p class="sub">Recurring training roster & floor coaching hours</p>
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:1rem;">
+        ${days.map(d => `
+          <div class="card" style="margin-bottom:0;">
+            <div class="card-head">
+              <h2>${d}</h2>
+              <span class="sub">SESSION BLOCK</span>
+            </div>
+            <div class="card-body">
+              <div style="display:flex; flex-direction:column; gap:.6rem;">
+                <div style="padding:.6rem .8rem; background:var(--ink-2); border-left:3px solid var(--gold); border-radius:0 4px 4px 0;">
+                  <div style="font-weight:600; font-size:.88rem;">07:00 – 09:00 AM</div>
+                  <div style="color:var(--cream-3); font-size:.8rem;">Early Morning Strength & Compound Lifting</div>
+                </div>
+                <div style="padding:.6rem .8rem; background:var(--ink-2); border-left:3px solid var(--blue); border-radius:0 4px 4px 0;">
+                  <div style="font-weight:600; font-size:.88rem;">05:30 – 07:30 PM</div>
+                  <div style="color:var(--cream-3); font-size:.8rem;">Hypertrophy Coaching & Technique Evaluation</div>
+                </div>
+                <div style="padding:.6rem .8rem; background:var(--ink-2); border-left:3px solid var(--green); border-radius:0 4px 4px 0;">
+                  <div style="font-weight:600; font-size:.88rem;">08:00 – 09:30 PM</div>
+                  <div style="color:var(--cream-3); font-size:.8rem;">1-on-1 PT Sessions & Progress Weigh-ins</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  // --- TAB: EARNINGS ---
+  function renderEarnings(container) {
+    const s = portalData.summary || {};
+    const members = portalData.members || [];
+
+    container.innerHTML = `
+      <div class="page-head">
+        <div>
+          <h1>Earnings & Commission Report</h1>
+          <p class="sub">Month-to-Date Compensation Breakdown</p>
+        </div>
+      </div>
+
+      <div class="stats">
+        <div class="stat">
+          <span class="k">Base Monthly Salary</span>
+          <span class="v">Rs ${Number(s.salary || 0).toLocaleString('en-PK')}</span>
+          <span class="delta">Fixed contract pay</span>
+        </div>
+        <div class="stat">
+          <span class="k">Commission Rate</span>
+          <span class="v gold">${s.commission_pct || 0}%</span>
+          <span class="delta">On PT fee collections</span>
+        </div>
+        <div class="stat">
+          <span class="k">Earned Commission</span>
+          <span class="v green">Rs ${Number(s.earned_commission || 0).toLocaleString('en-PK')}</span>
+          <span class="delta">MTD attribution</span>
+        </div>
+        <div class="stat">
+          <span class="k">Total Est. Payout</span>
+          <span class="v blue">Rs ${Number(s.mtd_earnings || 0).toLocaleString('en-PK')}</span>
+          <span class="delta">Salary + Commission</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Member-by-Member Attribution</h2>
+          <span class="sub">${members.length} ATHLETES</span>
+        </div>
+        <div class="card-body" style="padding:0; overflow-x:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>CODE</th>
+                <th>MEMBER</th>
+                <th>PACKAGE</th>
+                <th>MONTHLY FEE</th>
+                <th>FEE STATUS</th>
+                <th>EST. PT COMMISSION</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${members.map(m => {
+                const estPtf = 2500;
+                const trainerShare = Math.round((estPtf * (s.commission_pct || 0)) / 100);
+                return `
+                  <tr>
+                    <td class="mono">${m.member_code}</td>
+                    <td><strong>${m.full_name}</strong></td>
+                    <td>${m.package_name || 'Standard'}</td>
+                    <td>Rs ${Number(m.monthly_fee || 0).toLocaleString('en-PK')}</td>
+                    <td>
+                      ${m.due_amount > 0 ? `<span class="pill red">Due Rs ${Number(m.due_amount).toLocaleString('en-PK')}</span>` : `<span class="pill green">Paid</span>`}
+                    </td>
+                    <td style="color:var(--gold-2); font-weight:600;">
+                      Rs ${trainerShare.toLocaleString('en-PK')}
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }
+
+  // --- TAB: PROFILE ---
+  function renderProfile(container) {
+    container.innerHTML = `
+      <div class="page-head">
+        <div>
+          <h1>Coach Profile & Credentials</h1>
+          <p class="sub">${currentTrainer.trainer_code}</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Personal Information</h2>
+          <span class="sub">CREDENTIALS</span>
+        </div>
+        <div class="card-body">
+          <p><strong>Full Name:</strong> ${currentTrainer.name}</p>
+          <p><strong>Trainer Code:</strong> ${currentTrainer.trainer_code}</p>
+          <p><strong>Mobile Phone:</strong> ${currentTrainer.phone}</p>
+          <p><strong>Training Section:</strong> ${currentTrainer.section.toUpperCase()}</p>
+          <p><strong>Specializations & Notes:</strong> ${currentTrainer.notes || 'Strength & Conditioning, Hypertrophy, Form Coaching'}</p>
+        </div>
+      </div>
+    `;
+  }
+
+  // 3. Member Detail & Goal Edit Modal
+  window.openMemberModal = function(memberId, section) {
+    const m = (portalData.members || []).find(x => x.id == memberId && x.section == section);
+    if (!m) return;
+
+    const modal = document.getElementById('modalContainer');
+    modal.innerHTML = `
+      <div class="modal-overlay" onclick="if(event.target===this) this.remove();">
+        <div class="modal">
+          <div class="modal-head">
+            <div>
+              <h3>${m.full_name}</h3>
+              <div class="mono">${m.member_code} · ${m.section.toUpperCase()}</div>
+            </div>
+            <button class="modal-close" onclick="this.closest('.modal-overlay').remove();">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:.75rem; margin-bottom:1.25rem;">
+              <div style="background:var(--ink); padding:.75rem; border-radius:4px; border:1px solid var(--line-strong);">
+                <div class="mono">Phone</div>
+                <div><a href="tel:${m.phone}" style="color:var(--gold-2); font-weight:600;">${m.phone}</a></div>
+              </div>
+              <div style="background:var(--ink); padding:.75rem; border-radius:4px; border:1px solid var(--line-strong);">
+                <div class="mono">Last Attended</div>
+                <div>${m.last_checkin ? m.last_checkin.slice(0, 10) : 'No attendance'}</div>
+              </div>
+            </div>
+
+            <form id="trainerMemberEditForm">
+              <div class="field">
+                <label>Primary Goal</label>
+                <select id="editGoal">
+                  <option value="lose" ${m.goal === 'lose' ? 'selected' : ''}>Weight / Fat Loss</option>
+                  <option value="gain" ${m.goal === 'gain' ? 'selected' : ''}>Muscle Gain / Hypertrophy</option>
+                  <option value="maintain" ${m.goal === 'maintain' ? 'selected' : ''}>Maintain / General Fitness</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Target Weight (kg)</label>
+                <input type="number" step="0.5" id="editTargetWeight" value="${m.target_weight || ''}" placeholder="e.g. 78">
+              </div>
+              <div class="field">
+                <label>Height (cm)</label>
+                <input type="number" step="1" id="editHeight" value="${m.height || 172}" placeholder="e.g. 175">
+              </div>
+              <div class="field">
+                <label>Trainer Coaching Notes & Prescriptions</label>
+                <textarea id="editGoalNotes" rows="3" placeholder="e.g. Focus on progressive overload on squats, keep protein at 160g...">${m.goal_notes || ''}</textarea>
+              </div>
+              <button type="submit" class="btn-gold">Save Fitness Updates</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('trainerMemberEditForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const payload = {
+        member_id: m.id,
+        gender: m.section,
+        goal: document.getElementById('editGoal').value,
+        target_weight: parseFloat(document.getElementById('editTargetWeight').value) || null,
+        height: parseFloat(document.getElementById('editHeight').value) || null,
+        goal_notes: document.getElementById('editGoalNotes').value.trim()
+      };
+
+      try {
+        const res = await fetch('api/trainers.php?action=portal_update_member', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data && data.success) {
+          document.querySelector('.modal-overlay').remove();
+          checkAuth();
+        } else {
+          alert(data.message || 'Error updating member');
+        }
+      } catch (err) {
+        alert('Network error updating member');
+      }
+    });
+  };
+
+  // 4. Drawer & Navigation Events
+  const hambBtn = document.getElementById('hambBtn');
+  const drawer = document.getElementById('drawer');
+  const backdrop = document.getElementById('drawerBackdrop');
+
+  function toggleDrawer(open) {
+    if (drawer) drawer.classList.toggle('open', open);
+    if (backdrop) backdrop.classList.toggle('open', open);
+  }
+
+  if (hambBtn) hambBtn.addEventListener('click', () => toggleDrawer(true));
+  if (backdrop) backdrop.addEventListener('click', () => toggleDrawer(false));
+
+  window.addEventListener('hashchange', () => {
+    const tab = location.hash.replace('#', '') || 'dashboard';
+    toggleDrawer(false);
+    renderTab(tab);
+  });
+
+  document.querySelectorAll('#sidebarNav a, #drawerNav a, #bottomNav a').forEach(a => {
+    a.addEventListener('click', (e) => {
+      e.preventDefault();
+      location.hash = a.getAttribute('href');
+    });
+  });
+
+  // Boot
+  checkAuth();
+
+})();
+</script>
+</body>
+</html>

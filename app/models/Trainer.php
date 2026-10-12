@@ -230,6 +230,144 @@ class Trainer {
         return $row ?: null;
     }
 
+    public function getByCode(string $code): ?array {
+        $stmt = $this->conn->prepare("SELECT * FROM {$this->table} WHERE trainer_code = ? LIMIT 1");
+        $stmt->execute([trim($code)]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    public function getByPhone(string $phone): ?array {
+        $clean = preg_replace('/[^0-9]/', '', $phone);
+        $stmt = $this->conn->prepare("SELECT * FROM {$this->table} WHERE REPLACE(REPLACE(phone, '-', ''), ' ', '') LIKE ? LIMIT 1");
+        $stmt->execute(['%' . substr($clean, -10)]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /**
+     * Data bundle for the trainer portal dashboard:
+     * - Trainer details
+     * - Assigned members (men + women) with latest attendance & fitness metrics
+     * - Summary stats: total members, sessions this week, MTD earnings
+     */
+    public function getPortalData(int $trainerId): array {
+        $trainer = $this->getById($trainerId);
+        if (!$trainer) return ['success' => false, 'message' => 'Trainer not found'];
+
+        $members = [];
+        $sections = [];
+        if ($trainer['section'] === 'both') {
+            $sections = ['men', 'women'];
+        } elseif ($trainer['section'] === 'women') {
+            $sections = ['women'];
+        } else {
+            $sections = ['men'];
+        }
+
+        foreach ($sections as $sec) {
+            $sql = "SELECT m.id, m.member_code, m.full_name, m.phone, m.profile_photo,
+                           m.package_name, m.fee_status, m.due_date, m.due_amount, m.monthly_fee,
+                           m.status, '{$sec}' as section,
+                           mf.height, mf.goal, mf.target_weight, mf.goal_notes, mf.progress_json, mf.logs_json
+                    FROM members_{$sec} m
+                    LEFT JOIN member_fitness mf ON mf.gender = '{$sec}' AND mf.member_id = m.id
+                    WHERE m.assigned_trainer_id = :tid
+                    ORDER BY m.full_name ASC";
+            $stmt = $this->conn->prepare($sql);
+            $stmt->execute([':tid' => $trainerId]);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            // Enrich each member with last attendance check-in & progress info
+            foreach ($rows as &$r) {
+                $attStmt = $this->conn->prepare(
+                    "SELECT MAX(check_in) as last_seen, COUNT(*) as sessions_month
+                     FROM attendance_{$sec}
+                     WHERE member_id = :mid AND check_in >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)"
+                );
+                $attStmt->execute([':mid' => $r['id']]);
+                $att = $attStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+                $r['last_checkin'] = $att['last_seen'] ?? null;
+                $r['sessions_last_30d'] = (int)($att['sessions_month'] ?? 0);
+
+                // Decode progress
+                $progress = json_decode($r['progress_json'] ?? '[]', true) ?: [];
+                $r['progress'] = $progress;
+                $r['last_weight'] = !empty($progress) ? end($progress)['weight'] ?? null : null;
+                unset($r['progress_json'], $r['logs_json']);
+                $members[] = $r;
+            }
+            unset($r);
+        }
+
+        // Sessions conducted this week (approximation from assigned members check-ins this week)
+        $sessionsThisWeek = 0;
+        foreach ($sections as $sec) {
+            $wStmt = $this->conn->prepare(
+                "SELECT COUNT(*) FROM attendance_{$sec} a
+                 JOIN members_{$sec} m ON m.id = a.member_id
+                 WHERE m.assigned_trainer_id = :tid
+                   AND a.check_in >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)"
+            );
+            $wStmt->execute([':tid' => $trainerId]);
+            $sessionsThisWeek += (int)$wStmt->fetchColumn();
+        }
+
+        // Commission calculation (e.g. from PT fees if any, or flat salary + commission on members)
+        $salary = (float)($trainer['monthly_salary'] ?? 0);
+        $commPct = (float)($trainer['commission_pct'] ?? 0);
+        // Estimate PTF base (e.g. 2000 per assigned active member or package surplus)
+        $activeCount = count(array_filter($members, fn($m) => ($m['status'] ?? '') === 'active'));
+        $estimatedPtfPool = $activeCount * 2500;
+        $earnedCommission = round(($estimatedPtfPool * $commPct) / 100);
+        $mtdTotalEarnings = $salary + $earnedCommission;
+
+        // Members needing attention: haven't checked in for 7+ days or fee overdue
+        $attentionList = [];
+        $today = new DateTime();
+        foreach ($members as $m) {
+            $needsAttention = false;
+            $reasons = [];
+            if (!empty($m['due_amount']) && (float)$m['due_amount'] > 0) {
+                $needsAttention = true;
+                $reasons[] = 'Fee due: Rs ' . number_format((float)$m['due_amount']);
+            }
+            if (!empty($m['last_checkin'])) {
+                $lastSeen = new DateTime($m['last_checkin']);
+                $diffDays = $today->diff($lastSeen)->days;
+                if ($diffDays >= 7) {
+                    $needsAttention = true;
+                    $reasons[] = "Absent for {$diffDays} days";
+                }
+            } elseif (($m['status'] ?? '') === 'active') {
+                $needsAttention = true;
+                $reasons[] = 'No recent attendance recorded';
+            }
+            if ($needsAttention) {
+                $m['attention_reasons'] = $reasons;
+                $attentionList[] = $m;
+            }
+        }
+
+        return [
+            'success' => true,
+            'trainer' => $trainer,
+            'summary' => [
+                'total_members' => count($members),
+                'active_members' => $activeCount,
+                'sessions_this_week' => $sessionsThisWeek,
+                'salary' => $salary,
+                'commission_pct' => $commPct,
+                'earned_commission' => $earnedCommission,
+                'mtd_earnings' => $mtdTotalEarnings,
+                'attention_count' => count($attentionList)
+            ],
+            'members' => $members,
+            'attention_list' => $attentionList
+        ];
+    }
+
+
     /** Simplified list for dropdowns — id, name, section, status. */
     public function getForSelect(string $section = ''): array {
         $sql = "SELECT id, trainer_code, name, section, status
