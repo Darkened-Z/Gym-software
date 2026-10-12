@@ -1524,20 +1524,22 @@ function renderMembersTable(members, pagination) {
                     ${members.length > 0 ? members.map((m, idx) => `
                         <tr>
                             <td data-label="#">${startIndex + idx + 1}</td>
-                            <td data-label="Code">${m.member_code}</td>
-                            <td data-label="Name">${m.name}</td>
-                            <td data-label="Phone">${m.phone}</td>
-                            <td data-label="Email">${m.email || 'N/A'}</td>
-                            <td data-label="Join Date">${Utils.formatDate(m.join_date)}</td>
-                            <td data-label="Due Amount">${m.total_due_amount > 0 ? `<span style="color: red; font-weight: bold;">${Utils.formatCurrency(m.total_due_amount)}</span>` : '<span style="color: green;">No Due</span>'}</td>
+                            <td data-label="Code"><span class="member-code-badge">${m.member_code}</span></td>
+                            <td data-label="Name" class="cell-member-name"><strong class="member-name-text">${escapeHtml(m.name)}</strong></td>
+                            <td data-label="Phone" class="cell-nowrap">${m.phone}</td>
+                            <td data-label="Email" class="cell-email">${m.email ? escapeHtml(m.email) : '<span style="color: var(--text-muted); opacity: 0.6;">N/A</span>'}</td>
+                            <td data-label="Join Date" class="cell-nowrap cell-date">${Utils.formatDate(m.join_date)}</td>
+                            <td data-label="Due Amount" class="cell-nowrap">${m.total_due_amount > 0 ? `<span class="due-pill due-owed">${Utils.formatCurrency(m.total_due_amount)}</span>` : '<span class="due-pill due-clear"><i class="fa fa-check-circle" style="font-size: 0.75rem;"></i> No Due</span>'}</td>
                             <td data-label="Status"><span class="status-badge status-${m.calculated_status || m.status}">${m.calculated_status || m.status}</span></td>
-                            <td data-label="Actions">
-                                <button class="btn btn-sm btn-secondary" onclick="openMemberProfile('${m.member_code}', '${currentGender}')">Open</button>
-                                ${isAdminUser() ? `
-                                    <button class="btn btn-sm btn-primary" onclick="editMember(${m.id})">Edit</button>
-                                    <button class="btn btn-sm btn-success" onclick="updateFee(${m.id}, '${m.member_code}')">Take Fee</button>
-                                    <button class="btn btn-sm btn-danger" onclick="deleteMember(${m.id})">Delete</button>
-                                ` : ''}
+                            <td data-label="Actions" class="cell-actions">
+                                <div class="table-actions">
+                                    <button class="btn btn-sm btn-secondary" onclick="openMemberProfile('${m.member_code}', '${currentGender}')" title="Open Member Profile"><i class="fa fa-eye"></i> Open</button>
+                                    ${isAdminUser() ? `
+                                        <button class="btn btn-sm btn-primary" onclick="editMember(${m.id})" title="Edit Member"><i class="fa fa-pen"></i> Edit</button>
+                                        <button class="btn btn-sm btn-success" onclick="updateFee(${m.id}, '${m.member_code}')" title="Take Fee"><i class="fa fa-receipt"></i> Fee</button>
+                                        <button class="btn btn-sm btn-danger btn-icon-only" onclick="deleteMember(${m.id})" title="Delete Member" aria-label="Delete"><i class="fa fa-trash"></i></button>
+                                    ` : ''}
+                                </div>
                             </td>
                         </tr>
                     `).join('') : `
@@ -2249,7 +2251,9 @@ function loadAttendanceTable(page = 1) {
                                     <td data-label="Check Out">${a.check_out ? new Date(a.check_out).toLocaleString() : '<span style="color: orange;">In Progress</span>'}</td>
                                     <td data-label="Duration">${a.duration_minutes ? a.duration_minutes + ' min' : 'N/A'}</td>
                                     <td data-label="Actions">
-                                        ${!a.check_out ? `<button class="btn btn-sm btn-primary" onclick="checkOut(${a.id})">Check Out</button>` : ''}
+                                        <div class="table-actions">
+                                            ${!a.check_out ? `<button class="btn btn-sm btn-primary" onclick="checkOut(${a.id})" title="Check Out"><i class="fa fa-sign-out-alt"></i> Check Out</button>` : ''}
+                                        </div>
                                     </td>
                                 </tr>
                             `).join('')}
@@ -3315,8 +3319,10 @@ function loadStaffTable(page = 1) {
                                 <td data-label="Access">${escapeHtml(formatStaffAccess(row))}</td>
                                 <td data-label="Created">${Utils.formatDate(row.created_at)}</td>
                                 <td data-label="Actions">
-                                    <button class="btn btn-sm btn-primary" onclick="editStaff(${row.id})">Edit</button>
-                                    <button class="btn btn-sm btn-danger" onclick="deleteStaff(${row.id})">Delete</button>
+                                    <div class="table-actions">
+                                        <button class="btn btn-sm btn-primary" onclick="editStaff(${row.id})" title="Edit Staff"><i class="fa fa-pen"></i> Edit</button>
+                                        <button class="btn btn-sm btn-danger btn-icon-only" onclick="deleteStaff(${row.id})" title="Delete Staff" aria-label="Delete"><i class="fa fa-trash"></i></button>
+                                    </div>
                                 </td>
                             </tr>
                         `).join('') : '<tr><td colspan="8"><div class="empty-state"><strong>No staff found</strong>Add your first staff user here.</div></td></tr>'}
@@ -3540,10 +3546,12 @@ function renderTrainersTable(data) {
             <td>${Number(t.assigned_count || 0)}</td>
             <td><span class="badge ${t.status === 'active' ? 'badge-success' : 'badge-muted'}">${Utils.escapeHtml(t.status)}</span></td>
             <td>
-                <button class="btn btn-sm btn-secondary" onclick="editTrainer(${t.id})">Edit</button>
-                ${t.status === 'active'
-                    ? `<button class="btn btn-sm btn-danger" onclick="deactivateTrainer(${t.id})">Deactivate</button>`
-                    : `<button class="btn btn-sm btn-primary" onclick="activateTrainer(${t.id})">Reactivate</button>`}
+                <div class="table-actions">
+                    <button class="btn btn-sm btn-secondary" onclick="editTrainer(${t.id})" title="Edit Trainer"><i class="fa fa-pen"></i> Edit</button>
+                    ${t.status === 'active'
+                        ? `<button class="btn btn-sm btn-danger" onclick="deactivateTrainer(${t.id})" title="Deactivate Trainer"><i class="fa fa-ban"></i> Deactivate</button>`
+                        : `<button class="btn btn-sm btn-primary" onclick="activateTrainer(${t.id})" title="Reactivate Trainer"><i class="fa fa-redo"></i> Reactivate</button>`}
+                </div>
             </td>
         </tr>
     `).join('');
@@ -4832,9 +4840,11 @@ function renderDueFeesTable(members, pagination) {
                         <td data-label="Status"><span class="badge ${(m.calculated_status || m.status) === 'active' ? 'badge-success' : 'badge-secondary'}">${m.calculated_status || m.status}</span></td>
                         <td data-label="Actions">
                             ${isAdminUser() ? `
-                                <button class="btn btn-sm btn-primary" onclick="showUpdateDueFeeModal(${m.id}, '${m.gender}', ${m.total_due_amount || 0}, '${m.name}')">
-                                    Receive / Update
-                                </button>
+                                <div class="table-actions">
+                                    <button class="btn btn-sm btn-primary" onclick="showUpdateDueFeeModal(${m.id}, '${m.gender}', ${m.total_due_amount || 0}, '${m.name}')">
+                                        <i class="fa fa-receipt"></i> Receive / Update
+                                    </button>
+                                </div>
                             ` : '<span style="color:#6b7280;">Read only</span>'}
                         </td>
                     </tr>
@@ -5592,8 +5602,10 @@ function renderExpensesTable(expenses, pagination) {
                         <td data-label="Amount"><strong style="color: #e74c3c;">${Utils.formatCurrency(e.amount || 0)}</strong></td>
                         <td data-label="Actions">
                             ${isAdminUser() ? `
-                                <button class="btn btn-sm btn-primary" onclick="showEditExpenseForm(${e.id})">Edit</button>
-                                <button class="btn btn-sm btn-danger" onclick="deleteExpense(${e.id})">Delete</button>
+                                <div class="table-actions">
+                                    <button class="btn btn-sm btn-primary" onclick="showEditExpenseForm(${e.id})" title="Edit Expense"><i class="fa fa-pen"></i> Edit</button>
+                                    <button class="btn btn-sm btn-danger btn-icon-only" onclick="deleteExpense(${e.id})" title="Delete Expense" aria-label="Delete"><i class="fa fa-trash"></i></button>
+                                </div>
                             ` : '<span style="color:#6b7280;">Read only</span>'}
                         </td>
                     </tr>
@@ -6010,7 +6022,9 @@ function renderReport(data, type) {
                                             <td><span style="color: ${d.days_overdue > 0 ? 'red' : '#f39c12'}; font-weight: bold;">${d.days_overdue || 0} days</span></td>
                                             <td><strong style="color: #e74c3c;">${Utils.formatCurrency(d.total_due_amount || 0)}</strong></td>
                                             <td>
-                                                ${isAdminUser() ? `<button class="btn btn-sm btn-primary" onclick="currentGender='${d.gender}'; updateFee(${d.id}, '${d.member_code}')">Take Fee</button>` : '<span style="color:#6b7280;">Read only</span>'}
+                                                <div class="table-actions">
+                                                    ${isAdminUser() ? `<button class="btn btn-sm btn-success" onclick="currentGender='${d.gender}'; updateFee(${d.id}, '${d.member_code}')"><i class="fa fa-receipt"></i> Take Fee</button>` : '<span style="color:#6b7280;">Read only</span>'}
+                                                </div>
                                             </td>
                                         </tr>
                                     `).join('')}
@@ -7647,8 +7661,10 @@ function renderPackagesTable(packages) {
             <td data-label="Status">${parseInt(p.is_active) ? '<span class="status-badge status-active">Active</span>' : '<span class="status-badge status-inactive">Inactive</span>'}</td>
             <td data-label="Actions">
                 ${isAdminUser() ? `
-                    <button class="btn btn-sm btn-primary" onclick="showEditPackageForm(${p.id})">Edit</button>
-                    <button class="btn btn-sm btn-danger" onclick="deletePackage(${p.id})">Delete</button>
+                    <div class="table-actions">
+                        <button class="btn btn-sm btn-primary" onclick="showEditPackageForm(${p.id})" title="Edit Package"><i class="fa fa-pen"></i> Edit</button>
+                        <button class="btn btn-sm btn-danger btn-icon-only" onclick="deletePackage(${p.id})" title="Delete Package" aria-label="Delete"><i class="fa fa-trash"></i></button>
+                    </div>
                 ` : '<span style="color:#6b7280;">Read only</span>'}
             </td>
         </tr>
@@ -8049,10 +8065,12 @@ function loadRegistrationsTable(page = 1) {
                                 <td data-label="Requested">${Utils.formatDate(r.created_at)}</td>
                                 <td data-label="Status">${badge(r.status)}${r.assigned_member_code ? ' <strong>' + escapeHtml(r.assigned_member_code) + '</strong>' : ''}</td>
                                 <td data-label="Actions">
-                                    ${r.status === 'pending' ? `
-                                        <button class="btn btn-sm btn-primary" onclick="showApproveRegistration(${r.id})">Approve</button>
-                                        <button class="btn btn-sm btn-danger" onclick="rejectRegistration(${r.id})">Reject</button>
-                                    ` : `<button class="btn btn-sm btn-secondary" onclick="showRegistrationDetails(${r.id})">View</button>`}
+                                    <div class="table-actions">
+                                        ${r.status === 'pending' ? `
+                                            <button class="btn btn-sm btn-primary" onclick="showApproveRegistration(${r.id})" title="Approve Request"><i class="fa fa-check"></i> Approve</button>
+                                            <button class="btn btn-sm btn-danger btn-icon-only" onclick="rejectRegistration(${r.id})" title="Reject Request" aria-label="Reject"><i class="fa fa-times"></i></button>
+                                        ` : `<button class="btn btn-sm btn-secondary" onclick="showRegistrationDetails(${r.id})" title="View Details"><i class="fa fa-eye"></i> View</button>`}
+                                    </div>
                                 </td>
                             </tr>
                         `).join('') : '<tr><td colspan="8"><div class="empty-state"><strong>No requests</strong>New "Create profile" requests will show up here.</div></td></tr>'}
