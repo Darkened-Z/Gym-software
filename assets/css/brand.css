@@ -1770,8 +1770,13 @@ html body .eaEmpty {
    Transforms the legacy UI into a high-performance, dark-luxury dashboard.
    ============================================================================ */
 
-/* 1. Global Viewport & Surface Polish */
+/* 1. Global Viewport & Surface Polish (Compact 90% Fit) */
+html {
+  zoom: 0.9;
+}
+
 body {
+  zoom: 0.9 !important;
   background-color: #09090b !important;
   color: #f4f4f5 !important;
   font-family: var(--brand-font-body) !important;
@@ -1783,48 +1788,59 @@ body {
   background: #09090b !important;
 }
 
-/* 2. Sleek Modern Sidebar */
+/* 2. Sleek Modern Compact Sidebar — Fits all 17 items on screen without scrolling */
 .sidebar {
-  width: 250px !important;
+  width: 230px !important;
   background: #0e0e11 !important;
   border-right: 1px solid rgba(255, 255, 255, 0.07) !important;
   box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4) !important;
+  overflow-y: auto !important;
+  scrollbar-width: thin !important;
+  height: 100vh !important;
+  max-height: 100vh !important;
 }
 
 .sidebar-header.brand-sidebar-header {
-  padding: 1.25rem 1.4rem !important;
+  padding: 0.75rem 1rem !important;
   background: transparent !important;
   border-bottom: 1px solid rgba(255, 255, 255, 0.07) !important;
 }
 
 .sidebar-header.brand-sidebar-header h2 {
-  font-size: 1.1rem !important;
+  font-size: 1rem !important;
   font-weight: 700 !important;
   color: #ffffff !important;
   letter-spacing: -0.01em !important;
 }
 
 .sidebar-nav {
-  padding: 0.75rem 0.6rem !important;
+  padding: 0.35rem 0.45rem !important;
   display: flex !important;
   flex-direction: column !important;
-  gap: 0.2rem !important;
+  gap: 0.12rem !important;
 }
 
 .nav-item {
   display: flex !important;
   align-items: center !important;
-  gap: 0.75rem !important;
-  padding: 0.65rem 0.95rem !important;
+  gap: 0.65rem !important;
+  padding: 0.38rem 0.65rem !important;
   color: #a1a1aa !important;
-  font-size: 0.86rem !important;
+  font-size: 0.82rem !important;
   font-weight: 500 !important;
-  border-radius: 8px !important;
+  border-radius: 6px !important;
   border-left: none !important;
-  transition: all 0.18s ease-in-out !important;
+  transition: all 0.15s ease-in-out !important;
   text-decoration: none !important;
   position: relative !important;
   overflow: visible !important;
+  min-height: 32px !important;
+}
+
+.main-content {
+  margin-left: 230px !important;
+  max-width: calc(100% - 230px) !important;
+  width: calc(100% - 230px) !important;
 }
 
 .nav-item::before {
@@ -1861,39 +1877,42 @@ body {
   color: #f5c518 !important;
 }
 
-/* 3. Sticky Top Header */
+/* 3. Sticky Top Header (Compact) */
 .content-header {
-  background: rgba(9, 9, 11, 0.85) !important;
+  background: rgba(9, 9, 11, 0.88) !important;
   -webkit-backdrop-filter: blur(20px) !important;
   backdrop-filter: blur(20px) !important;
   border-bottom: 1px solid rgba(255, 255, 255, 0.07) !important;
-  padding: 1rem 2rem !important;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3) !important;
+  padding: 0.6rem 1.25rem !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3) !important;
+  min-height: 48px !important;
 }
 
 .content-header h1 {
-  font-size: 1.35rem !important;
+  font-size: 1.2rem !important;
   font-weight: 700 !important;
   color: #f4f4f5 !important;
   letter-spacing: -0.02em !important;
 }
 
 .content-body {
-  padding: 1.75rem 2rem !important;
+  padding: 0.85rem 1.25rem !important;
 }
 
-/* 4. Bento Stat Cards & Metrics */
+/* 4. Bento Stat Cards & Metrics (Compact Fit) */
 .dashboard-stats {
-  gap: 1.25rem !important;
+  gap: 0.75rem !important;
+  margin-bottom: 0.85rem !important;
 }
 
 .stat-card {
   background: linear-gradient(145deg, rgba(22, 22, 26, 0.95), rgba(14, 14, 16, 0.95)) !important;
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  border-radius: 12px !important;
-  padding: 1.35rem 1.4rem !important;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35) !important;
+  border-radius: 10px !important;
+  padding: 0.75rem 0.95rem !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3) !important;
   transition: all 0.2s ease !important;
+  min-height: 78px !important;
 }
 
 .stat-card::before {
@@ -1916,13 +1935,56 @@ body {
 }
 
 .stat-value {
-  font-size: 2.1rem !important;
+  font-size: 1.55rem !important;
   font-weight: 800 !important;
   color: #f5c518 !important;
   -webkit-text-fill-color: initial !important;
   background: none !important;
   font-family: 'JetBrains Mono', monospace, sans-serif !important;
-  letter-spacing: -0.03em !important;
+  letter-spacing: -0.02em !important;
+  line-height: 1.1 !important;
+}
+
+/* Compact Fast Actions, Date Range & Section Cards */
+.dashboard-fast-actions,
+.action-strip,
+.section-guide-card {
+  padding: 0.75rem 1rem !important;
+  margin-bottom: 0.85rem !important;
+  border-radius: 10px !important;
+}
+
+.dashboard-fast-actions h2,
+.section-guide-card h3 {
+  font-size: 0.95rem !important;
+  margin-bottom: 0.2rem !important;
+}
+
+.dashboard-fast-actions p,
+.section-guide-card p {
+  font-size: 0.78rem !important;
+  margin-bottom: 0.5rem !important;
+}
+
+.dashboard-fast-actions .btn,
+.action-strip .btn {
+  padding: 0.45rem 0.85rem !important;
+  font-size: 0.82rem !important;
+}
+
+.dashboard-date-range {
+  padding: 0.5rem 0.85rem !important;
+  margin-bottom: 0.85rem !important;
+}
+
+.dashboard-date-range input {
+  padding: 0.35rem 0.6rem !important;
+  font-size: 0.82rem !important;
+}
+
+.pwa-status-bar {
+  padding: 0.35rem 0.85rem !important;
+  font-size: 0.78rem !important;
 }
 
 .stat-card small {
