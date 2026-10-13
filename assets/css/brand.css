@@ -826,11 +826,11 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
 }
 
 .main-content {
-  margin-left: 215px !important;
+  margin-left: 240px !important;
   flex: 1 1 0% !important;
   min-width: 0 !important;
-  max-width: calc(100% - 215px) !important;
-  width: calc(100% - 215px) !important;
+  max-width: calc(100% - 240px) !important;
+  width: calc(100% - 240px) !important;
   overflow-x: hidden !important;
   box-sizing: border-box !important;
 }
@@ -1810,14 +1810,12 @@ body {
   box-sizing: border-box !important;
 }
 
-/* 2. Sleek Modern Compact Sidebar — Fits all 17 items on screen without scrolling */
+/* 2. Sleek Modern Full-Height Sidebar — Fills entire left side with Logo and docked Logout */
 .sidebar {
-  width: 215px !important;
-  background: #0e0e11 !important;
+  width: 240px !important;
+  background: #0d0d10 !important;
   border-right: 1px solid rgba(255, 255, 255, 0.07) !important;
-  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4) !important;
-  overflow-y: auto !important;
-  scrollbar-width: thin !important;
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.45) !important;
   height: 100vh !important;
   max-height: 100vh !important;
   position: fixed !important;
@@ -1825,55 +1823,96 @@ body {
   left: 0 !important;
   bottom: 0 !important;
   z-index: 90 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  box-sizing: border-box !important;
+  overflow-y: auto !important;
+  scrollbar-width: thin !important;
 }
 
 .sidebar-header.brand-sidebar-header {
-  padding: 0.65rem 0.85rem !important;
-  background: transparent !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+  padding: 0.85rem 1rem !important;
+  background: rgba(255, 255, 255, 0.02) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07) !important;
   display: flex !important;
   align-items: center !important;
-  gap: 0.5rem !important;
+  gap: 0.75rem !important;
+  min-height: 62px !important;
+  box-sizing: border-box !important;
+  flex-shrink: 0 !important;
 }
 
-.sidebar-header.brand-sidebar-header h2 {
+.brand-sidebar-logo {
+  width: 42px !important;
+  height: 42px !important;
+  object-fit: contain !important;
+  border-radius: 50% !important;
+  background: #09090b !important;
+  border: 1.5px solid rgba(245, 197, 24, 0.45) !important;
+  box-shadow: 0 0 12px rgba(245, 197, 24, 0.25) !important;
+  flex-shrink: 0 !important;
+  transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+}
+
+.sidebar-header.brand-sidebar-header:hover .brand-sidebar-logo {
+  transform: scale(1.05) !important;
+  box-shadow: 0 0 16px rgba(245, 197, 24, 0.45) !important;
+}
+
+.brand-sidebar-text {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.15rem !important;
+  overflow: hidden !important;
+}
+
+.sidebar-header.brand-sidebar-header h2,
+.brand-sidebar-name {
   font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif !important;
-  font-size: 0.84rem !important;
+  font-size: 0.92rem !important;
   font-weight: 800 !important;
   color: #ffffff !important;
-  letter-spacing: 0.06em !important;
+  letter-spacing: 0.03em !important;
   text-transform: uppercase !important;
   margin: 0 !important;
-  display: flex !important;
-  align-items: center !important;
-  gap: 0.45rem !important;
+  line-height: 1.15 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
 }
 
 .sidebar-header.brand-sidebar-header h2::before {
-  content: '';
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #f5c518;
-  box-shadow: 0 0 8px rgba(245, 197, 24, 0.7);
+  display: none !important;
+}
+
+.brand-sidebar-badge {
+  font-size: 0.62rem !important;
+  font-weight: 700 !important;
+  color: #f5c518 !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase !important;
+  line-height: 1 !important;
+  opacity: 0.9 !important;
 }
 
 .sidebar-nav {
-  padding: 0.25rem 0.35rem !important;
+  padding: 0.5rem 0.55rem 0.85rem !important;
   display: flex !important;
   flex-direction: column !important;
-  gap: 0.08rem !important;
+  flex: 1 1 auto !important;
+  gap: 0.2rem !important;
+  box-sizing: border-box !important;
+  min-height: 0 !important;
 }
 
 .nav-item {
   display: flex !important;
   align-items: center !important;
-  gap: 0.55rem !important;
-  padding: 0.3rem 0.6rem !important;
+  gap: 0.65rem !important;
+  padding: 0.42rem 0.75rem !important;
   color: #94a3b8 !important;
   font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif !important;
-  font-size: 0.79rem !important;
+  font-size: 0.85rem !important;
   font-weight: 500 !important;
   letter-spacing: 0.01em !important;
   border-radius: 6px !important;
@@ -1882,13 +1921,13 @@ body {
   text-decoration: none !important;
   position: relative !important;
   overflow: visible !important;
-  min-height: 28px !important;
-  line-height: 1.2 !important;
+  min-height: 35px !important;
+  line-height: 1.25 !important;
   box-sizing: border-box !important;
 }
 
 .nav-item span {
-  font-size: 0.79rem !important;
+  font-size: 0.85rem !important;
   font-weight: 500 !important;
   color: inherit !important;
   transform: none !important;
@@ -1901,8 +1940,8 @@ body {
 }
 
 .nav-item .nav-icon {
-  font-size: 0.85rem !important;
-  width: 17px !important;
+  font-size: 0.95rem !important;
+  width: 20px !important;
   text-align: center !important;
   color: #64748b !important;
   transition: color 0.15s ease !important;
@@ -1910,7 +1949,7 @@ body {
 }
 
 .nav-item:hover {
-  background: rgba(255, 255, 255, 0.05) !important;
+  background: rgba(255, 255, 255, 0.06) !important;
   color: #ffffff !important;
   transform: none !important;
   border-left-color: rgba(245, 197, 24, 0.4) !important;
@@ -1922,7 +1961,7 @@ body {
 
 /* Modern Luxury Active State: Clean obsidian highlight with gold indicator bar */
 .nav-item.active {
-  background: linear-gradient(90deg, rgba(245, 197, 24, 0.12) 0%, rgba(245, 197, 24, 0.02) 100%) !important;
+  background: linear-gradient(90deg, rgba(245, 197, 24, 0.14) 0%, rgba(245, 197, 24, 0.03) 100%) !important;
   color: #ffffff !important;
   font-weight: 600 !important;
   border-left: 3px solid #f5c518 !important;
@@ -1940,14 +1979,30 @@ body {
   filter: drop-shadow(0 0 6px rgba(245, 197, 24, 0.4)) !important;
 }
 
+#logoutBtn {
+  margin-top: auto !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+  padding-top: 0.5rem !important;
+  margin-bottom: 0.25rem !important;
+}
+
 #logoutBtn:hover {
-  background: rgba(239, 68, 68, 0.1) !important;
+  background: rgba(239, 68, 68, 0.12) !important;
   color: #f87171 !important;
   border-left-color: #ef4444 !important;
 }
 
 #logoutBtn:hover .nav-icon {
   color: #ef4444 !important;
+}
+
+.main-content {
+  margin-left: 240px !important;
+  flex: 1 1 0% !important;
+  max-width: calc(100% - 240px) !important;
+  width: calc(100% - 240px) !important;
+  box-sizing: border-box !important;
+  min-width: 0 !important;
 }
 
 /* 3. Sticky Top Header (Ultra-Compact Full-Width) */
