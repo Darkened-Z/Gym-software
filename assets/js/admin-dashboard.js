@@ -3543,10 +3543,11 @@ function renderTrainersTable(data) {
             <td>${Utils.escapeHtml(t.section)}</td>
             <td>${Number(t.monthly_salary || 0).toFixed(2)}</td>
             <td>${Number(t.commission_pct || 0).toFixed(2)}%</td>
-            <td>${Number(t.assigned_count || 0)}</td>
+            <td>${Number(t.assigned_count || 0) > 0 ? `<button class="btn btn-sm btn-link" onclick="viewTrainerMembers(${t.id})" style="font-weight:600; text-decoration:underline; cursor:pointer; color:var(--brand-gold, #f5c518); background:none; border:none; padding:0;" title="View assigned members">${Number(t.assigned_count)} members</button>` : `<span class="text-muted">0</span>`}</td>
             <td><span class="badge ${t.status === 'active' ? 'badge-success' : 'badge-muted'}">${Utils.escapeHtml(t.status)}</span></td>
             <td>
                 <div class="table-actions">
+                    <button class="btn btn-sm btn-info" onclick="viewTrainerMembers(${t.id})" title="View Assigned Members"><i class="fa fa-users"></i> Members</button>
                     <button class="btn btn-sm btn-secondary" onclick="editTrainer(${t.id})" title="Edit Trainer"><i class="fa fa-pen"></i> Edit</button>
                     ${t.status === 'active'
                         ? `<button class="btn btn-sm btn-danger" onclick="deactivateTrainer(${t.id})" title="Deactivate Trainer"><i class="fa fa-ban"></i> Deactivate</button>`
@@ -3693,6 +3694,90 @@ function activateTrainer(id) {
             if (!data.success) throw new Error(data.message || 'Failed');
             Utils.showNotification('Trainer reactivated', 'success');
             loadTrainersTable(1);
+        })
+        .catch(err => Utils.showNotification(err.message, 'error'));
+}
+
+function viewTrainerMembers(trainerId) {
+    fetch(`api/trainers.php?action=portal_data&trainer_id=${trainerId}`)
+        .then(res => res.json())
+        .then(data => {
+            if (!data.success && data.message) throw new Error(data.message);
+            const trainer = data.trainer || {};
+            const members = data.members || [];
+            const summary = data.summary || {};
+
+            const memberRows = members.map(m => `
+                <tr>
+                    <td><strong>${Utils.escapeHtml(m.member_code || m.code || '-')}</strong></td>
+                    <td>${Utils.escapeHtml(m.name || m.full_name || '-')}</td>
+                    <td>${Utils.escapeHtml(m.phone || '-')}</td>
+                    <td><span class="badge ${m.section === 'women' ? 'badge-info' : 'badge-primary'}">${Utils.escapeHtml(m.section || '-')}</span></td>
+                    <td>${Utils.escapeHtml(m.package_name || '-')}</td>
+                    <td>${Utils.formatCurrency(m.due_amount || 0)}</td>
+                    <td>${m.last_checkin ? Utils.formatDate(m.last_checkin) : '<span class="text-muted">Never</span>'}</td>
+                </tr>
+            `).join('');
+
+            const modal = document.createElement('div');
+            modal.className = 'modal-overlay';
+            modal.id = 'trainerMembersModal';
+            modal.innerHTML = `
+                <div class="modal-content" style="max-width: 820px; width: 95%;">
+                    <div class="modal-header">
+                        <div>
+                            <h2>${Utils.escapeHtml(trainer.name || 'Trainer')} — Assigned Members (${members.length})</h2>
+                            <p class="modal-subtitle" style="margin: 0.25rem 0 0; font-size: 0.85rem; color: var(--text-secondary);">
+                                Code: <strong>${Utils.escapeHtml(trainer.trainer_code || '-')}</strong> | 
+                                Phone: <strong>${Utils.escapeHtml(trainer.phone || '-')}</strong> | 
+                                Commission: <strong>${Number(trainer.commission_pct || 0)}%</strong> | 
+                                Base Salary: <strong>${Utils.formatCurrency(trainer.monthly_salary || 0)}</strong>
+                            </p>
+                        </div>
+                        <button class="modal-close" onclick="document.getElementById('trainerMembersModal').remove()">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.75rem; margin-bottom: 1rem;">
+                            <div style="background: var(--bg-secondary, #1a1a1a); padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid var(--border-color, #2a2a2a);">
+                                <small style="color: var(--text-secondary); text-transform: uppercase; font-size: 0.7rem;">Assigned Members</small>
+                                <div style="font-size: 1.35rem; font-weight: 700; color: var(--text-color);">${members.length}</div>
+                            </div>
+                            <div style="background: var(--bg-secondary, #1a1a1a); padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid var(--border-color, #2a2a2a);">
+                                <small style="color: var(--text-secondary); text-transform: uppercase; font-size: 0.7rem;">Active Trainees</small>
+                                <div style="font-size: 1.35rem; font-weight: 700; color: var(--success-color, #4ade80);">${summary.active_members || members.filter(m => m.status === 'active').length}</div>
+                            </div>
+                            <div style="background: var(--bg-secondary, #1a1a1a); padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid var(--border-color, #2a2a2a);">
+                                <small style="color: var(--text-secondary); text-transform: uppercase; font-size: 0.7rem;">Est. MTD Earnings</small>
+                                <div style="font-size: 1.35rem; font-weight: 700; color: var(--brand-gold, #f5c518);">${Utils.formatCurrency(summary.mtd_total_earnings || (Number(trainer.monthly_salary || 0)))}</div>
+                            </div>
+                        </div>
+
+                        <div class="table-container" style="max-height: 380px; overflow-y: auto;">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Code</th>
+                                        <th>Name</th>
+                                        <th>Phone</th>
+                                        <th>Section</th>
+                                        <th>Package</th>
+                                        <th>Due Amount</th>
+                                        <th>Last Check-In</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${memberRows || '<tr><td colspan="7" class="text-center" style="padding: 2rem;">No members currently assigned to this trainer.<br><small class="text-muted">You can assign members from the Member Edit form.</small></td></tr>'}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-size: 0.85rem; color: var(--text-secondary);">Section: <strong>${Utils.escapeHtml(trainer.section || 'both')}</strong></span>
+                        <button class="btn btn-secondary" onclick="document.getElementById('trainerMembersModal').remove()">Close</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
         })
         .catch(err => Utils.showNotification(err.message, 'error'));
 }
