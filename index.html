@@ -14,7 +14,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="assets/css/style.css?v=8">
     <link rel="stylesheet" href="assets/css/pwa.css">
-    <link rel="stylesheet" href="assets/css/brand.css?v=16">
+    <link rel="stylesheet" href="assets/css/brand.css?v=17">
 </head>
 <body>
     <div class="login-container">
@@ -28,6 +28,16 @@
                 <div class="access-intro">
                     <strong>Start here</strong>
                     <p>Front desk staff should use username and password. Members should use member code only.</p>
+                </div>
+
+                                <!-- Mobile / Narrow Screen Segmented Tabs -->
+                <div class="login-tabs-bar" role="tablist" aria-label="Select login type">
+                    <button type="button" class="login-tab-btn active" id="tabStaffBtn" onclick="switchLoginTab('staff')" role="tab" aria-selected="true">
+                        <i class="fa-solid fa-user-shield"></i> Staff / Admin
+                    </button>
+                    <button type="button" class="login-tab-btn" id="tabMemberBtn" onclick="switchLoginTab('member')" role="tab" aria-selected="false">
+                        <i class="fa-solid fa-id-card"></i> Member
+                    </button>
                 </div>
 
                 <div class="login-split-layout">
@@ -67,6 +77,10 @@
                             <small class="form-hint">Only staff and admin should use this side.</small>
                             <button type="submit" class="btn btn-primary" aria-label="Login as Admin">Open Dashboard</button>
                         </form>
+                        <div class="login-tab-switch-hint">
+                            <span>Are you a gym member?</span>
+                            <button type="button" class="btn-link-switch" onclick="switchLoginTab('member')">Member Login →</button>
+                        </div>
                     </section>
 
                     <div class="login-divider" aria-hidden="true">
@@ -96,6 +110,10 @@
                             <span class="form-hint">New here and don't have a code yet?</span>
                             <button type="button" class="btn btn-secondary" id="openSignupBtn">Create profile</button>
                         </div>
+                        <div class="login-tab-switch-hint">
+                            <span>Front desk staff?</span>
+                            <button type="button" class="btn-link-switch" onclick="switchLoginTab('staff')">Staff / Admin Login →</button>
+                        </div>
                     </section>
                 </div>
 
@@ -114,9 +132,65 @@
     <script src="assets/js/pwa.js?v=4"></script>
     <script src="assets/js/auth.js?v=9"></script>
     <script>
-        // Check authentication status on page load
+        // Tab switching for mobile/narrow viewports
+        function switchLoginTab(tab) {
+            var adminPanel = document.getElementById('admin-login');
+            var memberPanel = document.getElementById('member-login');
+            var divider = document.querySelector('.login-divider');
+            var tabStaffBtn = document.getElementById('tabStaffBtn');
+            var tabMemberBtn = document.getElementById('tabMemberBtn');
+
+            if (window.innerWidth <= 768) {
+                if (tab === 'member') {
+                    if (adminPanel) adminPanel.style.display = 'none';
+                    if (memberPanel) memberPanel.style.display = 'block';
+                    if (divider) divider.style.display = 'none';
+                    if (tabStaffBtn) { tabStaffBtn.classList.remove('active'); tabStaffBtn.setAttribute('aria-selected', 'false'); }
+                    if (tabMemberBtn) { tabMemberBtn.classList.add('active'); tabMemberBtn.setAttribute('aria-selected', 'true'); }
+                    var memberInput = document.getElementById('memberCode');
+                    if (memberInput) memberInput.focus();
+                } else {
+                    if (adminPanel) adminPanel.style.display = 'block';
+                    if (memberPanel) memberPanel.style.display = 'none';
+                    if (divider) divider.style.display = 'none';
+                    if (tabStaffBtn) { tabStaffBtn.classList.add('active'); tabStaffBtn.setAttribute('aria-selected', 'true'); }
+                    if (tabMemberBtn) { tabMemberBtn.classList.remove('active'); tabMemberBtn.setAttribute('aria-selected', 'false'); }
+                    var adminInput = document.getElementById('adminUsername');
+                    if (adminInput) adminInput.focus();
+                }
+            } else {
+                if (adminPanel) adminPanel.style.display = '';
+                if (memberPanel) memberPanel.style.display = '';
+                if (divider) divider.style.display = '';
+            }
+        }
+
+        // Check authentication status and initialize tab mode
         document.addEventListener('DOMContentLoaded', function() {
             checkAuthStatus();
+            if (window.innerWidth <= 768) {
+                var hash = window.location.hash;
+                var lastRole = sessionStorage.getItem('gym_last_role');
+                if (hash === '#member' || lastRole === 'member') {
+                    switchLoginTab('member');
+                } else {
+                    switchLoginTab('staff');
+                }
+            }
+        });
+
+        window.addEventListener('resize', function() {
+            if (window.innerWidth > 768) {
+                var adminPanel = document.getElementById('admin-login');
+                var memberPanel = document.getElementById('member-login');
+                var divider = document.querySelector('.login-divider');
+                if (adminPanel) adminPanel.style.display = '';
+                if (memberPanel) memberPanel.style.display = '';
+                if (divider) divider.style.display = '';
+            } else {
+                var isMember = document.getElementById('tabMemberBtn') && document.getElementById('tabMemberBtn').classList.contains('active');
+                switchLoginTab(isMember ? 'member' : 'staff');
+            }
         });
 
         function checkAuthStatus() {
