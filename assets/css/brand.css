@@ -1476,3 +1476,354 @@ html body .eaEmpty {
 .fa-camera::before { content: '\f030'; }
 .fa-spinner::before{ content: '\f110'; }
 
+/* ============================================================================
+   2026 ULTRA-MODERN OBSIDIAN & GOLD SAAS SUITE (LINEAR / APEX DESIGN SYSTEM)
+   Transforms the legacy UI into a high-performance, dark-luxury dashboard.
+   ============================================================================ */
+
+/* 1. Global Viewport & Surface Polish */
+body {
+  background-color: #09090b !important;
+  color: #f4f4f5 !important;
+  font-family: var(--brand-font-body) !important;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.dashboard-container {
+  background: #09090b !important;
+}
+
+/* 2. Sleek Modern Sidebar */
+.sidebar {
+  width: 250px !important;
+  background: #0e0e11 !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.07) !important;
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4) !important;
+}
+
+.sidebar-header.brand-sidebar-header {
+  padding: 1.25rem 1.4rem !important;
+  background: transparent !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07) !important;
+}
+
+.sidebar-header.brand-sidebar-header h2 {
+  font-size: 1.1rem !important;
+  font-weight: 700 !important;
+  color: #ffffff !important;
+  letter-spacing: -0.01em !important;
+}
+
+.sidebar-nav {
+  padding: 0.75rem 0.6rem !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.2rem !important;
+}
+
+.nav-item {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.75rem !important;
+  padding: 0.65rem 0.95rem !important;
+  color: #a1a1aa !important;
+  font-size: 0.86rem !important;
+  font-weight: 500 !important;
+  border-radius: 8px !important;
+  border-left: none !important;
+  transition: all 0.18s ease-in-out !important;
+  text-decoration: none !important;
+  position: relative !important;
+  overflow: visible !important;
+}
+
+.nav-item::before {
+  display: none !important;
+}
+
+.nav-item .nav-icon {
+  font-size: 0.95rem !important;
+  width: 18px !important;
+  text-align: center !important;
+  color: #71717a !important;
+  transition: color 0.18s ease !important;
+  flex-shrink: 0 !important;
+}
+
+.nav-item:hover {
+  background: rgba(255, 255, 255, 0.05) !important;
+  color: #ffffff !important;
+  transform: none !important;
+}
+
+.nav-item:hover .nav-icon {
+  color: #f5c518 !important;
+}
+
+.nav-item.active {
+  background: rgba(245, 197, 24, 0.12) !important;
+  color: #f5c518 !important;
+  font-weight: 600 !important;
+  box-shadow: inset 0 0 0 1px rgba(245, 197, 24, 0.25) !important;
+}
+
+.nav-item.active .nav-icon {
+  color: #f5c518 !important;
+}
+
+/* 3. Sticky Top Header */
+.content-header {
+  background: rgba(9, 9, 11, 0.85) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  backdrop-filter: blur(20px) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07) !important;
+  padding: 1rem 2rem !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3) !important;
+}
+
+.content-header h1 {
+  font-size: 1.35rem !important;
+  font-weight: 700 !important;
+  color: #f4f4f5 !important;
+  letter-spacing: -0.02em !important;
+}
+
+.content-body {
+  padding: 1.75rem 2rem !important;
+}
+
+/* 4. Bento Stat Cards & Metrics */
+.dashboard-stats {
+  gap: 1.25rem !important;
+}
+
+.stat-card {
+  background: linear-gradient(145deg, rgba(22, 22, 26, 0.95), rgba(14, 14, 16, 0.95)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 12px !important;
+  padding: 1.35rem 1.4rem !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35) !important;
+  transition: all 0.2s ease !important;
+}
+
+.stat-card::before {
+  display: none !important;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px) !important;
+  border-color: rgba(245, 197, 24, 0.4) !important;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 20px rgba(245, 197, 24, 0.1) !important;
+}
+
+.stat-card h3 {
+  font-size: 0.72rem !important;
+  font-weight: 600 !important;
+  color: #a1a1aa !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.06em !important;
+  margin-bottom: 0.5rem !important;
+}
+
+.stat-value {
+  font-size: 2.1rem !important;
+  font-weight: 800 !important;
+  color: #f5c518 !important;
+  -webkit-text-fill-color: initial !important;
+  background: none !important;
+  font-family: 'JetBrains Mono', monospace, sans-serif !important;
+  letter-spacing: -0.03em !important;
+}
+
+.stat-card small {
+  color: #71717a !important;
+  font-size: 0.8rem !important;
+  margin-top: 0.35rem !important;
+}
+
+/* 5. Modern Bento Panels & Containers */
+.dashboard-recent,
+.card,
+.section-card,
+.attendance-container,
+.member-container,
+.form-container,
+.report-container {
+  background: #111114 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4) !important;
+  overflow: hidden !important;
+}
+
+/* 6. High-Precision Modern Data Tables */
+table,
+.data-table,
+.members-table,
+.attendance-table {
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+  width: 100% !important;
+  border: none !important;
+}
+
+thead th,
+.data-table thead th {
+  background: #16161a !important;
+  color: #a1a1aa !important;
+  font-size: 0.72rem !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.06em !important;
+  padding: 0.8rem 1rem !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-top: none !important;
+}
+
+tbody td,
+.data-table tbody td {
+  padding: 0.85rem 1rem !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04) !important;
+  color: #e4e4e7 !important;
+  font-size: 0.86rem !important;
+  vertical-align: middle !important;
+}
+
+tbody tr {
+  transition: background-color 0.15s ease !important;
+}
+
+tbody tr:hover {
+  background: rgba(255, 255, 255, 0.03) !important;
+}
+
+/* 7. Modern Status Pills & Badges */
+.status-pill,
+.badge,
+.pill {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.35rem !important;
+  font-size: 0.72rem !important;
+  font-weight: 700 !important;
+  padding: 0.25rem 0.65rem !important;
+  border-radius: 9999px !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.04em !important;
+}
+
+.status-active,
+.pill.green,
+.badge-success {
+  background: rgba(34, 197, 94, 0.12) !important;
+  color: #4ade80 !important;
+  border: 1px solid rgba(34, 197, 94, 0.3) !important;
+}
+
+.status-inactive,
+.status-due,
+.pill.red,
+.badge-danger {
+  background: rgba(239, 68, 68, 0.12) !important;
+  color: #f87171 !important;
+  border: 1px solid rgba(239, 68, 68, 0.3) !important;
+}
+
+.status-warning,
+.pill.gold,
+.badge-warning {
+  background: rgba(245, 197, 24, 0.12) !important;
+  color: #f5c518 !important;
+  border: 1px solid rgba(245, 197, 24, 0.3) !important;
+}
+
+/* 8. Modern Buttons & Micro-Interactions */
+.btn,
+.btn-primary,
+button[type="submit"] {
+  border-radius: 8px !important;
+  font-weight: 600 !important;
+  font-size: 0.85rem !important;
+  letter-spacing: 0.01em !important;
+  padding: 0.55rem 1.15rem !important;
+  transition: all 0.15s ease !important;
+  border: none !important;
+}
+
+.btn-primary,
+.btn-gold {
+  background: linear-gradient(180deg, #f8d23c 0%, #efb70c 100%) !important;
+  color: #0d0d0d !important;
+  font-weight: 700 !important;
+  box-shadow: 0 2px 10px rgba(245, 197, 24, 0.25) !important;
+}
+
+.btn-primary:hover,
+.btn-gold:hover {
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 16px rgba(245, 197, 24, 0.4) !important;
+}
+
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: #f4f4f5 !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* 9. Form Inputs with Focus Rings */
+input[type="text"],
+input[type="number"],
+input[type="email"],
+input[type="password"],
+input[type="date"],
+select,
+textarea {
+  background: #141417 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: #f4f4f5 !important;
+  border-radius: 8px !important;
+  padding: 0.6rem 0.9rem !important;
+  font-size: 0.88rem !important;
+  transition: border-color 0.2s, box-shadow 0.2s !important;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: #f5c518 !important;
+  box-shadow: 0 0 0 3px rgba(245, 197, 24, 0.15) !important;
+  outline: none !important;
+}
+
+/* 10. Floating Modals & Dialogs */
+.modal-content,
+.modal-dialog,
+.modal-box {
+  background: #141418 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.75) !important;
+}
+
+.modal-header {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  padding: 1.25rem 1.5rem !important;
+}
+
+.modal-header h3,
+.modal-header h2 {
+  font-size: 1.15rem !important;
+  font-weight: 700 !important;
+  color: #ffffff !important;
+}
+
+.modal-footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+  padding: 1rem 1.5rem !important;
+}
+
