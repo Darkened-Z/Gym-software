@@ -219,25 +219,35 @@ body {
 html body { background: #09090b !important; }
 
 .brand-login-head h1,
-.login-box h1,
-.sidebar-header.brand-sidebar-header h2,
-.sidebar-header h2,
-#pageTitle,
-.content-header h1,
-.dashboard-recent h2,
-.dashboard-intro-copy h2,
-.modal-header h2 {
+.login-box h1 {
   font-family: var(--brand-font-display);
   font-weight: 400;
   letter-spacing: .04em;
-  -webkit-text-fill-color: currentColor;   /* cancel any gradient text-clip */
+  -webkit-text-fill-color: currentColor;
   background: none;
+  font-size: 2.15rem;
+  line-height: 1.1;
+  color: #ffffff;
 }
-/* Display headings must be LIGHT/GOLD on dark — never --brand-ink (vanishes) */
-.brand-login-head h1, .login-box h1 { font-size: 2.15rem; line-height: 1.1; color: #ffffff; }
-.content-header h1, #pageTitle { font-size: 2rem; color: #ffffff; }
-.sidebar-header.brand-sidebar-header h2, .sidebar-header h2 { font-size: 1.5rem; color: #ffffff; }
-.dashboard-recent h2, .dashboard-intro-copy h2, .modal-header h2 { color: #ededed; }
+
+#pageTitle,
+.content-header h1,
+.sidebar-header.brand-sidebar-header h2,
+.sidebar-header h2,
+.dashboard-recent h2,
+.dashboard-intro-copy h2,
+.modal-header h2 {
+  font-family: var(--brand-font-body), -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif !important;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  text-transform: capitalize;
+  -webkit-text-fill-color: currentColor;
+  background: none;
+  color: #ffffff;
+}
+.sidebar-header.brand-sidebar-header h2, .sidebar-header h2 { font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.content-header h1, #pageTitle { font-size: 1.25rem; }
+.dashboard-recent h2, .dashboard-intro-copy h2, .modal-header h2 { color: #f4f4f5; font-size: 1.05rem; }
 
 ::selection { background: var(--brand-yellow); color: var(--brand-ink); }
 
@@ -1092,18 +1102,17 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
    ============================================================================ */
 .main-content, .content-body, .dashboard-container { background: var(--bg-color); }
 .content-header, .section-header {
-  background: rgba(13, 13, 13, .94);   /* sticky bar — show-through intentional */
+  background: rgba(13, 13, 13, .94);
   box-shadow: none;
-  border-bottom: 2px solid var(--brand-gold);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 #userName, .user-info { color: var(--text-color); }
 
 .stat-card, .dashboard-recent, .dashboard-intro-card {
-  background: #161616;
-  box-shadow: none;
-  border: 1px solid var(--border-color);
-  border-top: 2px solid rgba(var(--brand-accent-rgb), .55);
-  border-radius: 10px;
+  background: #141417;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
 }
 .stat-card { background: linear-gradient(135deg, #181818 0%, #141414 100%); }
 .stat-card:hover { box-shadow: 0 12px 35px rgba(0, 0, 0, .55); }
@@ -1510,23 +1519,26 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
 .brand-social svg { fill: #ededed; width: 15px; height: 15px; }
 .brand-social .s-sc:hover svg { fill: #0d0d0d; }  /* re-assert: dark glyph on yellow */
 
-/* Gold underline under display headings (echoes the logo ring) */
+/* Headings underline - disable for dashboard titles to keep UI clean */
+#pageTitle::after,
+.content-header h1::after {
+  display: none !important;
+  content: none !important;
+}
+
 .brand-login-head h1::after,
-.login-box h1::after,
-#pageTitle::after {
+.login-box h1::after {
   content: ''; display: block; height: 3px; width: 56px; border-radius: 2px;
   background: var(--brand-gold); margin-top: .45rem;
+  margin-left: auto; margin-right: auto;
 }
-.brand-login-head h1::after, .login-box h1::after { margin-left: auto; margin-right: auto; }
 .lookup-bar #lookupBtn { background: var(--gold-grad); color: #0d0d0d; border: 1px solid #d9a407; }
 
 /* ============================================================================
-   12. PWA STATUS BAR (assets/css/pwa.css — was the last light white-flash band)
+   12. PWA STATUS BAR (Hidden when online, compact warning when offline)
    ============================================================================ */
 .pwa-status-bar.is-online {
-  background: rgba(39, 174, 96, .16);
-  color: #4ade80;
-  border-color: rgba(39, 174, 96, .4);
+  display: none !important;
 }
 .pwa-status-bar.is-offline {
   background: rgba(245, 158, 11, .16);
@@ -1816,63 +1828,84 @@ body {
 }
 
 .sidebar-header.brand-sidebar-header {
-  padding: 0.55rem 0.85rem !important;
+  padding: 0.65rem 0.85rem !important;
   background: transparent !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
 }
 
 .sidebar-header.brand-sidebar-header h2 {
-  font-size: 0.92rem !important;
-  font-weight: 700 !important;
+  font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif !important;
+  font-size: 0.84rem !important;
+  font-weight: 800 !important;
   color: #ffffff !important;
-  letter-spacing: -0.01em !important;
+  letter-spacing: 0.06em !important;
+  text-transform: uppercase !important;
   margin: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.45rem !important;
+}
+
+.sidebar-header.brand-sidebar-header h2::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #f5c518;
+  box-shadow: 0 0 8px rgba(245, 197, 24, 0.7);
 }
 
 .sidebar-nav {
-  padding: 0.2rem 0.35rem !important;
+  padding: 0.25rem 0.35rem !important;
   display: flex !important;
   flex-direction: column !important;
-  gap: 0.06rem !important;
+  gap: 0.08rem !important;
 }
 
 .nav-item {
   display: flex !important;
   align-items: center !important;
   gap: 0.55rem !important;
-  padding: 0.28rem 0.55rem !important;
-  color: #a1a1aa !important;
-  font-size: 0.78rem !important;
+  padding: 0.3rem 0.6rem !important;
+  color: #94a3b8 !important;
+  font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif !important;
+  font-size: 0.79rem !important;
   font-weight: 500 !important;
-  border-radius: 5px !important;
-  border-left: none !important;
+  letter-spacing: 0.01em !important;
+  border-radius: 6px !important;
+  border-left: 3px solid transparent !important;
   transition: all 0.15s ease-in-out !important;
   text-decoration: none !important;
   position: relative !important;
   overflow: visible !important;
   min-height: 28px !important;
   line-height: 1.2 !important;
-}
-
-.main-content {
-  margin-left: 215px !important;
-  flex: 1 1 0% !important;
-  max-width: calc(100% - 215px) !important;
-  width: calc(100% - 215px) !important;
   box-sizing: border-box !important;
-  min-width: 0 !important;
 }
 
-.nav-item::before {
-  display: none !important;
+.nav-item span {
+  font-size: 0.79rem !important;
+  font-weight: 500 !important;
+  color: inherit !important;
+  transform: none !important;
+  transition: color 0.15s ease !important;
+  letter-spacing: 0.01em !important;
+}
+
+.nav-item:hover span {
+  transform: none !important;
 }
 
 .nav-item .nav-icon {
-  font-size: 0.95rem !important;
-  width: 18px !important;
+  font-size: 0.85rem !important;
+  width: 17px !important;
   text-align: center !important;
-  color: #71717a !important;
-  transition: color 0.18s ease !important;
+  color: #64748b !important;
+  transition: color 0.15s ease !important;
   flex-shrink: 0 !important;
 }
 
@@ -1880,41 +1913,120 @@ body {
   background: rgba(255, 255, 255, 0.05) !important;
   color: #ffffff !important;
   transform: none !important;
+  border-left-color: rgba(245, 197, 24, 0.4) !important;
 }
 
 .nav-item:hover .nav-icon {
   color: #f5c518 !important;
 }
 
+/* Modern Luxury Active State: Clean obsidian highlight with gold indicator bar */
 .nav-item.active {
-  background: rgba(245, 197, 24, 0.12) !important;
-  color: #f5c518 !important;
+  background: linear-gradient(90deg, rgba(245, 197, 24, 0.12) 0%, rgba(245, 197, 24, 0.02) 100%) !important;
+  color: #ffffff !important;
   font-weight: 600 !important;
-  box-shadow: inset 0 0 0 1px rgba(245, 197, 24, 0.25) !important;
+  border-left: 3px solid #f5c518 !important;
+  border-radius: 0 6px 6px 0 !important;
+  box-shadow: none !important;
+}
+
+.nav-item.active span {
+  color: #ffffff !important;
+  font-weight: 600 !important;
 }
 
 .nav-item.active .nav-icon {
   color: #f5c518 !important;
+  filter: drop-shadow(0 0 6px rgba(245, 197, 24, 0.4)) !important;
+}
+
+#logoutBtn:hover {
+  background: rgba(239, 68, 68, 0.1) !important;
+  color: #f87171 !important;
+  border-left-color: #ef4444 !important;
+}
+
+#logoutBtn:hover .nav-icon {
+  color: #ef4444 !important;
 }
 
 /* 3. Sticky Top Header (Ultra-Compact Full-Width) */
 .content-header {
-  background: rgba(9, 9, 11, 0.92) !important;
+  background: rgba(9, 9, 11, 0.95) !important;
   -webkit-backdrop-filter: blur(20px) !important;
   backdrop-filter: blur(20px) !important;
   border-bottom: 1px solid rgba(255, 255, 255, 0.07) !important;
-  padding: 0.45rem 1rem !important;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3) !important;
-  min-height: 40px !important;
+  padding: 0.45rem 1.25rem !important;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25) !important;
+  min-height: 44px !important;
   width: 100% !important;
   box-sizing: border-box !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
 }
 
+#pageTitle,
 .content-header h1 {
-  font-size: 1.1rem !important;
+  font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif !important;
+  font-size: 1.15rem !important;
   font-weight: 700 !important;
-  color: #f4f4f5 !important;
-  letter-spacing: -0.02em !important;
+  color: #ffffff !important;
+  letter-spacing: -0.015em !important;
+  text-transform: capitalize !important;
+  margin: 0 !important;
+  line-height: 1.2 !important;
+  border-bottom: none !important;
+}
+
+#pageTitle::after,
+.content-header h1::after {
+  display: none !important;
+  content: none !important;
+}
+
+.content-header .header-actions {
+  margin-left: auto !important;
+  margin-right: 0.75rem !important;
+}
+
+.header-actions .btn-primary,
+.content-header .btn-primary {
+  background: linear-gradient(135deg, #f5c518 0%, #d4a012 100%) !important;
+  color: #09090b !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 6px !important;
+  padding: 0.36rem 0.8rem !important;
+  font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif !important;
+  font-size: 0.78rem !important;
+  font-weight: 600 !important;
+  text-transform: none !important;
+  letter-spacing: 0.01em !important;
+  box-shadow: 0 2px 8px rgba(245, 197, 24, 0.25) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.45rem !important;
+  transition: all 0.15s ease !important;
+  cursor: pointer !important;
+}
+
+.header-actions .btn-primary:hover,
+.content-header .btn-primary:hover {
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 14px rgba(245, 197, 24, 0.45) !important;
+  background: linear-gradient(135deg, #ffd84d 0%, #e0ab16 100%) !important;
+}
+
+.header-actions .btn-primary i,
+.content-header .btn-primary i {
+  font-size: 0.8rem !important;
+  color: #09090b !important;
+}
+
+.content-header .user-info {
+  font-size: 0.8rem !important;
+  color: #a1a1aa !important;
+  font-weight: 500 !important;
 }
 
 .content-body {
@@ -1985,33 +2097,108 @@ body {
 .dashboard-fast-actions,
 .action-strip,
 .section-guide-card {
-  padding: 0.6rem 0.85rem !important;
-  margin-bottom: 0.6rem !important;
+  padding: 0.65rem 0.95rem !important;
+  margin-bottom: 0.65rem !important;
   border-radius: 8px !important;
   width: 100% !important;
   box-sizing: border-box !important;
+  background: #111114 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25) !important;
+}
+
+.page-chip {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.35rem !important;
+  padding: 0.18rem 0.55rem !important;
+  font-size: 0.68rem !important;
+  font-weight: 600 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.06em !important;
+  background: rgba(245, 197, 24, 0.1) !important;
+  color: #f5c518 !important;
+  border: 1px solid rgba(245, 197, 24, 0.22) !important;
+  border-radius: 9999px !important;
+  margin-bottom: 0.35rem !important;
 }
 
 .dashboard-intro-copy h2,
 .dashboard-fast-actions h2,
 .section-guide-card h3 {
-  font-size: 0.9rem !important;
-  margin: 0.1rem 0 0.2rem !important;
+  font-size: 0.92rem !important;
+  font-weight: 700 !important;
+  color: #f4f4f5 !important;
+  margin: 0.1rem 0 0.25rem !important;
+  letter-spacing: -0.01em !important;
 }
 
 .dashboard-intro-copy p,
 .dashboard-fast-actions p,
 .section-guide-card p {
-  font-size: 0.74rem !important;
-  margin-bottom: 0.3rem !important;
+  font-size: 0.75rem !important;
+  color: #a1a1aa !important;
+  margin-bottom: 0.4rem !important;
+  line-height: 1.4 !important;
+}
+
+.dashboard-intro-actions {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 0.45rem !important;
+  margin-top: 0.45rem !important;
 }
 
 .dashboard-intro-actions .btn,
 .dashboard-fast-actions .btn,
 .action-strip .btn {
-  padding: 0.32rem 0.65rem !important;
+  padding: 0.35rem 0.75rem !important;
   font-size: 0.76rem !important;
+  font-weight: 600 !important;
+  border-radius: 6px !important;
   min-height: 28px !important;
+  text-transform: none !important;
+  letter-spacing: 0.01em !important;
+  transition: all 0.15s ease !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.4rem !important;
+}
+
+.dashboard-intro-actions .btn-primary {
+  background: linear-gradient(135deg, #f5c518 0%, #d4a012 100%) !important;
+  color: #09090b !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+}
+
+.dashboard-intro-actions .btn-success {
+  background: rgba(34, 197, 94, 0.15) !important;
+  color: #4ade80 !important;
+  border: 1px solid rgba(34, 197, 94, 0.3) !important;
+}
+.dashboard-intro-actions .btn-success:hover {
+  background: rgba(34, 197, 94, 0.25) !important;
+  color: #86efac !important;
+}
+
+.dashboard-intro-actions .btn-warning {
+  background: rgba(245, 158, 11, 0.15) !important;
+  color: #fbbf24 !important;
+  border: 1px solid rgba(245, 158, 11, 0.3) !important;
+}
+.dashboard-intro-actions .btn-warning:hover {
+  background: rgba(245, 158, 11, 0.25) !important;
+  color: #fde68a !important;
+}
+
+.dashboard-intro-actions .btn-secondary {
+  background: rgba(255, 255, 255, 0.07) !important;
+  color: #e4e4e7 !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+.dashboard-intro-actions .btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
 }
 
 .dashboard-toolbar {

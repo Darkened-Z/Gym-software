@@ -29,9 +29,7 @@
 }
 
 .pwa-status-bar.is-online {
-    background: #dcfce7;
-    color: #14532d;
-    border-color: #bbf7d0;
+    display: none !important;
 }
 
 .pwa-status-bar.is-offline {
