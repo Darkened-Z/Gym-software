@@ -30,6 +30,7 @@ $code = trim((string)($_GET['code'] ?? ''));
 
 try {
     $db = (new Database())->getConnection();
+    $fitnessModel = new MemberFitness($db);
 
     // 1. Resolve Member
     $memberMen = new Member($db, 'men');
@@ -45,7 +46,25 @@ try {
             $member = $memberWomen->getByCode($code);
             $gender = 'women';
         }
-        // Fallback: search by phone number if not found by exact code
+        // Fallback: try zero-padded code (e.g. 1 -> 001, 0001) or numeric ID
+        if (!$member && ctype_digit($code)) {
+            foreach ([str_pad($code, 3, '0', STR_PAD_LEFT), str_pad($code, 4, '0', STR_PAD_LEFT)] as $padded) {
+                $member = $memberMen->getByCode($padded);
+                if ($member) { $gender = 'men'; break; }
+                $member = $memberWomen->getByCode($padded);
+                if ($member) { $gender = 'women'; break; }
+            }
+            if (!$member) {
+                $member = $memberMen->getById((int)$code);
+                if ($member) {
+                    $gender = 'men';
+                } else {
+                    $member = $memberWomen->getById((int)$code);
+                    if ($member) $gender = 'women';
+                }
+            }
+        }
+        // Fallback: search by phone number if not found by code
         if (!$member && strlen(preg_replace('/[^0-9]/', '', $code)) >= 4) {
             $cleanPhone = '%' . substr(preg_replace('/[^0-9]/', '', $code), -10);
             $pStmt = $db->prepare("SELECT * FROM members_men WHERE REPLACE(REPLACE(phone, '-', ''), ' ', '') LIKE ? LIMIT 1");
@@ -71,7 +90,6 @@ try {
         exit;
     }
 
-    $fitnessModel = new MemberFitness($db);
     $memberId = (int)$member['id'];
 
     switch ($action) {

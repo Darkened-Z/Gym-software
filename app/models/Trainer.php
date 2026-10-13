@@ -255,6 +255,9 @@ class Trainer {
         $trainer = $this->getById($trainerId);
         if (!$trainer) return ['success' => false, 'message' => 'Trainer not found'];
 
+        require_once __DIR__ . '/MemberFitness.php';
+        new MemberFitness($this->conn);
+
         $members = [];
         $sections = [];
         if ($trainer['section'] === 'both') {
@@ -266,10 +269,7 @@ class Trainer {
         }
 
         foreach ($sections as $sec) {
-            $sql = "SELECT m.id, m.member_code, m.name AS full_name, m.name, m.phone,
-                           m.profile_image AS profile_photo, m.membership_type AS package_name,
-                           m.next_fee_due_date AS due_date, m.total_due_amount AS due_amount,
-                           m.monthly_fee, m.ptf_fee, m.status, '{$sec}' as section,
+            $sql = "SELECT m.*, '{$sec}' as section,
                            mf.height, mf.goal, mf.target_weight, mf.goal_notes, mf.progress_json, mf.logs_json
                     FROM members_{$sec} m
                     LEFT JOIN member_fitness mf ON mf.gender = '{$sec}' AND mf.member_id = m.id
@@ -279,8 +279,16 @@ class Trainer {
             $stmt->execute([':tid' => $trainerId]);
             $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-            // Enrich each member with last attendance check-in & progress info
+            // Enrich each member with normalized keys, last attendance check-in & progress info
             foreach ($rows as &$r) {
+                $r['full_name'] = $r['full_name'] ?? $r['name'] ?? '';
+                $r['profile_photo'] = $r['profile_photo'] ?? $r['profile_image'] ?? null;
+                $r['package_name'] = $r['package_name'] ?? $r['membership_type'] ?? 'Standard';
+                $r['due_date'] = $r['due_date'] ?? $r['next_fee_due_date'] ?? null;
+                $r['due_amount'] = (float)($r['due_amount'] ?? $r['total_due_amount'] ?? 0);
+                $r['monthly_fee'] = (float)($r['monthly_fee'] ?? 0);
+                $r['ptf_fee'] = (float)($r['ptf_fee'] ?? 0);
+
                 $attStmt = $this->conn->prepare(
                     "SELECT MAX(check_in) as last_seen, COUNT(*) as sessions_month
                      FROM attendance_{$sec}
