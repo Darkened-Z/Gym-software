@@ -1,5 +1,7 @@
 /* PWA shell/status styles */
 .pwa-status-bar {
+    width: 100%;
+    box-sizing: border-box;
     display: flex;
     align-items: center;
     justify-content: space-between;

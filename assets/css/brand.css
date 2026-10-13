@@ -194,12 +194,11 @@
   --gold-grad: linear-gradient(180deg, #f8d23c 0%, #efb70c 100%);
 }
 
-/* ---- Global 90% Scale & Viewport Containment ----------------------------- */
+/* ---- Global Viewport & Surface Polish ----------------------------- */
 html {
-  font-size: 15px;
-  max-width: 100vw;
+  font-size: 14.5px;
+  width: 100%;
   height: 100%;
-  overflow-x: hidden;
   box-sizing: border-box;
 }
 *, *::before, *::after {
@@ -207,22 +206,17 @@ html {
 }
 
 body {
-  zoom: 0.9;
   font-family: var(--brand-font-body);
-  background: #0a0a0a;
+  background: #09090b !important;
   color: var(--text-color);
-  max-width: 100vw;
-  width: 100%;
+  width: 100% !important;
   min-height: 100%;
+  margin: 0;
+  padding: 0;
   overflow-x: hidden;
+  box-sizing: border-box;
 }
-html body { background: #0a0a0a; }
-
-@supports not (zoom: 0.9) {
-  html {
-    font-size: 14.4px; /* 90% fallback for legacy engines without zoom */
-  }
-}
+html body { background: #09090b !important; }
 
 .brand-login-head h1,
 .login-box h1,
@@ -811,20 +805,22 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
 /* ============================================================================
    5. TABLES & DATA-TABLE SUITE (Viewport Contained & 90% Calibrated)
    ============================================================================ */
-/* Dashboard viewport containment — prevents horizontal window breakout */
+/* Dashboard viewport containment — stretches 100% full width */
 .dashboard-container {
   width: 100% !important;
-  max-width: 100vw !important;
+  max-width: 100% !important;
+  min-width: 100% !important;
+  min-height: 100vh !important;
   overflow-x: hidden !important;
   box-sizing: border-box !important;
 }
 
 .main-content {
-  margin-left: 250px !important;
+  margin-left: 215px !important;
   flex: 1 1 0% !important;
   min-width: 0 !important;
-  max-width: calc(100% - 250px) !important;
-  width: calc(100% - 250px) !important;
+  max-width: calc(100% - 215px) !important;
+  width: calc(100% - 215px) !important;
   overflow-x: hidden !important;
   box-sizing: border-box !important;
 }
@@ -1770,27 +1766,41 @@ html body .eaEmpty {
    Transforms the legacy UI into a high-performance, dark-luxury dashboard.
    ============================================================================ */
 
-/* 1. Global Viewport & Surface Polish (Compact 90% Fit) */
+/* 1. Global Viewport & Surface Polish (Full Width Fit + 90% Rem Scale) */
 html {
-  zoom: 0.9;
+  font-size: 14.4px !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  height: 100% !important;
 }
 
 body {
-  zoom: 0.9 !important;
   background-color: #09090b !important;
   color: #f4f4f5 !important;
   font-family: var(--brand-font-body) !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  min-height: 100vh !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow-x: hidden !important;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 .dashboard-container {
+  display: flex !important;
+  width: 100% !important;
+  min-width: 100% !important;
+  max-width: 100% !important;
+  min-height: 100vh !important;
   background: #09090b !important;
+  box-sizing: border-box !important;
 }
 
 /* 2. Sleek Modern Compact Sidebar — Fits all 17 items on screen without scrolling */
 .sidebar {
-  width: 230px !important;
+  width: 215px !important;
   background: #0e0e11 !important;
   border-right: 1px solid rgba(255, 255, 255, 0.07) !important;
   box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4) !important;
@@ -1798,49 +1808,59 @@ body {
   scrollbar-width: thin !important;
   height: 100vh !important;
   max-height: 100vh !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  bottom: 0 !important;
+  z-index: 90 !important;
 }
 
 .sidebar-header.brand-sidebar-header {
-  padding: 0.75rem 1rem !important;
+  padding: 0.55rem 0.85rem !important;
   background: transparent !important;
   border-bottom: 1px solid rgba(255, 255, 255, 0.07) !important;
 }
 
 .sidebar-header.brand-sidebar-header h2 {
-  font-size: 1rem !important;
+  font-size: 0.92rem !important;
   font-weight: 700 !important;
   color: #ffffff !important;
   letter-spacing: -0.01em !important;
+  margin: 0 !important;
 }
 
 .sidebar-nav {
-  padding: 0.35rem 0.45rem !important;
+  padding: 0.2rem 0.35rem !important;
   display: flex !important;
   flex-direction: column !important;
-  gap: 0.12rem !important;
+  gap: 0.06rem !important;
 }
 
 .nav-item {
   display: flex !important;
   align-items: center !important;
-  gap: 0.65rem !important;
-  padding: 0.38rem 0.65rem !important;
+  gap: 0.55rem !important;
+  padding: 0.28rem 0.55rem !important;
   color: #a1a1aa !important;
-  font-size: 0.82rem !important;
+  font-size: 0.78rem !important;
   font-weight: 500 !important;
-  border-radius: 6px !important;
+  border-radius: 5px !important;
   border-left: none !important;
   transition: all 0.15s ease-in-out !important;
   text-decoration: none !important;
   position: relative !important;
   overflow: visible !important;
-  min-height: 32px !important;
+  min-height: 28px !important;
+  line-height: 1.2 !important;
 }
 
 .main-content {
-  margin-left: 230px !important;
-  max-width: calc(100% - 230px) !important;
-  width: calc(100% - 230px) !important;
+  margin-left: 215px !important;
+  flex: 1 1 0% !important;
+  max-width: calc(100% - 215px) !important;
+  width: calc(100% - 215px) !important;
+  box-sizing: border-box !important;
+  min-width: 0 !important;
 }
 
 .nav-item::before {
@@ -1877,42 +1897,57 @@ body {
   color: #f5c518 !important;
 }
 
-/* 3. Sticky Top Header (Compact) */
+/* 3. Sticky Top Header (Ultra-Compact Full-Width) */
 .content-header {
-  background: rgba(9, 9, 11, 0.88) !important;
+  background: rgba(9, 9, 11, 0.92) !important;
   -webkit-backdrop-filter: blur(20px) !important;
   backdrop-filter: blur(20px) !important;
   border-bottom: 1px solid rgba(255, 255, 255, 0.07) !important;
-  padding: 0.6rem 1.25rem !important;
+  padding: 0.45rem 1rem !important;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3) !important;
-  min-height: 48px !important;
+  min-height: 40px !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
 }
 
 .content-header h1 {
-  font-size: 1.2rem !important;
+  font-size: 1.1rem !important;
   font-weight: 700 !important;
   color: #f4f4f5 !important;
   letter-spacing: -0.02em !important;
 }
 
 .content-body {
-  padding: 0.85rem 1.25rem !important;
+  padding: 0.65rem 1rem !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
 }
 
-/* 4. Bento Stat Cards & Metrics (Compact Fit) */
+/* 4. Bento Stat Cards & Metrics (Full-Width Responsive Grid) */
 .dashboard-stats {
-  gap: 0.75rem !important;
-  margin-bottom: 0.85rem !important;
+  display: grid !important;
+  grid-template-columns: repeat(4, 1fr) !important;
+  gap: 0.65rem !important;
+  margin-bottom: 0.65rem !important;
+  width: 100% !important;
+}
+
+@media (max-width: 1024px) {
+  .dashboard-stats {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
 }
 
 .stat-card {
   background: linear-gradient(145deg, rgba(22, 22, 26, 0.95), rgba(14, 14, 16, 0.95)) !important;
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  border-radius: 10px !important;
-  padding: 0.75rem 0.95rem !important;
+  border-radius: 8px !important;
+  padding: 0.6rem 0.85rem !important;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3) !important;
   transition: all 0.2s ease !important;
-  min-height: 78px !important;
+  min-height: 64px !important;
+  box-sizing: border-box !important;
 }
 
 .stat-card::before {
@@ -1935,7 +1970,7 @@ body {
 }
 
 .stat-value {
-  font-size: 1.55rem !important;
+  font-size: 1.35rem !important;
   font-weight: 800 !important;
   color: #f5c518 !important;
   -webkit-text-fill-color: initial !important;
@@ -1946,45 +1981,69 @@ body {
 }
 
 /* Compact Fast Actions, Date Range & Section Cards */
+.dashboard-intro-card,
 .dashboard-fast-actions,
 .action-strip,
 .section-guide-card {
-  padding: 0.75rem 1rem !important;
-  margin-bottom: 0.85rem !important;
-  border-radius: 10px !important;
+  padding: 0.6rem 0.85rem !important;
+  margin-bottom: 0.6rem !important;
+  border-radius: 8px !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
 }
 
+.dashboard-intro-copy h2,
 .dashboard-fast-actions h2,
 .section-guide-card h3 {
-  font-size: 0.95rem !important;
-  margin-bottom: 0.2rem !important;
+  font-size: 0.9rem !important;
+  margin: 0.1rem 0 0.2rem !important;
 }
 
+.dashboard-intro-copy p,
 .dashboard-fast-actions p,
 .section-guide-card p {
-  font-size: 0.78rem !important;
-  margin-bottom: 0.5rem !important;
+  font-size: 0.74rem !important;
+  margin-bottom: 0.3rem !important;
 }
 
+.dashboard-intro-actions .btn,
 .dashboard-fast-actions .btn,
 .action-strip .btn {
-  padding: 0.45rem 0.85rem !important;
-  font-size: 0.82rem !important;
+  padding: 0.32rem 0.65rem !important;
+  font-size: 0.76rem !important;
+  min-height: 28px !important;
+}
+
+.dashboard-toolbar {
+  padding: 0.4rem 0.75rem !important;
+  margin-bottom: 0.6rem !important;
+  border-radius: 8px !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
 }
 
 .dashboard-date-range {
-  padding: 0.5rem 0.85rem !important;
-  margin-bottom: 0.85rem !important;
+  padding: 0.28rem 0.5rem !important;
+  margin-bottom: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
 }
 
 .dashboard-date-range input {
-  padding: 0.35rem 0.6rem !important;
-  font-size: 0.82rem !important;
+  padding: 0.25rem 0.45rem !important;
+  font-size: 0.76rem !important;
+}
+
+.dashboard-date-range .btn {
+  padding: 0.25rem 0.55rem !important;
+  font-size: 0.74rem !important;
+  min-height: 26px !important;
 }
 
 .pwa-status-bar {
-  padding: 0.35rem 0.85rem !important;
-  font-size: 0.78rem !important;
+  padding: 0.25rem 0.75rem !important;
+  font-size: 0.75rem !important;
+  min-height: 26px !important;
 }
 
 .stat-card small {
