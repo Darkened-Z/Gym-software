@@ -69,6 +69,7 @@ CREATE TABLE IF NOT EXISTS members_men (
     status ENUM('active', 'inactive') DEFAULT 'active',
     status_force_active TINYINT(1) DEFAULT 0,
     is_checked_in TINYINT(1) DEFAULT 0,
+    assigned_trainer_id INT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_member_code (member_code),
@@ -80,6 +81,7 @@ CREATE TABLE IF NOT EXISTS members_men (
     INDEX idx_email (email),
     INDEX idx_join_date (join_date),
     INDEX idx_is_checked_in (is_checked_in),
+    INDEX idx_assigned_trainer_id (assigned_trainer_id),
     CONSTRAINT chk_men_due_non_negative CHECK (total_due_amount >= 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -104,6 +106,7 @@ CREATE TABLE IF NOT EXISTS members_women (
     status ENUM('active', 'inactive') DEFAULT 'active',
     status_force_active TINYINT(1) DEFAULT 0,
     is_checked_in TINYINT(1) DEFAULT 0,
+    assigned_trainer_id INT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_member_code (member_code),
@@ -115,6 +118,7 @@ CREATE TABLE IF NOT EXISTS members_women (
     INDEX idx_email (email),
     INDEX idx_join_date (join_date),
     INDEX idx_is_checked_in (is_checked_in),
+    INDEX idx_assigned_trainer_id (assigned_trainer_id),
     CONSTRAINT chk_women_due_non_negative CHECK (total_due_amount >= 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -468,6 +472,54 @@ CREATE TABLE IF NOT EXISTS message_logs (
     CONSTRAINT fk_message_logs_queue FOREIGN KEY (queue_id) REFERENCES message_queue(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ============================================================================
+-- Trainers & Fitness Add-ons
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS trainers (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    trainer_code VARCHAR(50) UNIQUE NOT NULL,
+    name VARCHAR(200) NOT NULL,
+    phone VARCHAR(20) UNIQUE NOT NULL,
+    cnic VARCHAR(20) UNIQUE NULL,
+    dob DATE NULL,
+    hire_date DATE NOT NULL,
+    section ENUM('men', 'women', 'both') NOT NULL DEFAULT 'both',
+    monthly_salary DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+    commission_pct DECIMAL(5, 2) NOT NULL DEFAULT 0.00,
+    address VARCHAR(255) NULL,
+    emergency_contact VARCHAR(20) NULL,
+    profile_image VARCHAR(255) NULL,
+    notes TEXT NULL,
+    status ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
+    created_by INT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_trainer_code (trainer_code),
+    INDEX idx_phone (phone),
+    INDEX idx_status (status),
+    INDEX idx_section (section)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS member_fitness (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    gender ENUM('men', 'women') NOT NULL,
+    member_id INT NOT NULL,
+    height DECIMAL(5, 2) NULL,
+    goal ENUM('lose', 'gain', 'maintain') NOT NULL DEFAULT 'maintain',
+    target_weight DECIMAL(5, 2) NULL,
+    goal_notes TEXT NULL,
+    vegetarian TINYINT(1) NOT NULL DEFAULT 0,
+    allergies TEXT NULL,
+    injuries TEXT NULL,
+    experience ENUM('novice', 'intermediate', 'advanced') NOT NULL DEFAULT 'intermediate',
+    progress_json LONGTEXT NULL,
+    logs_json LONGTEXT NULL,
+    meals_json LONGTEXT NULL,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_member (gender, member_id),
+    INDEX idx_gender_member (gender, member_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- ============================================================================
@@ -476,6 +528,10 @@ SET FOREIGN_KEY_CHECKS = 1;
 INSERT INTO users (username, password, role, name)
 VALUES ('admin', '$2y$10$7OVayNVrfaz.zWT/fZESPOSfayaFlUGqeh6j7e6IMQ4pEJvgnrA/m', 'admin', 'Administrator')
 ON DUPLICATE KEY UPDATE name = VALUES(name);
+
+INSERT INTO system_license (license_key, server_fingerprint, is_active, expires_at)
+VALUES ('STANDALONE-FULL-LICENSE', 'STANDALONE', 1, NULL)
+ON DUPLICATE KEY UPDATE is_active = 1, expires_at = NULL;
 
 INSERT INTO gate_configuration (gate_id, gate_type, gate_name, location, open_duration_ms) VALUES
 ('ENTRY_01', 'entry', 'Main Entry Gate', 'Front Entrance', 3000),
