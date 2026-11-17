@@ -2479,11 +2479,6 @@ textarea:focus {
   padding: 1rem 1.5rem !important;
 }
 
-/* Member / Trainer switch inside the member sign-in panel */
-.who-switch { display: inline-flex; border: 1px solid rgba(255,255,255,.16); margin-bottom: .6rem; }
-.who-switch__btn { background: transparent; border: 0; padding: .45rem 1rem; font: 800 .72rem/1 var(--brand-font-body); letter-spacing: .12em; text-transform: uppercase; color: #9a9a95; cursor: pointer; }
-.who-switch__btn.is-active { background: var(--brand-accent); color: #0d0d0d; }
-.who-switch__btn:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; }
 
 /* ---------------------------------------------------------------------------
    Final layer: phone layout, stat figures, quick actions.
@@ -2557,4 +2552,18 @@ textarea:focus {
 }
 @media (prefers-reduced-motion: reduce) {
   .sidebar { transition: none !important; }
+}
+
+/* Login: one tab bar (Staff / Admin · Member · Trainer), one panel at a time, every width */
+.login-tabs-bar { display: flex !important; }
+.login-tab-btn.active { box-shadow: none; }
+.login-tab-btn:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; }
+.login-split-layout { display: block !important; }
+.login-form-panel[hidden] { display: none !important; }
+@media (min-width: 769px) {
+  .login-box, .login-box-wide { max-width: 520px; }
+}
+@media (max-width: 420px) {
+  .login-tab-btn { padding: .55rem .35rem; font-size: .8rem; white-space: nowrap; }
+  .login-tab-btn i { display: none; }
 }

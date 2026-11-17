@@ -56,7 +56,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const trainerForm = document.getElementById('trainerForm');
     if (trainerForm) {
-        setupWhoSwitch();
         trainerForm.addEventListener('submit', function (e) {
             e.preventDefault();
             handleTrainerLogin();
@@ -188,37 +187,6 @@ function handleMemberLogin() {
             const submitBtn = document.querySelector('#memberForm button[type="submit"]');
             if (submitBtn) Utils.setButtonLoading(submitBtn, false);
         });
-}
-
-// The member panel doubles as the trainer sign-in (Member | Trainer switch).
-function setupWhoSwitch() {
-    const memberBtn = document.getElementById('whoMember');
-    const trainerBtn = document.getElementById('whoTrainer');
-    const memberForm = document.getElementById('memberForm');
-    const trainerForm = document.getElementById('trainerForm');
-    const title = document.getElementById('member-login-title');
-    const text = document.getElementById('memberPanelText');
-    const extras = document.querySelectorAll('#member-login .member-signup-cta');
-
-    function show(who) {
-        const isTrainer = who === 'trainer';
-        memberBtn.classList.toggle('is-active', !isTrainer);
-        trainerBtn.classList.toggle('is-active', isTrainer);
-        memberBtn.setAttribute('aria-selected', String(!isTrainer));
-        trainerBtn.setAttribute('aria-selected', String(isTrainer));
-        memberForm.hidden = isTrainer;
-        trainerForm.hidden = !isTrainer;
-        extras.forEach(el => { el.hidden = isTrainer; });
-        title.textContent = isTrainer ? 'Trainer sign in' : 'Open member profile';
-        text.textContent = isTrainer
-            ? 'Use your trainer code or phone number and your PIN.'
-            : 'Members only need their code. No password is needed here.';
-        (isTrainer ? document.getElementById('trainerLoginId') : document.getElementById('memberCode')).focus();
-    }
-
-    memberBtn.addEventListener('click', () => show('member'));
-    trainerBtn.addEventListener('click', () => show('trainer'));
-    if (location.hash === '#trainer') show('trainer');
 }
 
 function handleTrainerLogin() {
