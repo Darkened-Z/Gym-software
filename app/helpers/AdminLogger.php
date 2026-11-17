@@ -140,7 +140,7 @@ class AdminLogger {
         $dailyStmt->execute();
         $daily = $dailyStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
-        $weeklyStmt = $this->conn->prepare("SELECT YEAR(created_at) AS year_num, WEEK(created_at, 1) AS week_num, CONCAT(YEAR(created_at), '-W', LPAD(WEEK(created_at, 1), 2, '0')) AS label, COUNT(*) AS total FROM admin_action_log {$whereClause} GROUP BY YEAR(created_at), WEEK(created_at, 1) ORDER BY YEAR(created_at) ASC, WEEK(created_at, 1) ASC");
+        $weeklyStmt = $this->conn->prepare("SELECT YEAR(created_at) AS year_num, WEEK(created_at, 1) AS week_num, CONCAT(YEAR(created_at), '-W', LPAD(WEEK(created_at, 1), 2, '0')) AS label, COUNT(*) AS total FROM admin_action_log {$whereClause} GROUP BY YEAR(created_at), WEEK(created_at, 1), label ORDER BY YEAR(created_at) ASC, WEEK(created_at, 1) ASC");
         foreach ($params as $key => $value) {
             $weeklyStmt->bindValue($key, $value, PDO::PARAM_STR);
         }
