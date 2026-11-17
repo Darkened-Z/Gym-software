@@ -18,6 +18,8 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 $sessionMemberCode = $_SESSION['member_code'] ?? '';
 $sessionMemberGender = $_SESSION['member_gender'] ?? 'men';
+$sessionRole = $_SESSION['role'] ?? '';
+$sessionTrainerId = (int)($_SESSION['trainer_id'] ?? 0);
 if (session_status() === PHP_SESSION_ACTIVE) {
     session_write_close();
 }
@@ -59,38 +61,6 @@ try {
             $member = $memberWomen->getByCode($code);
             $gender = 'women';
         }
-        // Fallback: try zero-padded code (e.g. 1 -> 001, 0001) or numeric ID
-        if (!$member && ctype_digit($code)) {
-            foreach ([str_pad($code, 3, '0', STR_PAD_LEFT), str_pad($code, 4, '0', STR_PAD_LEFT)] as $padded) {
-                $member = $memberMen->getByCode($padded);
-                if ($member) { $gender = 'men'; break; }
-                $member = $memberWomen->getByCode($padded);
-                if ($member) { $gender = 'women'; break; }
-            }
-            if (!$member) {
-                $member = $memberMen->getById((int)$code);
-                if ($member) {
-                    $gender = 'men';
-                } else {
-                    $member = $memberWomen->getById((int)$code);
-                    if ($member) $gender = 'women';
-                }
-            }
-        }
-        // Fallback: search by phone number if not found by code
-        if (!$member && strlen(preg_replace('/[^0-9]/', '', $code)) >= 4) {
-            $cleanPhone = '%' . substr(preg_replace('/[^0-9]/', '', $code), -10);
-            $pStmt = $db->prepare("SELECT * FROM members_men WHERE REPLACE(REPLACE(phone, '-', ''), ' ', '') LIKE ? LIMIT 1");
-            $pStmt->execute([$cleanPhone]);
-            $member = $pStmt->fetch(PDO::FETCH_ASSOC);
-            $gender = 'men';
-            if (!$member) {
-                $pStmt = $db->prepare("SELECT * FROM members_women WHERE REPLACE(REPLACE(phone, '-', ''), ' ', '') LIKE ? LIMIT 1");
-                $pStmt->execute([$cleanPhone]);
-                $member = $pStmt->fetch(PDO::FETCH_ASSOC);
-                $gender = 'women';
-            }
-        }
     } elseif ($sessionMemberCode !== '') {
         $gender = $sessionMemberGender === 'women' ? 'women' : 'men';
         $model = $gender === 'women' ? $memberWomen : $memberMen;
@@ -100,6 +70,16 @@ try {
     if (!$member) {
         http_response_code(404);
         echo json_encode(['success' => false, 'message' => 'Member not found. Please provide a valid member code.']);
+        exit;
+    }
+
+    // Coaching data is private: the member themself, front desk, or the assigned trainer.
+    $canAccess = in_array($sessionRole, ['admin', 'staff'], true)
+        || ($sessionMemberCode !== '' && strcasecmp($sessionMemberCode, (string)$member['member_code']) === 0)
+        || ($sessionTrainerId > 0 && (int)($member['assigned_trainer_id'] ?? 0) === $sessionTrainerId);
+    if (!$canAccess) {
+        http_response_code(401);
+        echo json_encode(['success' => false, 'message' => 'Sign in to see coaching']);
         exit;
     }
 
