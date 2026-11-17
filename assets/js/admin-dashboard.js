@@ -3576,7 +3576,7 @@ function renderTrainersTable(data) {
 function showTrainerForm(trainer = null) {
     const isEdit = !!trainer;
     const modal = document.createElement('div');
-    modal.className = 'modal-overlay';
+    modal.className = 'modal show';
     modal.id = 'trainerModal';
     modal.innerHTML = `
         <div class="modal-content">
@@ -3720,7 +3720,7 @@ function viewTrainerMembers(trainerId) {
             `).join('');
 
             const modal = document.createElement('div');
-            modal.className = 'modal-overlay';
+            modal.className = 'modal show';
             modal.id = 'trainerMembersModal';
             modal.innerHTML = `
                 <div class="modal-content" style="max-width: 820px; width: 95%;">

@@ -418,7 +418,7 @@ class Trainer {
             return ['success' => true, 'id' => (int)$this->conn->lastInsertId(), 'trainer_code' => $n['trainer_code']];
         } catch (PDOException $e) {
             // Unique-constraint hit on code / phone / cnic
-            if ($e->errorInfo[1] ?? 0 === 1062) {
+            if (($e->errorInfo[1] ?? 0) === 1062) {
                 $msg = $e->getMessage();
                 if (strpos($msg, 'trainer_code') !== false) return ['success' => false, 'message' => 'Trainer code already exists'];
                 if (strpos($msg, 'phone') !== false) return ['success' => false, 'message' => 'A trainer with this phone already exists'];
@@ -447,7 +447,7 @@ class Trainer {
             $stmt->execute($n + [':id' => $id]);
             return ['success' => true];
         } catch (PDOException $e) {
-            if ($e->errorInfo[1] ?? 0 === 1062) {
+            if (($e->errorInfo[1] ?? 0) === 1062) {
                 return ['success' => false, 'message' => 'Trainer code, phone, or CNIC already exists on another trainer'];
             }
             error_log('Trainer::update ' . $e->getMessage());
