@@ -2567,3 +2567,28 @@ textarea:focus {
   .login-tab-btn { padding: .55rem .35rem; font-size: .8rem; white-space: nowrap; }
   .login-tab-btn i { display: none; }
 }
+
+/* Modals: the overlay scrolls, so forms taller than the screen (Add Trainer, Add Member)
+   can be reached on phones. margin:auto keeps short dialogs centred. */
+.modal.show,
+.modal.is-active,
+.modal[style*="display: flex"],
+.modal[style*="display:flex"] {
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+  align-items: flex-start !important;
+  padding: 1rem 0 !important;
+}
+.modal > .modal-content { margin: auto !important; overflow-y: auto !important; overscroll-behavior: contain; }
+body:has(.modal.show, .modal.is-active, .modal[style*="display: flex"], .modal[style*="display:flex"]) .mobile-menu-toggle {
+  display: none !important;
+}
+
+@media (max-width: 768px) {
+  /* Table rows become cards: the desktop max-width on these cells is narrower than the
+     label gutter, which pushed the value back over the label. */
+  .data-table td.cell-member-name,
+  .data-table td.cell-email {
+    max-width: none !important;
+  }
+}

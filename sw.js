@@ -1,4 +1,4 @@
-const SHELL_CACHE = 'gym-shell-v23';
+const SHELL_CACHE = 'gym-shell-v24';
 const DATA_CACHE = 'gym-data-v1';
 const SHELL_ASSETS = [
     '/',
@@ -9,7 +9,7 @@ const SHELL_ASSETS = [
     '/trainer-portal.html',
     '/manifest.webmanifest',
     '/assets/css/style.css?v=7',
-    '/assets/css/brand.css?v=26',
+    '/assets/css/brand.css?v=27',
     '/assets/css/admin-dashboard.css?v=10',
     '/assets/css/member-profile.css?v=8',
     '/assets/css/pwa.css',
