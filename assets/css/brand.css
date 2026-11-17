@@ -2484,3 +2484,77 @@ textarea:focus {
 .who-switch__btn { background: transparent; border: 0; padding: .45rem 1rem; font: 800 .72rem/1 var(--brand-font-body); letter-spacing: .12em; text-transform: uppercase; color: #9a9a95; cursor: pointer; }
 .who-switch__btn.is-active { background: var(--brand-accent); color: #0d0d0d; }
 .who-switch__btn:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; }
+
+/* ---------------------------------------------------------------------------
+   Final layer: phone layout, stat figures, quick actions.
+   Must stay last — earlier blocks pin the sidebar with !important at all widths.
+   --------------------------------------------------------------------------- */
+.stat-value {
+  font-family: var(--brand-font-display) !important;
+  font-weight: 400 !important;
+  font-size: 1.9rem !important;
+  letter-spacing: .03em !important;
+  font-variant-numeric: tabular-nums;
+  line-height: 1 !important;
+}
+.stat-card:hover {
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.dashboard-intro-actions .btn-success,
+.dashboard-intro-actions .btn-warning,
+.dashboard-intro-actions .btn-secondary {
+  background: transparent !important;
+  color: #ececea !important;
+  border: 1px solid rgba(255, 255, 255, .16) !important;
+}
+.dashboard-intro-actions .btn-success:hover,
+.dashboard-intro-actions .btn-warning:hover,
+.dashboard-intro-actions .btn-secondary:hover {
+  background: rgba(var(--brand-accent-rgb), .08) !important;
+  border-color: rgba(var(--brand-accent-rgb), .55) !important;
+  color: #fff !important;
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    width: min(280px, 86vw) !important;
+    transform: translateX(-100%) !important;
+    transition: transform .28s cubic-bezier(.22, 1, .36, 1) !important;
+    z-index: 1000 !important;
+    box-shadow: none !important;
+  }
+  .sidebar.open {
+    transform: none !important;
+    box-shadow: 0 0 0 100vmax rgba(0, 0, 0, .6) !important;
+  }
+  .main-content {
+    margin-left: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  .content-header { padding-left: 6.75rem !important; }
+  .mobile-menu-toggle {
+    top: .45rem !important;
+    left: .75rem !important;
+    padding: .45rem .8rem !important;
+    font-size: .85rem !important;
+    border-radius: 6px !important;
+    box-shadow: none !important;
+  }
+  .mobile-menu-toggle:hover { transform: none !important; }
+  body:has(.sidebar.open) .mobile-menu-toggle { opacity: 0; pointer-events: none; }
+  .dashboard-intro-actions {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+  }
+  .dashboard-intro-actions .btn {
+    justify-content: center !important;
+    min-height: 44px !important;
+    font-size: .85rem !important;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sidebar { transition: none !important; }
+}

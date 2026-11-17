@@ -95,23 +95,20 @@ document.addEventListener('DOMContentLoaded', function () {
 function setupMobileMenu() {
     const mobileToggle = document.getElementById('mobileMenuToggle');
     const sidebar = document.getElementById('sidebar');
-    const contentBody = document.getElementById('contentBody');
 
     if (mobileToggle && sidebar) {
         mobileToggle.addEventListener('click', function () {
             sidebar.classList.toggle('open');
         });
 
-        // Close sidebar when clicking outside on mobile
-        if (contentBody) {
-            contentBody.addEventListener('click', function (e) {
-                if (window.innerWidth <= 768 && sidebar.classList.contains('open')) {
-                    if (!sidebar.contains(e.target) && !mobileToggle.contains(e.target)) {
-                        sidebar.classList.remove('open');
-                    }
+        // Close sidebar when tapping anywhere outside it on mobile
+        document.addEventListener('click', function (e) {
+            if (window.innerWidth <= 768 && sidebar.classList.contains('open')) {
+                if (!sidebar.contains(e.target) && !mobileToggle.contains(e.target)) {
+                    sidebar.classList.remove('open');
                 }
-            });
-        }
+            }
+        });
 
         // Close sidebar when clicking a nav item on mobile
         document.querySelectorAll('.nav-item').forEach(item => {
