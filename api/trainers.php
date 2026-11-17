@@ -19,7 +19,7 @@ $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? 'list';
 
 // Portal actions can be accessed by trainers via trainer authentication
-$isPortalAction = in_array($action, ['portal_login', 'portal_data', 'portal_update_member'], true);
+$isPortalAction = in_array($action, ['portal_login', 'portal_logout', 'portal_data', 'portal_update_member'], true);
 if (!$isPortalAction) {
     AuthHelper::requireAdminOrStaff();
 }
@@ -141,10 +141,9 @@ try {
                 exit;
             }
 
-            // Authenticate PIN: default is last 4 digits of trainer phone, or '1234'
             $cleanPhone = preg_replace('/[^0-9]/', '', $trainer['phone'] ?? '');
             $expectedPin = substr($cleanPhone, -4);
-            if ($pin !== '' && $pin !== $expectedPin && $pin !== '1234') {
+            if (strlen($expectedPin) < 4 || !hash_equals($expectedPin, $pin)) {
                 http_response_code(401);
                 echo json_encode(['success' => false, 'message' => 'Invalid PIN. (Default PIN is last 4 digits of phone)']);
                 exit;
@@ -153,6 +152,7 @@ try {
             if (session_status() === PHP_SESSION_NONE) {
                 session_start();
             }
+            session_regenerate_id(true);
             $_SESSION['trainer_id'] = (int)$trainer['id'];
             $_SESSION['trainer_code'] = $trainer['trainer_code'];
 
@@ -172,15 +172,20 @@ try {
             break;
         }
 
+        case 'portal_logout': {
+            if (session_status() === PHP_SESSION_NONE) session_start();
+            unset($_SESSION['trainer_id'], $_SESSION['trainer_code']);
+            echo json_encode(['success' => true]);
+            break;
+        }
+
         case 'portal_data': {
-            $trainerId = filter_var($_GET['trainer_id'] ?? 0, FILTER_VALIDATE_INT);
-            if (!$trainerId) {
-                if (session_status() === PHP_SESSION_NONE) session_start();
+            // Admin/staff may view any trainer (dashboard); a trainer only ever sees their own roster.
+            $role = AuthHelper::currentRole();
+            if (in_array($role, ['admin', 'staff'], true)) {
+                $trainerId = (int)filter_var($_GET['trainer_id'] ?? 0, FILTER_VALIDATE_INT);
+            } else {
                 $trainerId = (int)($_SESSION['trainer_id'] ?? 0);
-            }
-            if (!$trainerId && !empty($_GET['code'])) {
-                $t = $model->getByCode($_GET['code']);
-                if ($t) $trainerId = (int)$t['id'];
             }
 
             if (!$trainerId) {
@@ -189,8 +194,7 @@ try {
                 exit;
             }
 
-            $portalData = $model->getPortalData($trainerId);
-            echo json_encode($portalData);
+            echo json_encode($model->getPortalData($trainerId));
             break;
         }
 
@@ -204,6 +208,23 @@ try {
                 http_response_code(400);
                 echo json_encode(['success' => false, 'message' => 'Member ID is required']);
                 exit;
+            }
+
+            $role = AuthHelper::currentRole();
+            if (!in_array($role, ['admin', 'staff'], true)) {
+                $trainerId = (int)($_SESSION['trainer_id'] ?? 0);
+                if (!$trainerId) {
+                    http_response_code(401);
+                    echo json_encode(['success' => false, 'message' => 'Trainer authentication required']);
+                    exit;
+                }
+                $own = $db->prepare("SELECT 1 FROM members_{$gender} WHERE id = ? AND assigned_trainer_id = ?");
+                $own->execute([$memberId, $trainerId]);
+                if (!$own->fetchColumn()) {
+                    http_response_code(403);
+                    echo json_encode(['success' => false, 'message' => 'This member is not assigned to you']);
+                    exit;
+                }
             }
 
             $fitModel = new MemberFitness($db);

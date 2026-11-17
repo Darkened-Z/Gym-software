@@ -2479,3 +2479,14 @@ textarea:focus {
   padding: 1rem 1.5rem !important;
 }
 
+/* Login footer entry point to the separate Trainer app */
+.brand-trainer-link {
+  display: inline-block;
+  margin-bottom: .35rem;
+  font-size: .8rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  color: var(--brand-accent);
+  text-decoration: none;
+}
+.brand-trainer-link:hover { text-decoration: underline; }

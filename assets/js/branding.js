@@ -62,6 +62,7 @@
             document.title = suffix ? (name + ' — ' + suffix) : name;
             setText('.brand-login-head h1, .login-box > h1', name);
             setText('.brand-sidebar-header h2, .sidebar-header h2', name);
+            each('.gym-brand-name', function (el) { el.textContent = name; });
             each('.brand-splash-logo, .brand-login-logo, .brand-sidebar-logo', function (el) {
                 el.setAttribute('alt', name);
             });

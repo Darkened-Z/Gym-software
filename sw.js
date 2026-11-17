@@ -1,4 +1,4 @@
-const SHELL_CACHE = 'gym-shell-v16';
+const SHELL_CACHE = 'gym-shell-v17';
 const DATA_CACHE = 'gym-data-v1';
 const SHELL_ASSETS = [
     '/',
@@ -10,18 +10,19 @@ const SHELL_ASSETS = [
     '/trainer-portal.html',
     '/manifest.webmanifest',
     '/assets/css/style.css?v=7',
-    '/assets/css/brand.css?v=14',
+    '/assets/css/brand.css?v=23',
     '/assets/css/admin-dashboard.css?v=10',
     '/assets/css/member-profile.css?v=8',
     '/assets/css/pwa.css',
     '/assets/js/utils.js?v=7',
     '/assets/js/offline-state.js?v=2',
-    '/assets/js/branding.js?v=2',
+    '/assets/js/branding.js?v=3',
     '/assets/js/social-icons.js?v=1',
     '/assets/js/auth.js?v=9',
     '/assets/js/admin-dashboard.js?v=36',
-    '/assets/js/member-profile.js?v=12',
-    '/assets/js/apex-ai.js',
+    '/assets/js/member-profile.js?v=13',
+    '/assets/js/coach-ai.js?v=1',
+    '/assets/css/fit-app.css?v=1',
     '/assets/js/pwa.js?v=4',
     '/assets/icons/gym-icon.svg',
     '/assets/icons/gym-icon-192.png',

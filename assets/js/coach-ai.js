@@ -1,5 +1,5 @@
 /* ============================================================================
-   APEX FIT — AI engine (rule-based, evidence-informed)
+   Gym fitness coach — AI engine (rule-based, evidence-informed)
 
    Design philosophy: every response is derived from published fitness/
    nutrition science applied to *this* member's data. No canned text; the
@@ -20,8 +20,8 @@
    - Prochaska–DiClemente TTM (stages of change) — used in chat fallback tone
    ============================================================================ */
 
-window.APEX_AI = (function () {
-  const getTodayStr = () => (window.APEX_DATA && window.APEX_DATA.TODAY) || new Date().toISOString().slice(0, 10);
+window.COACH_AI = (function () {
+  const getTodayStr = () => new Date().toISOString().slice(0, 10);
   const rand = (arr) => arr[Math.floor(Math.random() * arr.length)];
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
   const round = (n, d = 0) => { const p = 10 ** d; return Math.round(n * p) / p; };
