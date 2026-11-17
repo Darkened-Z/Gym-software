@@ -1,4 +1,4 @@
-const SHELL_CACHE = 'gym-shell-v19';
+const SHELL_CACHE = 'gym-shell-v20';
 const DATA_CACHE = 'gym-data-v1';
 const SHELL_ASSETS = [
     '/',
@@ -91,7 +91,13 @@ async function handleNavigationRequest(request) {
     const url = new URL(request.url);
     const fallbackPath = getNavigationFallbackPath(url.pathname);
     try {
-        const response = await fetch(request);
+        // nginx sends no Cache-Control for HTML; revalidate so a deploy shows up on the next visit
+        let response;
+        try {
+            response = await fetch(request, { cache: 'no-cache' });
+        } catch (error) {
+            response = await fetch(request);
+        }
         if (response && response.ok) {
             cache.put(fallbackPath, response.clone());
         }
