@@ -4,12 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0d0d0d">
-<title>Bhatti Gym — Trainers</title>
-<link rel="manifest" href="manifest.php?app=trainer">
+<title>Bhatti Gym — Trainer Dashboard</title>
+<link rel="manifest" href="manifest.php">
 <link rel="icon" href="assets/images/bhatti-logo.png">
 <link rel="apple-touch-icon" href="assets/images/bhatti-logo.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Trainers">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="stylesheet" href="assets/css/fit-app.css?v=2">
 <style>
@@ -26,41 +25,13 @@
 </head>
 <body>
 
-<div id="loginView" class="signin-wrap" style="display:none;">
-  <div class="signin-card">
-    <div class="brand-row">
-      <img class="brand-mark brand-login-logo" src="assets/images/bhatti-logo.png" onerror="this.src='assets/icons/gym-icon.svg'" alt="Bhatti Gym">
-      <div class="brand-txt">
-        <span class="big gym-brand-name">Bhatti Gym</span>
-        <span class="small">Trainer App</span>
-      </div>
-    </div>
-    <h2>Trainer sign in</h2>
-    <p class="lead">Your members, their progress, PT sessions and earnings.</p>
-    <div id="loginError" class="warn-note" style="display:none; margin:0 0 1rem;"></div>
-    <form id="trainerLoginForm">
-      <div class="field">
-        <label for="trainerLoginId">Trainer code or mobile number</label>
-        <input type="text" id="trainerLoginId" placeholder="e.g. TRN-0001 or 03001234567" required autofocus autocomplete="username">
-      </div>
-      <div class="field">
-        <label for="trainerLoginPin">PIN</label>
-        <input type="password" id="trainerLoginPin" inputmode="numeric" placeholder="4-digit PIN" maxlength="20" required autocomplete="current-password">
-        <div class="hint">Your PIN is the last 4 digits of the phone number the gym has on file.</div>
-      </div>
-      <button type="submit" class="btn-gold" style="margin-top:.5rem;">Sign in →</button>
-    </form>
-    <a class="back" href="index.html">← Back to gym login</a>
-  </div>
-</div>
-
 <div class="app" id="portalView" style="display:none;">
   <aside class="sidebar">
     <div class="brand-row">
       <img class="brand-mark brand-sidebar-logo" src="assets/images/bhatti-logo.png" onerror="this.src='assets/icons/gym-icon.svg'" alt="Bhatti Gym">
       <div class="brand-txt">
         <span class="big gym-brand-name">Bhatti Gym</span>
-        <span class="small">Trainer App</span>
+        <span class="small">Trainer Dashboard</span>
       </div>
     </div>
     <nav class="nav" id="sidebarNav">
@@ -110,7 +81,7 @@
       <img class="brand-mark brand-sidebar-logo" src="assets/images/bhatti-logo.png" onerror="this.src='assets/icons/gym-icon.svg'" alt="Bhatti Gym">
       <div class="brand-txt">
         <span class="big gym-brand-name">Bhatti Gym</span>
-        <span class="small">Trainer App</span>
+        <span class="small">Trainer Dashboard</span>
       </div>
     </div>
   <nav class="nav" id="drawerNav">
@@ -141,12 +112,7 @@
   let portalData = null;
   let currentActiveTab = 'dashboard';
 
-  // 1. Auth & Session Handling
-  function getQueryParam(p) {
-    const u = new URLSearchParams(window.location.search);
-    return u.get(p) || '';
-  }
-
+  // 1. Auth: the trainer signs in on the main login page (Member | Trainer switch)
   async function checkAuth() {
     try {
       const res = await fetch('api/trainers.php?action=portal_data', { credentials: 'same-origin' });
@@ -166,58 +132,19 @@
   }
 
   function showLoginView() {
-    document.getElementById('loginView').style.display = 'flex';
-    document.getElementById('portalView').style.display = 'none';
-    document.getElementById('bottomNav').style.display = 'none';
-    const urlCode = getQueryParam('code');
-    const loginInp = document.getElementById('trainerLoginId');
-    if (urlCode && loginInp && !loginInp.value) {
-      loginInp.value = urlCode;
-    }
+    location.replace('index.html#trainer');
   }
 
   function showPortalView() {
-    document.getElementById('loginView').style.display = 'none';
     document.getElementById('portalView').style.display = 'grid';
     document.getElementById('bottomNav').style.display = '';
   }
-
-  document.getElementById('trainerLoginForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const loginId = document.getElementById('trainerLoginId').value.trim();
-    const pin = document.getElementById('trainerLoginPin').value.trim();
-    const errBox = document.getElementById('loginError');
-    errBox.style.display = 'none';
-
-    try {
-      const res = await fetch('api/trainers.php?action=portal_login', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ login_id: loginId, pin: pin })
-      });
-      const data = await res.json();
-      if (data && data.success) {
-        document.getElementById('trainerLoginPin').value = '';
-        checkAuth();
-      } else {
-        errBox.textContent = data.message || 'Invalid trainer credentials';
-        errBox.style.display = 'block';
-      }
-    } catch (err) {
-      errBox.textContent = 'Connection error. Please try again.';
-      errBox.style.display = 'block';
-    }
-  });
 
   async function logout() {
     try {
       await fetch('api/trainers.php?action=portal_logout', { method: 'POST', credentials: 'same-origin' });
     } catch (err) { /* session will expire on its own */ }
-    portalData = null;
-    currentTrainer = null;
-    toggleDrawer(false);
-    showLoginView();
+    location.replace('index.html');
   }
 
   document.getElementById('logoutBtn').addEventListener('click', logout);

@@ -35,18 +35,12 @@ $ext = strtolower(pathinfo(parse_url($icon, PHP_URL_PATH) ?: $icon, PATHINFO_EXT
 $mimes = ['png' => 'image/png', 'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'webp' => 'image/webp', 'gif' => 'image/gif', 'svg' => 'image/svg+xml'];
 $mime = $mimes[$ext] ?? 'image/png';
 
-// ?app=trainer serves the Trainer app as its own installable PWA (separate icon + launcher entry).
-$isTrainer = ($_GET['app'] ?? '') === 'trainer';
-$appName = $isTrainer ? $name . ' Trainers' : $name;
-
 echo json_encode([
-    'id' => $isTrainer ? './trainer-portal.html' : './',
-    'name' => $appName,
-    'short_name' => $isTrainer ? 'Trainers' : mb_substr($name, 0, 24),
-    'description' => $isTrainer
-        ? $name . ' trainer app — members, progress, PT sessions & earnings'
-        : $name . ' — membership, attendance & payments',
-    'start_url' => $isTrainer ? './trainer-portal.html' : './',
+    'id' => './',
+    'name' => $name,
+    'short_name' => mb_substr($name, 0, 24),
+    'description' => $name . ' — membership, attendance & payments',
+    'start_url' => './',
     'scope' => './',
     'display' => 'standalone',
     'orientation' => 'portrait',

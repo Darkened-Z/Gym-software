@@ -2,8 +2,8 @@
 /**
  * Fitness & AI Coach API
  *
- * Powers both the dedicated Member Fit portal (member-fit.html)
- * and the AI Coach widgets embedded in member profiles.
+ * Powers the Coaching section of the member profile (assets/js/coaching.js)
+ * for members with an assigned trainer.
  */
 
 require_once __DIR__ . '/../config/config.php';
@@ -181,6 +181,7 @@ try {
                 'due_amount' => (float)($member['total_due_amount'] ?? 0),
                 'nextDue' => $member['next_fee_due_date'] ?? null,
                 'due_date' => $member['next_fee_due_date'] ?? null,
+                'hasTrainer' => $trainerName !== null,
                 'trainer' => $trainerName ?: 'Head Coach',
                 'trainerPhone' => $trainerPhone ?: '',
                 'progress' => $progressArr,
