@@ -147,7 +147,11 @@ class MemberFitness {
         $current = $this->getByMember($gender, $memberId);
         $progress = $current['progress'] ?? [];
         $entry['date'] = $entry['date'] ?? date('Y-m-d');
+        // One weigh-in per day: a second entry the same day corrects the first.
+        $progress = array_values(array_filter($progress, fn($p) => ($p['date'] ?? '') !== $entry['date']));
         $progress[] = $entry;
+        usort($progress, fn($a, $b) => strcmp($a['date'] ?? '', $b['date'] ?? ''));
+        $progress = array_slice($progress, -400);
 
         try {
             $stmt = $this->conn->prepare(
@@ -174,6 +178,7 @@ class MemberFitness {
         $logs = $current['session_logs'] ?? [];
         $log['date'] = $log['date'] ?? date('Y-m-d');
         $logs[] = $log;
+        $logs = array_slice($logs, -500);
 
         try {
             $stmt = $this->conn->prepare(
@@ -200,6 +205,7 @@ class MemberFitness {
         $meals = $current['meal_logs'] ?? [];
         $meal['date'] = $meal['date'] ?? date('Y-m-d');
         $meals[] = $meal;
+        $meals = array_slice($meals, -500);
 
         try {
             $stmt = $this->conn->prepare(

@@ -24,6 +24,19 @@ if (session_status() === PHP_SESSION_ACTIVE) {
 
 header('Content-Type: application/json');
 
+function fitNum($v, float $min, float $max): ?float {
+    if (!is_numeric($v)) return null;
+    $v = (float)$v;
+    return ($v >= $min && $v <= $max) ? round($v, 1) : null;
+}
+function fitText($v, int $max = 200): string {
+    return mb_substr(trim(strip_tags((string)$v)), 0, $max);
+}
+function fitDate($v): string {
+    $v = (string)$v;
+    return preg_match('/^\d{4}-\d{2}-\d{2}$/', $v) && strtotime($v) && $v <= date('Y-m-d', strtotime('+1 day')) ? $v : date('Y-m-d');
+}
+
 $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? 'get';
 $code = trim((string)($_GET['code'] ?? ''));
@@ -132,17 +145,8 @@ try {
                 } catch (Exception $e) {}
             }
 
-            $progressArr = $fit['progress'] ?: [
-                [
-                    'date' => $member['join_date'] ?? date('Y-m-d'),
-                    'weight' => $fit['target_weight'] ? ($fit['goal'] === 'lose' ? $fit['target_weight'] + 5 : ($fit['goal'] === 'gain' ? $fit['target_weight'] - 4 : $fit['target_weight'])) : 72.0,
-                    'chest' => 96,
-                    'waist' => 82,
-                    'arms' => 32,
-                    'thighs' => 54,
-                    'notes' => 'Baseline'
-                ]
-            ];
+            // No invented baseline: the app asks the member for a first weigh-in instead.
+            $progressArr = $fit['progress'] ?? [];
 
             // Build AI-compatible member payload (supports both top-level and nested .fitness/.recent_attendance consumers)
             $payload = [
@@ -159,6 +163,7 @@ try {
                 'joinDate' => $member['join_date'] ?? date('Y-m-d'),
                 'join_date' => $member['join_date'] ?? date('Y-m-d'),
                 'height' => (float)($fit['height'] ?: 175.0),
+                'needsSetup' => empty($progressArr) || empty($fit['height']),
                 'goal' => $fit['goal'] ?: 'maintain',
                 'targetWeight' => $fit['target_weight'] !== null ? (float)$fit['target_weight'] : null,
                 'goalNotes' => $fit['goal_notes'] ?: '',
@@ -238,12 +243,19 @@ try {
                 exit;
             }
             $entry = json_decode(file_get_contents('php://input'), true);
-            if (!is_array($entry) || empty($entry['weight'])) {
+            $weight = is_array($entry) ? fitNum($entry['weight'] ?? null, 25, 300) : null;
+            if ($weight === null) {
                 http_response_code(400);
-                echo json_encode(['success' => false, 'message' => 'Weight is required']);
+                echo json_encode(['success' => false, 'message' => 'Enter a weight between 25 and 300 kg']);
                 exit;
             }
-            $ok = $fitnessModel->addProgress($gender, $memberId, $entry);
+            $ok = $fitnessModel->addProgress($gender, $memberId, [
+                'date' => fitDate($entry['date'] ?? ''),
+                'weight' => $weight,
+                'waist' => fitNum($entry['waist'] ?? null, 40, 250),
+                'chest' => fitNum($entry['chest'] ?? null, 50, 250),
+                'notes' => fitText($entry['notes'] ?? ''),
+            ]);
             echo json_encode(['success' => $ok]);
             break;
         }
@@ -260,7 +272,13 @@ try {
                 echo json_encode(['success' => false, 'message' => 'Invalid payload']);
                 exit;
             }
-            $ok = $fitnessModel->addSessionLog($gender, $memberId, $log);
+            $ok = $fitnessModel->addSessionLog($gender, $memberId, [
+                'date' => fitDate($log['date'] ?? ''),
+                'title' => fitText($log['title'] ?? 'Workout', 80) ?: 'Workout',
+                'minutes' => (int)(fitNum($log['minutes'] ?? null, 5, 300) ?? 50),
+                'rpe' => (int)(fitNum($log['rpe'] ?? null, 1, 10) ?? 8),
+                'notes' => fitText($log['notes'] ?? ''),
+            ]);
             echo json_encode(['success' => $ok]);
             break;
         }
@@ -277,7 +295,13 @@ try {
                 echo json_encode(['success' => false, 'message' => 'Invalid payload']);
                 exit;
             }
-            $ok = $fitnessModel->addMealLog($gender, $memberId, $meal);
+            $ok = $fitnessModel->addMealLog($gender, $memberId, [
+                'date' => fitDate($meal['date'] ?? ''),
+                'name' => fitText($meal['name'] ?? 'Meal', 40) ?: 'Meal',
+                'kcal' => (int)(fitNum($meal['kcal'] ?? null, 0, 5000) ?? 0),
+                'protein' => (int)(fitNum($meal['protein'] ?? null, 0, 400) ?? 0),
+                'desc' => fitText($meal['desc'] ?? ''),
+            ]);
             echo json_encode(['success' => $ok]);
             break;
         }

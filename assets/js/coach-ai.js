@@ -52,6 +52,25 @@ window.COACH_AI = (function () {
 
   // ------ Body composition helpers ----------------------------------------
 
+  // Members mostly measure in inches. No adult waist/chest is under 60 cm, so
+  // smaller numbers are inches — this also repairs entries saved before the
+  // form had a unit selector.
+  function toCm(v) {
+    v = Number(v);
+    if (!v || v <= 0) return null;
+    return v < 60 ? Math.round(v * 2.54 * 10) / 10 : v;
+  }
+  function normaliseEntry(e) {
+    return Object.assign({}, e, { weight: Number(e.weight), waist: toCm(e.waist), chest: toCm(e.chest) });
+  }
+
+  // Weight at BMI 25 for this height. Protein and the calorie floor are scaled
+  // to this for heavier members — scaling to total bodyweight overshoots badly.
+  function referenceWeight(m, w) {
+    const h = (m.height || 170) / 100;
+    return Math.min(w, 25 * h * h);
+  }
+
   // US Navy circumference method for body fat %. Requires waist (we have),
   // neck (we DON'T reliably have — use anthropometric default from height),
   // and — for women — hip (we approximate as thighs × 1.15 when absent).
@@ -82,7 +101,7 @@ window.COACH_AI = (function () {
   // ------ Aggregate stats -------------------------------------------------
 
   function stats(m) {
-    const p = (m.progress || []).slice().sort((a, b) => new Date(a.date) - new Date(b.date));
+    const p = (m.progress || []).filter((r) => Number(r.weight) > 0).map(normaliseEntry).sort((a, b) => new Date(a.date) - new Date(b.date));
     const first = p[0] || null, last = p[p.length - 1] || null;
 
     // Rolling 4-week (or all-data) trendline via linreg on day index
@@ -185,8 +204,9 @@ window.COACH_AI = (function () {
       // ~15-20% deficit, capped so we don't push someone into starvation.
       const deficit = clamp(tdee * 0.18, 300, 750);
       target = Math.round(tdee - deficit);
-      // Never below floor: 22 × bodyweight (kcal) — hormonal safety.
-      target = Math.max(target, Math.round(22 * w));
+      // Floor: 22 kcal per kg of reference weight, and never under 1200/1500.
+      const floor = Math.max(m.gender === 'female' ? 1200 : 1500, Math.round(22 * referenceWeight(m, w)));
+      target = Math.max(target, floor);
     } else if (m.goal === 'gain') {
       const surplus = clamp(tdee * 0.10, 150, 350);
       target = Math.round(tdee + surplus);
@@ -202,10 +222,11 @@ window.COACH_AI = (function () {
 
     // Protein — Helms 2014 recommendations (per kg LBM in a cut, per kg BW
     // otherwise). Higher floor during aggressive deficit to spare muscle.
+    const refW = referenceWeight(m, w);
     let proteinG;
-    if (m.goal === 'lose') proteinG = Math.round(lbm * 2.6);      // 2.3–3.1 g/kg LBM
-    else if (m.goal === 'gain') proteinG = Math.round(w * 1.8);    // 1.6–2.0 g/kg BW
-    else proteinG = Math.round(w * 1.6);                            // maintenance
+    if (m.goal === 'lose') proteinG = Math.round(Math.min(lbm * 2.4, refW * 2.2)); // 2.3–3.1 g/kg LBM, capped for heavier members
+    else if (m.goal === 'gain') proteinG = Math.round(refW * 1.8);                 // 1.6–2.0 g/kg BW
+    else proteinG = Math.round(refW * 1.6);                                         // maintenance
 
     // Fat floor — Israetel: 0.5 g/kg minimum, prefer 20–35% of kcal.
     // Aim ~25% of kcal, floor at 0.5 g/kg.
@@ -216,7 +237,7 @@ window.COACH_AI = (function () {
     const carbsG = Math.max(0, Math.round((c.target - proteinG * 4 - fatG * 9) / 4));
 
     // Per-meal protein target for MPS: 0.4 g/kg per meal × 4 meals.
-    const proteinPerMeal = Math.round((w * 0.4));
+    const proteinPerMeal = Math.round(proteinG / 4);
 
     // Fiber — 14 g per 1000 kcal (US Dietary Guidelines).
     const fiberG = Math.round(c.target / 1000 * 14);
@@ -488,16 +509,24 @@ window.COACH_AI = (function () {
       ? `Working around: ${m.injuries.join(', ')}. Swaps applied automatically — see the exercise list.`
       : null;
 
+    // With one weigh-in there is no trend yet — don't talk about "down 0.0 kg in 1 days".
+    const hasTrend = (m.progress || []).filter((r) => Number(r.weight) > 0).length >= 2 && s.days >= 7;
+    const toTarget = m.targetWeight && s.last ? Math.abs(s.last.weight - m.targetWeight).toFixed(1) : null;
+    const starterMessages = {
+      gain: `Day one of the build. ${toTarget ? toTarget + ' kg to go to ' + m.targetWeight + ' kg. ' : ''}Today's ${today.focus} — log a weigh-in each week and I'll start tracking your trend.`,
+      lose: `Day one of the cut. ${toTarget ? toTarget + ' kg to go to ' + m.targetWeight + ' kg. ' : ''}Today's ${today.focus} — log a weigh-in each week and I'll start tracking your trend.`,
+      maintain: `Today's ${today.focus}. Log a weigh-in each week so I can keep you steady.`
+    };
     const trend = s.weightDelta > 0 ? `up ${s.weightDelta.toFixed(1)} kg` : `down ${Math.abs(s.weightDelta).toFixed(1)} kg`;
     const goalMessages = {
       gain: [
         `You're ${trend} in ${s.days} days — ${round(s.perWeek, 2)} kg/wk, right in the lean-bulk zone. Today's ${today.focus} keeps volume in the MAV range.`,
-        `${s.goalDone}% to ${m.targetWeight} kg. Push the first compound to RPE 8 — that's where hypertrophy lives. Rest 2–3 min between big sets.`,
+        `${s.goalDone}% of the way to ${m.targetWeight} kg. Push the first compound to RPE 8 — that's where hypertrophy lives. Rest 2–3 min between big sets.`,
         `Body's growing at ${round(s.perWeek, 2)} kg/wk. Today: ${today.focus}. Compound first, accessories second, done in ~65 min.`
       ],
       lose: [
         `${trend} — ${round(Math.abs(s.perWeek), 2)} kg/wk trend, ${s.projDate ? 'projected at ' + m.targetWeight + ' kg by ' + s.projDate : 'on track'}. Today's ${today.focus} preserves strength while in a deficit.`,
-        `${s.goalDone}% to ${m.targetWeight} kg. Intensity high, volume manageable — recovery is limited when kcal is low.`,
+        `${s.goalDone}% of the way to ${m.targetWeight} kg. Intensity high, volume manageable — recovery is limited when kcal is low.`,
         `Consistency's paying off. Today leans on ${today.focus}. Chase the target, not soreness.`
       ],
       maintain: [
@@ -514,7 +543,7 @@ window.COACH_AI = (function () {
       injuryNote,
       warmup: 'Foam roll problem areas 3 min · dynamic mobility 5 min · 2 warm-up sets at 40 % and 60 % of your working weight.',
       finisher: g === 'lose' ? 'Optional: 10 min incline walk finisher.' : g === 'gain' ? 'Optional: 8 min zone 2 for recovery.' : '',
-      coachMessage: rand(goalMessages[g]) + (isDeload ? ' — **Deload week** — 60% volume, 100% intensity.' : ''),
+      coachMessage: (hasTrend ? rand(goalMessages[g]) : starterMessages[g]) + (isDeload ? ' — **Deload week** — 60% volume, 100% intensity.' : ''),
       adherenceNudge, plateauNote, isDeload,
       estMinutes: today.kind === 'cardio' ? 45 : today.kind === 'strength' ? 65 : 55,
       restDay: false, kind: today.kind

@@ -1,4 +1,4 @@
-const SHELL_CACHE = 'gym-shell-v17';
+const SHELL_CACHE = 'gym-shell-v18';
 const DATA_CACHE = 'gym-data-v1';
 const SHELL_ASSETS = [
     '/',
@@ -21,8 +21,8 @@ const SHELL_ASSETS = [
     '/assets/js/auth.js?v=9',
     '/assets/js/admin-dashboard.js?v=36',
     '/assets/js/member-profile.js?v=13',
-    '/assets/js/coach-ai.js?v=1',
-    '/assets/css/fit-app.css?v=1',
+    '/assets/js/coach-ai.js?v=2',
+    '/assets/css/fit-app.css?v=2',
     '/assets/js/pwa.js?v=4',
     '/assets/icons/gym-icon.svg',
     '/assets/icons/gym-icon-192.png',

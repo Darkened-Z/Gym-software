@@ -156,3 +156,17 @@ strong, b { color: var(--fg); font-weight: 700; }
 .signin-card .back:hover { color: var(--accent); }
 
 .loading { text-align: center; padding: 4rem 1rem; color: var(--fg-3); }
+
+/* Form layout helpers */
+.grid-2 { display: grid; grid-template-columns: 1fr; gap: 0 1rem; }
+@media (min-width: 520px) { .grid-2 { grid-template-columns: 1fr 1fr; } }
+.pair { display: flex; gap: .5rem; }
+.pair > input { flex: 1; min-width: 0; }
+.pair > select { width: auto !important; flex: 0 0 auto; }
+.btn-gold:disabled { opacity: .6; cursor: wait; }
+
+/* Save feedback */
+.toast { position: fixed; left: 50%; bottom: calc(5rem + env(safe-area-inset-bottom)); transform: translate(-50%, 20px); background: var(--fg); color: var(--ink); padding: .75rem 1.1rem; font-weight: 700; font-size: .88rem; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 90; max-width: calc(100% - 2rem); }
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+.toast.err { background: var(--red); color: #fff; }
+@media (min-width: 960px) { .toast { bottom: 2rem; } }
