@@ -1,4 +1,6 @@
 <?php
+// Maintenance script: CLI only (php updatesv3.php). Over the web it would reset credentials.
+if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
 /**
  * updatesv3.php
  * Run in browser once to create/update database objects for staff users,

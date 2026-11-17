@@ -1,4 +1,6 @@
 <?php
+// Maintenance script: CLI only (php fix-admin-password.php). Over the web it would reset credentials.
+if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
 /**
  * Quick Fix: Update Admin Password
  * 
